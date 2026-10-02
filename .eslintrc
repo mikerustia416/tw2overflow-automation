@@ -1,0 +1,73 @@
+{
+    "extends": "eslint:recommended",
+    "parserOptions": {
+        "ecmaVersion": 2020
+    },
+    "env": {
+        "node": true,
+        "es6": true,
+        "browser": true
+    },
+    "ignorePatterns": [
+        "src/header.js",
+        "src/footer.js"
+    ],
+    "rules": {
+        "no-async-promise-executor": ["off"],
+        "indent": ["error", 4, {"SwitchCase": 1}],
+        "quotes": ["error", "single", {"allowTemplateLiterals": true}],
+        "semi": ["error", "always"],
+        "no-unused-vars": ["error", {"vars": "all", "args": "none"}],
+        "no-empty": ["error", {"allowEmptyCatch": true}],
+        "array-callback-return": "error",
+        "array-bracket-newline": ["error", "consistent"],
+        "array-bracket-spacing": "error",
+        "array-element-newline": ["error", "consistent"],
+        "brace-style": "error",
+        "comma-dangle": "error",
+        "comma-spacing": "error",
+        "comma-style": "error",
+        "computed-property-spacing": ["error", "never"],
+        "func-call-spacing": ["error", "never"],
+        "function-call-argument-newline": ["error", "consistent"],
+        "function-paren-newline": ["error", "consistent"],
+        "implicit-arrow-linebreak": ["error", "beside"],
+        "no-multiple-empty-lines": ["error", {"max": 2}],
+        "space-before-function-paren": ["error", "always"],
+        "space-before-blocks": ["error", "always"],
+        "space-in-parens": ["error", "never"],
+        "no-var": "error",
+        "prefer-const": "error",
+        "one-var-declaration-per-line": ["error", "always"],
+        "object-curly-spacing": ["error", "never"],
+        "key-spacing": "error",
+        "no-multi-spaces": "error"
+    },
+    "globals": {
+        "angular": true,
+        "injector": true,
+        "require": true,
+        "define": true,
+        "$rootScope": true,
+        "transferredSharedDataService": true,
+        "modelDataService": true,
+        "socketService": true,
+        "routeProvider": true,
+        "eventTypeProvider": true,
+        "windowDisplayService": true,
+        "windowManagerService": true,
+        "angularHotkeys": true,
+        "armyService": true,
+        "villageService": true,
+        "mapService": true,
+        "$filter": true,
+        "$timeout": true,
+        "storageService": true,
+        "resourceService": true,
+        "reportService": true,
+        "buildingService": true,
+        "villageInfoService": true,
+        "noop": true,
+        "hasOwn": true
+    }
+}

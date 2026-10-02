@@ -1,0 +1,1918 @@
+diff --git a/share/userscript/meta.js b/share/userscript/meta.js
+index 130e9c8..6ac79eb 100644
+--- a/share/userscript/meta.js
++++ b/share/userscript/meta.js
+@@ -1,12 +1,10 @@
+ // ==UserScript==
+-// @name        ___overflow_name
++// @name        TW2Overflow Farming Improvements
+ // @description ___overflow_description
+-// @namespace   relaxeaza/userscripts
+-// @version     ___overflow_version
++// @namespace   local/tw2overflow-farming
++// @version     ___overflow_version.1
+ // @grant       unsafeWindow
+ // @run-at      document-start
+ // @include     https://*.tribalwars2.com/game.php*
+-// @icon        https://relaxeaza.gitlab.io/twoverflow/tw2overflow.png
+-// @updateURL   https://relaxeaza.gitlab.io/twoverflow/tw2overflow.meta.js
+-// @downloadURL https://relaxeaza.gitlab.io/twoverflow/tw2overflow.user.js
++// @updateURL   none
+ // ==/UserScript==
+diff --git a/src/i18n/en_us/farm_overflow.json b/src/i18n/en_us/farm_overflow.json
+index b426353..4080ab9 100644
+--- a/src/i18n/en_us/farm_overflow.json
++++ b/src/i18n/en_us/farm_overflow.json
+@@ -1,5 +1,28 @@
+ {
+     "farm_overflow": {
++        "farming_controls": "Farming controls",
++        "farming_controls_help": "Preview records planned attacks without sending them. Capacity per hour estimates transport capacity, not actual loot. Saving settings pauses an active farmer.",
++        "preview_only": "Preview only (no attacks)",
++        "barbarians_only": "Only attack barbarian villages",
++        "optimize_haul": "Prefer carrying capacity per round-trip time",
++        "estimated_target_loot": "Estimated loot per target (0 = unknown)",
++        "estimated_loot_per_hour": "estimated loot per hour",
++        "unit_reserve_percent": "Keep units in town (%)",
++        "max_attacks_per_cycle": "Maximum attacks per village per cycle",
++        "target_order_variation": "Target score variation (%)",
++        "attack_jitter": "Maximum extra delay between attacks",
++        "cycle_jitter": "Maximum extra delay between cycles",
++        "empty_haul_cooldown": "Rest targets after an empty-haul report",
++        "loss_cooldown": "Rest targets after a casualty or defeat report",
++        "invalid_farming_settings": "Check farming settings: use valid numbers and nonnegative durations up to 7 days, a positive travel limit, and minimums no greater than maximums.",
++        "status_target_cooldown": "Target is resting after a report",
++        "status_cycle_attack_limit": "Cycle attack limit reached",
++        "status_command_timeout": "Send not acknowledged; farmer stopped",
++        "status_preview": "Previewing an attack",
++        "status_command_error": "Command or game data error",
++        "preview": "Preview",
++        "preset": "Preset",
++        "capacity_per_hour": "capacity per hour (estimate)",
+         "open_report": "Open report",
+         "no_report": "No report",
+         "reports": "Reports",
+diff --git a/src/modules/farm_overflow/assets/main.html b/src/modules/farm_overflow/assets/main.html
+index 1866c53..7a7a574 100644
+--- a/src/modules/farm_overflow/assets/main.html
++++ b/src/modules/farm_overflow/assets/main.html
+@@ -37,6 +37,17 @@
+ 
+                 <!-- settings -->
+                 <div class="settings" ng-show="selectedTab === TAB_TYPES.SETTINGS">
++                    <table class="tbl-border-light tbl-content tbl-medium-height">
++                        <colgroup><col><col width="270px"></colgroup>
++                        <tr><th colspan="2">{{ 'farming_controls' | i18n:loc.ale:'farm_overflow' }}</th></tr>
++                        <tr><td colspan="2">{{ 'farming_controls_help' | i18n:loc.ale:'farm_overflow' }}</td></tr>
++                        <tr ng-repeat="settingId in farmingSettings" ng-switch="settingsMap[settingId].inputType">
++                            <td>{{ settingId | i18n:loc.ale:'farm_overflow' }}</td>
++                            <td ng-switch-when="checkbox"><div switch-slider="" enabled="true" border="true" value="settings[settingId]" vertical="false" size="'56x28'"></div></td>
++                            <td ng-switch-when="number"><input type="number" class="fit textfield-border text-center" ng-model="settings[settingId]" min="{{ settingsMap[settingId].min }}" max="{{ settingsMap[settingId].max }}" step="1"></td>
++                            <td ng-switch-when="readable_time"><input type="text" class="fit textfield-border text-center" ng-model="settings[settingId]" tooltip="" tooltip-content="{{ 'readable_time_format' | i18n:loc.ale:'common' }}"></td>
++                        </tr>
++                    </table>
+                     <table class="tbl-border-light tbl-content tbl-medium-height">
+                         <colgroup>
+                             <col width="*">
+@@ -273,9 +284,11 @@
+                                 'icon-26x26-check-positive': log.type === LOG_TYPES.INCLUDED_VILLAGE || log.type === LOG_TYPES.IGNORED_VILLAGE_REMOVED,
+                                 'icon-26x26-attack-small': log.type === LOG_TYPES.ATTACKED_VILLAGE}"></span></td>
+ 
+-                            <td ng-if="log.type === LOG_TYPES.ATTACKED_VILLAGE">
++                            <td ng-if="log.type === LOG_TYPES.ATTACKED_VILLAGE || log.type === LOG_TYPES.PLANNED_VILLAGE">
++                                <span ng-if="log.type === LOG_TYPES.PLANNED_VILLAGE">{{ 'preview' | i18n:loc.ale:'farm_overflow' }}: </span>
+                                 <span class="icon-26x26-attack-small"></span>
+                                 <a class="link" ng-click="openVillageInfo(log.targetId)"><span class="icon-20x20-village"></span> {{ villagesLabel[log.targetId] }}</a>
++                                <span ng-if="log.type === LOG_TYPES.PLANNED_VILLAGE"> — {{ 'preset' | i18n:loc.ale:'farm_overflow' }} {{ log.presetId }}, {{ log.ratePerHour }} {{ (log.usingLootEstimate ? 'estimated_loot_per_hour' : 'capacity_per_hour') | i18n:loc.ale:'farm_overflow' }}</span>
+                             </td>
+ 
+                             <td ng-if="log.type === LOG_TYPES.IGNORED_VILLAGE">
+diff --git a/src/modules/farm_overflow/module.json b/src/modules/farm_overflow/module.json
+index adf4962..f793a4c 100644
+--- a/src/modules/farm_overflow/module.json
++++ b/src/modules/farm_overflow/module.json
+@@ -1,5 +1,5 @@
+ {
+     "name": "FarmOverflow",
+     "id": "farm_overflow",
+-    "version": "4.0.1"
++    "version": "4.1.0"
+ }
+diff --git a/src/modules/farm_overflow/src/core.js b/src/modules/farm_overflow/src/core.js
+index ebd9940..4f8a4de 100644
+--- a/src/modules/farm_overflow/src/core.js
++++ b/src/modules/farm_overflow/src/core.js
+@@ -19,7 +19,8 @@ define('two/farmOverflow', [
+     'conf/resourceTypes',
+     'struct/MapData',
+     'Lockr',
+-    'two/debug'
++    'two/debug',
++    'two/farmOverflow/policy'
+ ], function (
+     Settings,
+     ERROR_TYPES,
+@@ -41,7 +42,8 @@ define('two/farmOverflow', [
+     RESOURCE_TYPES,
+     $mapData,
+     Lockr,
+-    setupDebug
++    setupDebug,
++    policy
+ ) {
+     let initialized = false;
+     let running = false;
+@@ -67,10 +69,13 @@ define('two/farmOverflow', [
+     let persistentRunningLastCheck = timeHelper.gameTime();
+     let persistentRunningTimer = null;
+     let nextCycleDate = null;
++    let runVersion = 0;
++    let targetCooldowns = {};
++    let cooldownStorageKey;
+     const PERSISTENT_RUNNING_CHECK_INTERVAL = 30 * 1000;
+     const VILLAGE_COMMAND_LIMIT = 50;
+-    const MINIMUM_FARMER_CYCLE_INTERVAL = 100; // ms
+-    const MINIMUM_ATTACK_INTERVAL = 100; // ms
++    const MINIMUM_FARMER_CYCLE_INTERVAL = 1000; // ms
++    const MINIMUM_ATTACK_INTERVAL = 1000; // ms
+     const STEP_EXPIRE_TIME = 30 * 1000;
+     const CYCLE_BEGIN = 'cycle_begin';
+     const IGNORE_UPDATES = 'ignore_update';
+@@ -89,16 +94,19 @@ define('two/farmOverflow', [
+ 
+     const villageFilters = {
+         distance: function (target) {
+-            return !target.distance.between(
++            return !Number.isFinite(target.distance) || !target.distance.between(
+                 localSettings[SETTINGS.MIN_DISTANCE],
+                 localSettings[SETTINGS.MAX_DISTANCE]
+             );
+         },
+         ownPlayer: function (target) {
+-            return target.character_id === $player.getId();
++            return Number(target.character_id) === Number($player.getId());
+         },
+         included: function (target) {
+-            return target.character_id && !includedVillages.includes(target.id);
++            return !policy.isBarbarian(target) && !includedVillages.includes(target.id);
++        },
++        barbarian: function (target) {
++            return localSettings[SETTINGS.BARBARIANS_ONLY] && !policy.isBarbarian(target);
+         },
+         ignored: function (target) {
+             return ignoredVillages.includes(target.id);
+@@ -115,18 +123,24 @@ define('two/farmOverflow', [
+         villageFilters.distance,
+         villageFilters.ownPlayer,
+         villageFilters.included,
+-        villageFilters.ignored
++        villageFilters.ignored,
++        villageFilters.barbarian
+     ];
+ 
+     const calcDistances = function (targets, origin) {
+         return targets.map(function (target) {
+-            target.distance = math.actualDistance(origin, target);
+-            return target;
++            return {...target, distance: math.actualDistance(origin, target)};
+         });
+     };
+ 
+     const filterTargets = function (targets) {
++        const seen = new Set();
+         return targets.filter(function (target) {
++            if (seen.has(target.id)) {
++                return false;
++            }
++
++            seen.add(target.id);
+             return targetFilters.every(function (fn) {
+                 return !fn(target);
+             });
+@@ -376,7 +390,7 @@ define('two/farmOverflow', [
+                 return;
+             }
+ 
+-            const preset = playerPresets[presetId];
++            const preset = {...playerPresets[presetId]};
+             preset.load = getPresetHaul(preset);
+             preset.travelTime = armyService.calculateTravelTime(preset, {
+                 barbarian: false,
+@@ -424,18 +438,23 @@ define('two/farmOverflow', [
+     };
+ 
+     const reportListener = function (event, data) {
+-        if (!localSettings[SETTINGS.IGNORE_ON_LOSS] || !localSettings[SETTINGS.GROUP_IGNORE]) {
++        if (data.type !== COMMAND_TYPES.TYPES.ATTACK || !isTarget(data.target_village_id)) {
+             return;
+         }
+ 
+-        if (!running || data.type !== COMMAND_TYPES.TYPES.ATTACK) {
+-            return;
++        const hadLoss = data.result === 2 || data.result === 3;
++        const cooldown = hadLoss ? localSettings[SETTINGS.LOSS_COOLDOWN]
++            : data.haul === 'none' ? localSettings[SETTINGS.EMPTY_HAUL_COOLDOWN] : 0;
++
++        if (Number.isFinite(cooldown) && cooldown > 0) {
++            targetCooldowns[data.target_village_id] = timeHelper.gameTime() + cooldown;
++            Lockr.set(cooldownStorageKey, targetCooldowns);
+         }
+ 
+         // 1 = nocasualties
+         // 2 = casualties
+         // 3 = defeat
+-        if (data.result !== 1 && isTarget(data.target_village_id)) {
++        if (hadLoss && localSettings[SETTINGS.IGNORE_ON_LOSS] && localSettings[SETTINGS.GROUP_IGNORE]) {
+             tempVillageReports[data.target_village_id] = {
+                 haul: data.haul,
+                 id: data.id,
+@@ -448,7 +467,7 @@ define('two/farmOverflow', [
+     };
+ 
+     const commandSentListener = function (event, data) {
+-        if (!activeFarmer || !currentTarget) {
++        if (!running || !sendingCommand || !activeFarmer || !currentTarget) {
+             return;
+         }
+ 
+@@ -532,21 +551,8 @@ define('two/farmOverflow', [
+         const farmerBehavior = localSettings[SETTINGS.FARMER_BEHAVIOR];
+         const targetBehavior = localSettings[SETTINGS.TARGET_BEHAVIOR];
+ 
+-        if (thisFarmerIsAttacking) {
+-            if (farmerBehavior === FARMER_BEHAVIOR.ALLOW_MULTIPLE_ATTACK_EACH_TARGET) {
+-                return true;
+-            } else {
+-                return false;
+-            }
+-        } else if (otherFarmerIsAttacking) {
+-            if (targetBehavior === TARGET_BEHAVIOR.TARGETS_ALLOW_MULTIPLE_FARMERS) {
+-                return true;
+-            } else {
+-                return false;
+-            }
+-        } else {
+-            return true;
+-        }
++        return (!thisFarmerIsAttacking || farmerBehavior === FARMER_BEHAVIOR.ALLOW_MULTIPLE_ATTACK_EACH_TARGET)
++            && (!otherFarmerIsAttacking || targetBehavior === TARGET_BEHAVIOR.TARGETS_ALLOW_MULTIPLE_FARMERS);
+     };
+ 
+     const enableRequiredPresets = function (villageId, callback) {
+@@ -582,14 +588,14 @@ define('two/farmOverflow', [
+     const persistentRunningStart = function () {
+         const cycleInterval = getCycleInterval();
+         const attackInterval = getAttackInterval();
+-        const timeLimit = cycleInterval + (cycleInterval / 2) + attackInterval;
++        const timeLimit = cycleInterval + (cycleInterval / 2) + attackInterval
++            + localSettings[SETTINGS.CYCLE_JITTER] + localSettings[SETTINGS.ATTACK_JITTER] + STEP_EXPIRE_TIME;
+ 
+         persistentRunningTimer = setInterval(function () {
+             const now = timeHelper.gameTime();
+ 
+             if (now - persistentRunningLastCheck > timeLimit) {
+-                farmOverflow.stop();
+-                setTimeout(farmOverflow.start, 5000);
++                farmOverflow.stop(STATUS.EXPIRED_STEP);
+             }
+         }, PERSISTENT_RUNNING_CHECK_INTERVAL);
+     };
+@@ -620,8 +626,35 @@ define('two/farmOverflow', [
+         return Math.max(MINIMUM_ATTACK_INTERVAL, localSettings[SETTINGS.ATTACK_INTERVAL]);
+     };
+ 
++    const getPresetChoice = function (farmer, target) {
++        const distance = math.actualDistance(farmer.village.getPosition(), target);
++        return policy.choosePreset(selectedPresets, farmer.village.getUnitInfo().getUnits(), unitsData, function (preset) {
++            const fieldTime = armyService.calculateTravelTime(preset, {
++                barbarian: policy.isBarbarian(target),
++                officers: true,
++                effects: true
++            });
++            return armyService.getTravelTimeForDistance(preset, fieldTime, distance, COMMAND_TYPES.TYPES.ATTACK);
++        }, {
++            optimize: localSettings[SETTINGS.OPTIMIZE_HAUL],
++            reservePercent: localSettings[SETTINGS.UNIT_RESERVE_PERCENT],
++            expectedLoot: localSettings[SETTINGS.ESTIMATED_TARGET_LOOT],
++            maxTravelMs: localSettings[SETTINGS.MAX_TRAVEL_TIME]
++        });
++    };
++
++    const storageIsFull = function (village) {
++        resourceService.updateMaxStorage(village);
++        const resources = village.getResources();
++        const computed = resources.getComputed();
++        const maximum = resources.getMaxStorage();
++        return RESOURCES.every(type => computed[type].currentStock >= maximum);
++    };
++
+     function incomingCommandsFilter (command) {
+-        return command.startCharacterId === $player.getId() && command.data.direction === 'forward';
++        const type = command.type || command.data.type;
++        return command.startCharacterId === $player.getId() && command.data.direction === 'forward'
++            && (!type || type === COMMAND_TYPES.TYPES.ATTACK);
+     }
+ 
+     const Farmer = function (villageId) {
+@@ -638,6 +671,8 @@ define('two/farmOverflow', [
+         this.targets = false;
+         this.onCycleEndFn = noop;
+         this.status = STATUS.WAITING_CYCLE;
++        this.stepVersion = 0;
++        this.attacksThisCycle = 0;
+     };
+ 
+     Farmer.prototype.init = function () {
+@@ -674,7 +709,7 @@ define('two/farmOverflow', [
+     Farmer.prototype.start = function () {
+         persistentRunningUpdate();
+ 
+-        if (this.running) {
++        if (!running || this.running) {
+             return false;
+         }
+ 
+@@ -694,6 +729,12 @@ define('two/farmOverflow', [
+ 
+         activeFarmer = this;
+         this.running = true;
++        this.index = 0;
++        this.attacksThisCycle = 0;
++        this.targets = policy.orderTargets(this.targets, target => {
++            const choice = getPresetChoice(this, target);
++            return choice.score || 1 / Math.max(1, target.distance);
++        }, localSettings[SETTINGS.TARGET_ORDER_VARIATION]);
+         eventQueue.trigger(eventTypeProvider.FARM_OVERFLOW_INSTANCE_START, {
+             villageId: this.villageId
+         });
+@@ -707,6 +748,7 @@ define('two/farmOverflow', [
+ 
+     Farmer.prototype.stop = function (reason) {
+         this.running = false;
++        this.stepVersion++;
+ 
+         debug(1, 'stop farmer village %d', this.villageId);
+ 
+@@ -717,6 +759,8 @@ define('two/farmOverflow', [
+ 
+         if (reason === ERROR_TYPES.USER_STOP) {
+             this.setStatus(STATUS.USER_STOP);
++        } else if (reason) {
++            this.setStatus(reason);
+         }
+ 
+         stopTimers();
+@@ -744,18 +788,23 @@ define('two/farmOverflow', [
+     }
+ 
+     Farmer.prototype.targetStep = async function (options = {}) {
+-        if (!this.running) {
++        if (!running || !this.running) {
+             return false;
+         }
+ 
++        const stepVersion = ++this.stepVersion;
++        const isActive = () => running && this.running && activeFarmer === this && stepVersion === this.stepVersion;
++        const attackDelay = options.delay
++            ? policy.boundedDelay(getAttackInterval(), localSettings[SETTINGS.ATTACK_JITTER], MINIMUM_ATTACK_INTERVAL) : 0;
++
+         debug(1, 'start target step %d', this.villageId);
+ 
+         persistentRunningUpdate();
+ 
+-        const commandList = this.village.getCommandListModel();
+-        const villageCommands = commandList.getOutgoingCommands(true, true);
+         let selectedPreset = false;
++        let selectedChoice;
+         let target;
++        let incomingAttacks = [];
+         let checkedLocalCommands = false;
+         let otherFarmerIsAttacking;
+         let thisFarmerIsAttacking;
+@@ -765,21 +814,24 @@ define('two/farmOverflow', [
+                 stepDelayTimer = setTimeout(() => {
+                     stepDelayTimer = null;
+ 
+-                    if (!this.running) {
++                    if (!isActive()) {
+                         return reject(STATUS.USER_STOP);
+                     }
+ 
+                     resolve();
+-                }, getAttackInterval());
++                }, attackDelay);
+             } else {
+                 resolve();
+             }
+         });
+ 
+         const checkCommandLimit = stepFactory('checkCommandLimit', (resolve, reject) => {
++            const villageCommands = this.village.getCommandListModel().getOutgoingCommands(true, true);
+             const limit = VILLAGE_COMMAND_LIMIT - localSettings[SETTINGS.PRESERVE_COMMAND_SLOTS];
+ 
+-            if (villageCommands.length >= limit) {
++            if (this.attacksThisCycle >= localSettings[SETTINGS.MAX_ATTACKS_PER_CYCLE]) {
++                reject(STATUS.CYCLE_ATTACK_LIMIT);
++            } else if (villageCommands.length >= limit) {
+                 reject(STATUS.COMMAND_LIMIT);
+             } else {
+                 resolve();
+@@ -787,16 +839,8 @@ define('two/farmOverflow', [
+         });
+ 
+         const checkStorage = stepFactory('checkStorage', (resolve, reject) => {
+-            if (localSettings[SETTINGS.IGNORE_FULL_STORAGE]) {
+-                resourceService.updateMaxStorage(this.village);
+-                const resources = this.village.getResources();
+-                const computed = resources.getComputed();
+-                const maxStorage = resources.getMaxStorage();
+-                const isFull = RESOURCES.every((type) => computed[type].currentStock === maxStorage);
+-
+-                if (isFull) {
+-                    return reject(STATUS.FULL_STORAGE);
+-                }
++            if (localSettings[SETTINGS.IGNORE_FULL_STORAGE] && storageIsFull(this.village)) {
++                return reject(STATUS.FULL_STORAGE);
+             }
+ 
+             resolve();
+@@ -817,16 +861,24 @@ define('two/farmOverflow', [
+         });
+ 
+         const checkTarget = stepFactory('checkTarget', (resolve, reject) => {
++            if (targetCooldowns[target.id] > timeHelper.gameTime()) {
++                return reject(STATUS.TARGET_COOLDOWN);
++            }
++
+             const checkTargetHandler = (data) => {
+-                if (!this.running) {
++                if (!isActive()) {
+                     reject(STATUS.USER_STOP);
++                } else if (!data || data.id !== target.id || !Number.isFinite(data.points)) {
++                    reject(STATUS.COMMAND_ERROR);
+                 } else if (villageFilters.points(data.points)) {
+                     return reject(STATUS.NOT_ALLOWED_POINTS);
+-                } else if (target.character_id !== null && !includedVillages.includes(target.id)) {
++                } else if (villageFilters.barbarian(data) || villageFilters.ownPlayer(data)
++                    || villageFilters.included(data) || villageFilters.ignored(data)) {
+                     reject(STATUS.ABANDONED_CONQUERED);
+-                } else if (target.attack_protection) {
++                } else if (data.attack_protection) {
+                     reject(STATUS.PROTECTED_VILLAGE);
+                 } else {
++                    target = {...target, ...data};
+                     resolve();
+                 }
+             };
+@@ -834,15 +886,19 @@ define('two/farmOverflow', [
+             const data = $mapData.getTownAt(target.x, target.y);
+ 
+             if (data) {
+-                checkTargetHandler($mapData.getTownAt(target.x, target.y));
++                checkTargetHandler(data);
+             } else {
+                 $mapData.getTownAtAsync(target.x, target.y, checkTargetHandler);
+             }
+         });
+ 
+         const checkPresets = stepFactory('checkPresets', (resolve, reject) => {
++            if (localSettings[SETTINGS.PREVIEW_ONLY]) {
++                return resolve();
++            }
++
+             enableRequiredPresets(this.villageId, () => {
+-                if (this.running) {
++                if (isActive()) {
+                     resolve();
+                 } else {
+                     reject(STATUS.USER_STOP);
+@@ -851,43 +907,14 @@ define('two/farmOverflow', [
+         });
+ 
+         const selectPreset = stepFactory('selectPreset', (resolve, reject) => {
+-            const villageUnits = this.village.getUnitInfo().getUnits();
+-            const maxTravelTime = localSettings[SETTINGS.MAX_TRAVEL_TIME];
+-            const villagePosition = this.village.getPosition();
+-            const targetDistance = math.actualDistance(villagePosition, target);
+-
+-            utils.each(selectedPresets, (preset) => {
+-                const enoughUnits = !Object.entries(preset.units).some((unit) => {
+-                    const name = unit[0];
+-                    const amount = unit[1];
+-                            
+-                    return villageUnits[name].in_town < amount;
+-                });
+-
+-                if (!enoughUnits) {
+-                    return;
+-                }
+-
+-                const travelTime = armyService.calculateTravelTime(preset, {
+-                    barbarian: !target.character_id,
+-                    officers: false
+-                });
+-
+-                if (maxTravelTime > travelTime * targetDistance) {
+-                    selectedPreset = preset;
+-                    resolve();
+-                } else {
+-                    // why reject with TIME_LIMIT if there are more presets to check?
+-                    // because the preset list is sorted by travel time.
+-                    reject(STATUS.TIME_LIMIT);
+-                }
++            selectedChoice = getPresetChoice(this, target);
+ 
+-                return false;
+-            });
+-
+-            if (!selectedPreset) {
+-                reject(STATUS.NO_UNITS);
++            if (!selectedChoice.preset) {
++                return reject(selectedChoice.reason === 'time_limit' ? STATUS.TIME_LIMIT : STATUS.NO_UNITS);
+             }
++
++            selectedPreset = selectedChoice.preset;
++            resolve();
+         });
+ 
+         const checkLocalCommands = stepFactory('checkLocalCommands', (resolve, reject) => {
+@@ -899,6 +926,7 @@ define('two/farmOverflow', [
+ 
+                 const x = villageInfoService.getCommands(target.id);
+                 const incomingCommands = x.filter(incomingCommandsFilter);
++                incomingAttacks = incomingCommands;
+ 
+                 otherFarmerIsAttacking = incomingCommands.some((command) => command.startVillageId !== this.villageId);
+                 thisFarmerIsAttacking = incomingCommands.some((command) => command.startVillageId === this.villageId);
+@@ -921,11 +949,15 @@ define('two/farmOverflow', [
+                 village_id: target.id,
+                 num_reports: 0
+             }, (data) => {
+-                if (!this.running) {
++                if (!isActive()) {
+                     return reject(STATUS.USER_STOP);
+                 }
+ 
+-                const incomingAttacks = data.commands.own.filter((command) => command.type === COMMAND_TYPES.TYPES.ATTACK && command.direction === 'forward');
++                if (!data || !data.commands || !Array.isArray(data.commands.own)) {
++                    return reject(STATUS.COMMAND_ERROR);
++                }
++
++                incomingAttacks = data.commands.own.filter((command) => command.type === COMMAND_TYPES.TYPES.ATTACK && command.direction === 'forward');
+                 otherFarmerIsAttacking = incomingAttacks.some((command) => command.start_village_id !== this.villageId);
+                 thisFarmerIsAttacking = incomingAttacks.some((command) => command.start_village_id === this.villageId);
+ 
+@@ -943,26 +975,8 @@ define('two/farmOverflow', [
+                 return resolve();
+             }
+ 
+-            // command timestamps and time travel calculations are returned as SECONDS
+-            const multipleAttacksInterval = localSettings[SETTINGS.MULTIPLE_ATTACKS_INTERVAL] / 1000;
+-
+-            if (!multipleAttacksInterval) {
+-                return resolve();
+-            }
+-
+-            const now = timeHelper.gameTime() / 1000;
+-            const position = this.village.getPosition();
+-            const distance = math.actualDistance(position, target);
+-            const singleFieldtravelTime = armyService.calculateTravelTime(selectedPreset, {
+-                barbarian: !target.character_id,
+-                officers: true,
+-                effects: true
+-            });
+-            const commandTravelTime = armyService.getTravelTimeForDistance(selectedPreset, singleFieldtravelTime, distance, COMMAND_TYPES.TYPES.ATTACK);
+-            const incomingCommands = villageInfoService.getCommands(target.id).filter(incomingCommandsFilter);
+-            const attackCollision = incomingCommands.some((command) => {
+-                return Math.abs((now + commandTravelTime) - command.time_completed) < multipleAttacksInterval;
+-            });
++            const arrival = timeHelper.gameTime() / 1000 + selectedChoice.travelSeconds;
++            const attackCollision = policy.arrivalIsBusy(arrival, incomingAttacks, localSettings[SETTINGS.MULTIPLE_ATTACKS_INTERVAL]);
+ 
+             if (attackCollision) {
+                 debug(2, 'rejected by minimumInterval');
+@@ -973,18 +987,86 @@ define('two/farmOverflow', [
+         });
+ 
+         const prepareAttack = () => {
+-            if (!this.running) {
++            if (!isActive()) {
+                 return false;
+             }
+ 
++            // Recheck mutable state immediately before issuing a command.
++            const latest = $mapData.getTownAt(target.x, target.y);
++
++            if (!latest || latest.id !== target.id || villageFilters.barbarian(latest)
++                || villageFilters.ownPlayer(latest) || villageFilters.included(latest) || villageFilters.ignored(latest)) {
++                throw STATUS.ABANDONED_CONQUERED;
++            }
++
++            if (latest.attack_protection) {
++                throw STATUS.PROTECTED_VILLAGE;
++            }
++
++            if (!Number.isFinite(latest.points) || villageFilters.points(latest.points)) {
++                throw STATUS.NOT_ALLOWED_POINTS;
++            }
++
++            if (targetCooldowns[target.id] > timeHelper.gameTime()) {
++                throw STATUS.TARGET_COOLDOWN;
++            }
++
++            selectedChoice = getPresetChoice(this, {...target, ...latest});
++
++            if (!selectedChoice.preset || selectedChoice.preset.id !== selectedPreset.id) {
++                throw STATUS.NO_UNITS;
++            }
++
++            const commands = this.village.getCommandListModel().getOutgoingCommands(true, true);
++
++            if (commands.length >= VILLAGE_COMMAND_LIMIT - localSettings[SETTINGS.PRESERVE_COMMAND_SLOTS]) {
++                throw STATUS.COMMAND_LIMIT;
++            }
++
++            if (localSettings[SETTINGS.IGNORE_FULL_STORAGE] && storageIsFull(this.village)) {
++                throw STATUS.FULL_STORAGE;
++            }
++
++            if (policy.arrivalIsBusy(timeHelper.gameTime() / 1000 + selectedChoice.travelSeconds,
++                incomingAttacks,
++                localSettings[SETTINGS.MULTIPLE_ATTACKS_INTERVAL])) {
++                throw STATUS.BUSY_TARGET;
++            }
++
++            clearTimeout(commandExpireTimer);
++            commandExpireTimer = null;
++            this.index++;
++            this.attacksThisCycle++;
++
++            if (localSettings[SETTINGS.PREVIEW_ONLY]) {
++                this.setStatus(STATUS.PREVIEW);
++                addLog(LOG_TYPES.PLANNED_VILLAGE, {
++                    targetId: target.id,
++                    originId: this.villageId,
++                    presetId: selectedPreset.id,
++                    capacity: selectedChoice.haul,
++                    travelSeconds: selectedChoice.travelSeconds,
++                    ratePerHour: Math.round(selectedChoice.score * 3600),
++                    usingLootEstimate: localSettings[SETTINGS.ESTIMATED_TARGET_LOOT] > 0
++                });
++                this.targetStep({delay: true});
++                return;
++            }
++
+             this.setStatus(STATUS.ATTACKING);
+ 
+             sendingCommand = true;
+             currentTarget = target;
+-            this.index++;
+ 
+             debug(2, 'sending attack to %d from %d', target.id, this.villageId);
+ 
++            commandExpireTimer = setTimeout(() => {
++                if (isActive() && sendingCommand) {
++                    // An unacknowledged send must not be retried automatically.
++                    farmOverflow.stop(STATUS.COMMAND_TIMEOUT);
++                }
++            }, STEP_EXPIRE_TIME);
++
+             socketService.emit(routeProvider.SEND_PRESET, {
+                 start_village: this.villageId,
+                 target_village: target.id,
+@@ -994,6 +1076,10 @@ define('two/farmOverflow', [
+         };
+ 
+         const stepStatus = (status) => {
++            if (!isActive()) {
++                return;
++            }
++
+             stopTimers();
+ 
+             debug(1, 'target step finished "%s"', status);
+@@ -1013,6 +1099,12 @@ define('two/farmOverflow', [
+                     this.targetStep(options);
+                     break;
+                 }
++                case STATUS.TARGET_COOLDOWN: {
++                    this.index++;
++                    this.setStatus(status);
++                    this.targetStep(options);
++                    break;
++                }
+                 case STATUS.USER_STOP: {
+                     this.setStatus(status);
+                     break;
+@@ -1033,6 +1125,12 @@ define('two/farmOverflow', [
+                     this.stop(status);
+                     break;
+                 }
++                case STATUS.CYCLE_ATTACK_LIMIT: {
++                    this.index = 0;
++                    this.setStatus(status);
++                    this.stop(status);
++                    break;
++                }
+                 case STATUS.TARGET_CYCLE_END: {
+                     this.index = 0;
+                     this.setStatus(status);
+@@ -1040,8 +1138,9 @@ define('two/farmOverflow', [
+                     break;
+                 }
+                 case STATUS.EXPIRED_STEP: {
++                    this.index++;
+                     this.setStatus(status);
+-                    this.targetStep();
++                    this.targetStep({delay: true});
+                     break;
+                 }
+                 default: {
+@@ -1053,27 +1152,35 @@ define('two/farmOverflow', [
+             }
+         };
+ 
++        const activeStep = (step) => () => {
++            if (!isActive()) {
++                throw STATUS.USER_STOP;
++            }
++
++            return step();
++        };
++
+         const attackPromise = new Promise((resolve, reject) => {
+             delayStep()
+-                .then(checkCommandLimit)
+-                .then(checkStorage)
+-                .then(selectTarget)
+-                .then(checkTarget)
+-                .then(checkPresets)
+-                .then(selectPreset)
+-                .then(checkLocalCommands)
+-                .then(checkLoadedCommands)
+-                .then(minimumInterval)
++                .then(activeStep(checkCommandLimit))
++                .then(activeStep(checkStorage))
++                .then(activeStep(selectTarget))
++                .then(activeStep(checkTarget))
++                .then(activeStep(checkPresets))
++                .then(activeStep(selectPreset))
++                .then(activeStep(checkLocalCommands))
++                .then(activeStep(checkLoadedCommands))
++                .then(activeStep(minimumInterval))
+                 .then(resolve)
+                 .catch(reject);
+         });
+ 
+         const expirePromise = new Promise((resolve, reject) => {    
+             commandExpireTimer = setTimeout(() => {
+-                if (this.running) {
++                if (isActive()) {
+                     reject(STATUS.EXPIRED_STEP);
+                 }
+-            }, STEP_EXPIRE_TIME);
++            }, STEP_EXPIRE_TIME + attackDelay);
+         });
+ 
+         Promise.race([
+@@ -1166,9 +1273,11 @@ define('two/farmOverflow', [
+             return false;
+         }
+ 
++        const removedBeforeIndex = this.targets.slice(0, this.index).filter(target => target.id === targetId).length;
+         this.targets = this.targets.filter(function (target) {
+             return target.id !== targetId;
+         });
++        this.index = Math.max(0, this.index - removedBeforeIndex);
+ 
+         return true;
+     };
+@@ -1249,6 +1358,10 @@ define('two/farmOverflow', [
+     };
+ 
+     const farmerStep = function (status) {
++        if (!running) {
++            return;
++        }
++
+         persistentRunningUpdate();
+ 
+         if (!farmers.length) {
+@@ -1258,15 +1371,13 @@ define('two/farmOverflow', [
+             debug(1, 'farmerStep: cycle end');
+             farmerIndex = 0;
+             activeFarmer = false;
+-            nextCycleDate = timeHelper.gameTime() + getCycleInterval();
+-            eventQueue.trigger(eventTypeProvider.FARM_OVERFLOW_CYCLE_END);
+         } else {
+             activeFarmer = farmers[farmerIndex];
+         }
+ 
+         if (activeFarmer) {
+             activeFarmer.onCycleEnd(function (reason) {
+-                if (reason !== ERROR_TYPES.USER_STOP) {
++                if (running && reason !== ERROR_TYPES.USER_STOP) {
+                     debug(1, 'farmerStep: farmer finished, select next farmer');
+                     farmerIndex++;
+                     farmerStep();
+@@ -1279,22 +1390,29 @@ define('two/farmOverflow', [
+                 eventQueue.trigger(eventTypeProvider.FARM_OVERFLOW_CYCLE_BEGIN);
+             }
+ 
+-            activeFarmer.start();
++            if (!activeFarmer.start()) {
++                farmerIndex++;
++                farmerStep();
++            }
+         } else {
++            const cycleDelay = policy.boundedDelay(getCycleInterval(), localSettings[SETTINGS.CYCLE_JITTER], MINIMUM_FARMER_CYCLE_INTERVAL);
++            nextCycleDate = timeHelper.gameTime() + cycleDelay;
++            eventQueue.trigger(eventTypeProvider.FARM_OVERFLOW_CYCLE_END);
++
+             cycleTimer = setTimeout(function () {
+                 cycleTimer = null;
+                 farmerIndex = 0;
+                 nextCycleDate = null;
+                 eventQueue.trigger(eventTypeProvider.FARM_OVERFLOW_CYCLE_BEGIN);
+                 farmerStep();
+-            }, getCycleInterval());
++            }, cycleDelay);
+         }
+     };
+ 
+     const isTarget = function (targetId) {
+         for (let i = 0; i < farmers.length; i++) {
+             const farmer = farmers[i];
+-            const targets = farmer.getTargets();
++            const targets = farmer.getTargets() || [];
+ 
+             for (let j = 0; j < targets.length; j++) {
+                 const target = targets[j];
+@@ -1332,12 +1450,28 @@ define('two/farmOverflow', [
+         exceptionLogs = Lockr.get(STORAGE_KEYS.EXCEPTION_LOGS, {});
+         $player = modelDataService.getSelectedCharacter();
+         unitsData = modelDataService.getGameData().getUnitsObject();
++        cooldownStorageKey = `farm_overflow_cooldowns_${$player.getWorldId()}_${$player.getId()}`;
++        targetCooldowns = Lockr.get(cooldownStorageKey, {});
++
++        for (const [id, until] of Object.entries(targetCooldowns)) {
++            if (!Number.isFinite(until) || until <= timeHelper.gameTime()) {
++                delete targetCooldowns[id];
++            }
++        }
+ 
+         settings = new Settings({
+             settingsMap: SETTINGS_MAP,
+             storageKey: STORAGE_KEYS.SETTINGS
+         });
+ 
++        // Earlier versions stored the target-count text input without parsing it.
++        const legacyTargetLimit = settings.getRaw(SETTINGS.TARGET_LIMIT);
++
++        if (typeof legacyTargetLimit === 'string' && legacyTargetLimit.trim() !== ''
++            && Number.isInteger(Number(legacyTargetLimit))) {
++            settings.set(SETTINGS.TARGET_LIMIT, Number(legacyTargetLimit));
++        }
++
+         settings.onChange(function (changes, updates, _flag) {
+             debug(1, 'settings changes: %o updates: %o', changes, updates);
+ 
+@@ -1347,6 +1481,10 @@ define('two/farmOverflow', [
+                 return;
+             }
+ 
++            if (running) {
++                farmOverflow.stop();
++            }
++
+             if (updates[UPDATES.PRESET]) {
+                 processPresets();
+             }
+@@ -1406,6 +1544,31 @@ define('two/farmOverflow', [
+             return false;
+         }
+ 
++        const validSettings = Object.entries(SETTINGS_MAP).every(([id, map]) => {
++            const value = localSettings[id];
++
++            if (map.inputType === 'readable_time') {
++                return Number.isFinite(value) && value >= 0 && value <= 7 * 24 * 60 * 60 * 1000;
++            }
++
++            if (map.inputType === 'number') {
++                return Number.isInteger(value) && value >= map.min && value <= map.max;
++            }
++
++            if (map.inputType === 'checkbox') {
++                return typeof value === 'boolean';
++            }
++
++            return true;
++        });
++
++        if (!validSettings || localSettings[SETTINGS.MAX_TRAVEL_TIME] <= 0
++            || localSettings[SETTINGS.MIN_DISTANCE] > localSettings[SETTINGS.MAX_DISTANCE]
++            || localSettings[SETTINGS.MIN_POINTS] > localSettings[SETTINGS.MAX_POINTS]) {
++            utils.notif('error', $filter('i18n')('invalid_farming_settings', $rootScope.loc.ale, 'farm_overflow'));
++            return false;
++        }
++
+         if (!selectedPresets.length) {
+             debug(1, 'start: fail "%s"', ERROR_TYPES.NO_SELECTED_PRESET);
+ 
+@@ -1417,13 +1580,12 @@ define('two/farmOverflow', [
+         }
+ 
+         running = true;
++        const startedRun = ++runVersion;
+ 
+         const readyFarmers = [];
+ 
+         farmers.forEach(function (farmer) {
+-            readyFarmers.push(new Promise(function (resolve) {
+-                farmer.init().then(resolve);
+-            }));
++            readyFarmers.push(farmer.init());
+         });
+ 
+         if (!readyFarmers.length) {
+@@ -1433,8 +1595,16 @@ define('two/farmOverflow', [
+         }
+ 
+         Promise.all(readyFarmers).then(function () {
++            if (!running || runVersion !== startedRun) {
++                return;
++            }
++
+             debug(1, 'start: all farmers ready');
+             farmerStep(CYCLE_BEGIN);
++        }).catch(function () {
++            if (running && runVersion === startedRun) {
++                farmOverflow.stop(STATUS.UNKNOWN);
++            }
+         });
+ 
+         persistentRunningUpdate();
+@@ -1447,19 +1617,18 @@ define('two/farmOverflow', [
+     };
+ 
+     farmOverflow.stop = function (reason = STATUS.USER_STOP) {
++        running = false;
++        runVersion++;
++        sendingCommand = false;
++        currentTarget = false;
++
+         if (activeFarmer) {
+             activeFarmer.stop(reason);
+-            
+-            if (reason !== STATUS.USER_STOP) {
+-                nextCycleDate = timeHelper.gameTime() + getCycleInterval();
+-            }
+ 
+             eventQueue.trigger(eventTypeProvider.FARM_OVERFLOW_CYCLE_END, reason);
+-        } else {
+-            nextCycleDate = null;
+         }
+ 
+-        running = false;
++        nextCycleDate = null;
+ 
+         stopTimers();
+ 
+diff --git a/src/modules/farm_overflow/src/interface.js b/src/modules/farm_overflow/src/interface.js
+index dfef5fd..821b97b 100644
+--- a/src/modules/farm_overflow/src/interface.js
++++ b/src/modules/farm_overflow/src/interface.js
+@@ -12,7 +12,8 @@ define('two/farmOverflow/ui', [
+     'two/utils',
+     'queues/EventQueue',
+     'helper/time',
+-    'helper/util'
++    'helper/util',
++    'humanInterval'
+ ], function (
+     interfaceOverflow,
+     farmOverflow,
+@@ -27,7 +28,8 @@ define('two/farmOverflow/ui', [
+     utils,
+     eventQueue,
+     timeHelper,
+-    util
++    util,
++    humanInterval
+ ) {
+     let $scope;
+     let settings;
+@@ -112,16 +114,38 @@ define('two/farmOverflow/ui', [
+             SETTINGS.ATTACK_INTERVAL,
+             SETTINGS.FARMER_CYCLE_INTERVAL,
+             SETTINGS.MULTIPLE_ATTACKS_INTERVAL,
+-            SETTINGS.MAX_TRAVEL_TIME
++            SETTINGS.MAX_TRAVEL_TIME,
++            SETTINGS.ATTACK_JITTER,
++            SETTINGS.CYCLE_JITTER,
++            SETTINGS.EMPTY_HAUL_COOLDOWN,
++            SETTINGS.LOSS_COOLDOWN
+         ];
+ 
+         for (const id of validSettings) {
+-            if (!settings.valid('readable_time', $scope.settings[id])) {
++            const duration = humanInterval($scope.settings[id]);
++
++            if (!settings.valid('readable_time', $scope.settings[id]) || duration < 0
++                || duration > 7 * 24 * 60 * 60 * 1000 || (id === SETTINGS.MAX_TRAVEL_TIME && duration === 0)) {
+                 return utils.notif('error', $filter('i18n')('error_invalid_interval', $rootScope.loc.ale, 'common', id));
+             }
+         }
+ 
+-        settings.setAll(settings.decode($scope.settings));
++        const decoded = settings.decode($scope.settings);
++        const validNumbers = Object.entries(settings.settingsMap).every(([id, map]) => {
++            if (map.inputType !== 'number') {
++                return true;
++            }
++
++            const value = Number(decoded[id]);
++            return decoded[id] !== '' && Number.isInteger(value) && value >= map.min && value <= map.max;
++        });
++
++        if (!validNumbers || Number(decoded[SETTINGS.MIN_DISTANCE]) > Number(decoded[SETTINGS.MAX_DISTANCE])
++            || Number(decoded[SETTINGS.MIN_POINTS]) > Number(decoded[SETTINGS.MAX_POINTS])) {
++            return utils.notif('error', $filter('i18n')('invalid_farming_settings', $rootScope.loc.ale, 'farm_overflow'));
++        }
++
++        settings.setAll(decoded);
+         $scope.saveButtonColor = 'orange';
+         utils.notif('success', $filter('i18n')('settings_saved', $rootScope.loc.ale, 'farm_overflow'));
+     };
+@@ -195,14 +219,18 @@ define('two/farmOverflow/ui', [
+     };
+ 
+     const checkCycleInterval = function () {
++        clearInterval(cycleCountdownTimer);
+         const nextCycleDate = farmOverflow.getNextCycleDate();
+ 
+         if (nextCycleDate) {
+             $scope.showCycleTimer = true;
+             $scope.nextCycleCountdown = nextCycleDate - timeHelper.gameTime();
+ 
++            const scope = $scope;
+             cycleCountdownTimer = setInterval(function () {
+-                $scope.nextCycleCountdown -= 1000;
++                scope.$evalAsync(function () {
++                    scope.nextCycleCountdown = Math.max(0, (farmOverflow.getNextCycleDate() || timeHelper.gameTime()) - timeHelper.gameTime());
++                });
+             }, 1000);
+         }
+     };
+@@ -269,16 +297,11 @@ define('two/farmOverflow/ui', [
+             clearInterval(cycleCountdownTimer);
+         },
+         onCycleEnd: function (event, reason) {
+-            if (reason === STATUS.USER_STOP) {
++            if (reason || !farmOverflow.isRunning()) {
+                 return;
+             }
+ 
+-            $scope.showCycleTimer = true;
+-            $scope.nextCycleCountdown = farmOverflow.getCycleInterval();
+-
+-            cycleCountdownTimer = setInterval(function () {
+-                $scope.nextCycleCountdown -= 1000;
+-            }, 1000);
++            checkCycleInterval();
+         }
+     };
+ 
+@@ -322,6 +345,19 @@ define('two/farmOverflow/ui', [
+         $scope.nextCycleCountdown = 0;
+         $scope.saveButtonColor = 'orange';
+         $scope.settingsMap = settings.settingsMap;
++        $scope.farmingSettings = [
++            SETTINGS.PREVIEW_ONLY,
++            SETTINGS.BARBARIANS_ONLY,
++            SETTINGS.OPTIMIZE_HAUL,
++            SETTINGS.ESTIMATED_TARGET_LOOT,
++            SETTINGS.UNIT_RESERVE_PERCENT,
++            SETTINGS.MAX_ATTACKS_PER_CYCLE,
++            SETTINGS.TARGET_ORDER_VARIATION,
++            SETTINGS.ATTACK_JITTER,
++            SETTINGS.CYCLE_JITTER,
++            SETTINGS.EMPTY_HAUL_COOLDOWN,
++            SETTINGS.LOSS_COOLDOWN
++        ];
+ 
+         $scope.pagination = {
+             count: $scope.logs.length,
+@@ -376,14 +412,21 @@ define('two/farmOverflow/ui', [
+         eventScope.register(eventTypeProvider.GROUPS_UPDATED, eventHandlers.updateGroups, true);
+         eventScope.register(eventTypeProvider.GROUPS_CREATED, eventHandlers.updateGroups, true);
+         eventScope.register(eventTypeProvider.GROUPS_DESTROYED, eventHandlers.updateGroups, true);
+-        eventScope.register(eventTypeProvider.FARM_OVERFLOW_START, eventHandlers.start);
+-        eventScope.register(eventTypeProvider.FARM_OVERFLOW_STOP, eventHandlers.stop);
+-        eventScope.register(eventTypeProvider.FARM_OVERFLOW_LOGS_UPDATED, eventHandlers.updateLogs);
+-        eventScope.register(eventTypeProvider.FARM_OVERFLOW_FARMER_VILLAGES_UPDATED, eventHandlers.updateFarmerVillages);
+-        eventScope.register(eventTypeProvider.FARM_OVERFLOW_EXCEPTION_VILLAGES_UPDATED, eventHandlers.updateExceptionVillages);
+-        eventScope.register(eventTypeProvider.FARM_OVERFLOW_EXCEPTION_LOGS_UPDATED, eventHandlers.updateExceptionLogs);
+-        eventScope.register(eventTypeProvider.FARM_OVERFLOW_CYCLE_BEGIN, eventHandlers.onCycleBegin);
+-        eventScope.register(eventTypeProvider.FARM_OVERFLOW_CYCLE_END, eventHandlers.onCycleEnd);
++        const scope = $scope;
++        const inAngular = (handler) => (...args) => scope.$evalAsync(() => {
++            if (!scope.$$destroyed) {
++                handler(...args);
++            }
++        });
++
++        eventScope.register(eventTypeProvider.FARM_OVERFLOW_START, inAngular(eventHandlers.start));
++        eventScope.register(eventTypeProvider.FARM_OVERFLOW_STOP, inAngular(eventHandlers.stop));
++        eventScope.register(eventTypeProvider.FARM_OVERFLOW_LOGS_UPDATED, inAngular(eventHandlers.updateLogs));
++        eventScope.register(eventTypeProvider.FARM_OVERFLOW_FARMER_VILLAGES_UPDATED, inAngular(eventHandlers.updateFarmerVillages));
++        eventScope.register(eventTypeProvider.FARM_OVERFLOW_EXCEPTION_VILLAGES_UPDATED, inAngular(eventHandlers.updateExceptionVillages));
++        eventScope.register(eventTypeProvider.FARM_OVERFLOW_EXCEPTION_LOGS_UPDATED, inAngular(eventHandlers.updateExceptionLogs));
++        eventScope.register(eventTypeProvider.FARM_OVERFLOW_CYCLE_BEGIN, inAngular(eventHandlers.onCycleBegin));
++        eventScope.register(eventTypeProvider.FARM_OVERFLOW_CYCLE_END, inAngular(eventHandlers.onCycleEnd));
+ 
+         windowManagerService.getScreenWithInjectedScope('!twoverflow_farm_overflow_window', $scope);
+ 
+diff --git a/src/modules/farm_overflow/src/settings.js b/src/modules/farm_overflow/src/settings.js
+index 1921d52..5910fb1 100644
+--- a/src/modules/farm_overflow/src/settings.js
++++ b/src/modules/farm_overflow/src/settings.js
+@@ -18,7 +18,18 @@ define('two/farmOverflow/settings', [], function () {
+         IGNORE_ON_LOSS: 'ignore_on_loss',
+         TARGET_LIMIT: 'target_limit',
+         FARMER_BEHAVIOR: 'farmer_behavior',
+-        TARGET_BEHAVIOR: 'target_behavior'
++        TARGET_BEHAVIOR: 'target_behavior',
++        BARBARIANS_ONLY: 'barbarians_only',
++        OPTIMIZE_HAUL: 'optimize_haul',
++        ESTIMATED_TARGET_LOOT: 'estimated_target_loot',
++        UNIT_RESERVE_PERCENT: 'unit_reserve_percent',
++        ATTACK_JITTER: 'attack_jitter',
++        CYCLE_JITTER: 'cycle_jitter',
++        TARGET_ORDER_VARIATION: 'target_order_variation',
++        EMPTY_HAUL_COOLDOWN: 'empty_haul_cooldown',
++        LOSS_COOLDOWN: 'loss_cooldown',
++        MAX_ATTACKS_PER_CYCLE: 'max_attacks_per_cycle',
++        PREVIEW_ONLY: 'preview_only'
+     };
+ });
+ 
+@@ -47,6 +58,69 @@ define('two/farmOverflow/settings/map', [
+     TARGET_BEHAVIOR
+ ) {
+     return {
++        [SETTINGS.BARBARIANS_ONLY]: {
++            default: true,
++            updates: [UPDATES.TARGETS],
++            inputType: 'checkbox'
++        },
++        [SETTINGS.OPTIMIZE_HAUL]: {
++            default: true,
++            updates: [UPDATES.TARGETS],
++            inputType: 'checkbox'
++        },
++        [SETTINGS.ESTIMATED_TARGET_LOOT]: {
++            default: 0,
++            updates: [UPDATES.TARGETS],
++            inputType: 'number',
++            min: 0,
++            max: 1000000
++        },
++        [SETTINGS.UNIT_RESERVE_PERCENT]: {
++            default: 0,
++            updates: [],
++            inputType: 'number',
++            min: 0,
++            max: 100
++        },
++        [SETTINGS.ATTACK_JITTER]: {
++            default: '1 second',
++            updates: [UPDATES.INTERVAL_TIMERS],
++            inputType: 'readable_time'
++        },
++        [SETTINGS.CYCLE_JITTER]: {
++            default: '30 seconds',
++            updates: [UPDATES.INTERVAL_TIMERS],
++            inputType: 'readable_time'
++        },
++        [SETTINGS.TARGET_ORDER_VARIATION]: {
++            default: 5,
++            updates: [UPDATES.TARGETS],
++            inputType: 'number',
++            min: 0,
++            max: 25
++        },
++        [SETTINGS.EMPTY_HAUL_COOLDOWN]: {
++            default: '20 minutes',
++            updates: [],
++            inputType: 'readable_time'
++        },
++        [SETTINGS.LOSS_COOLDOWN]: {
++            default: '24 hours',
++            updates: [],
++            inputType: 'readable_time'
++        },
++        [SETTINGS.MAX_ATTACKS_PER_CYCLE]: {
++            default: 50,
++            updates: [],
++            inputType: 'number',
++            min: 1,
++            max: 1000
++        },
++        [SETTINGS.PREVIEW_ONLY]: {
++            default: true,
++            updates: [],
++            inputType: 'checkbox'
++        },
+         [SETTINGS.PRESETS]: {
+             default: [],
+             updates: [
+@@ -180,6 +254,7 @@ define('two/farmOverflow/settings/map', [
+         [SETTINGS.TARGET_LIMIT]: {
+             default: 25,
+             updates: [UPDATES.TARGETS],
++            inputType: 'number',
+             min: 0,
+             max: 500
+         },
+diff --git a/src/modules/farm_overflow/src/types.js b/src/modules/farm_overflow/src/types.js
+index de5ecdf..76f8e98 100644
+--- a/src/modules/farm_overflow/src/types.js
++++ b/src/modules/farm_overflow/src/types.js
+@@ -27,7 +27,11 @@ define('two/farmOverflow/types/status', [], function () {
+         ATTACKING: 'attacking',
+         WAITING_CYCLE: 'waiting_cycle',
+         USER_STOP: 'user_stop',
+-        EXPIRED_STEP: 'expired_step'
++        EXPIRED_STEP: 'expired_step',
++        TARGET_COOLDOWN: 'target_cooldown',
++        CYCLE_ATTACK_LIMIT: 'cycle_attack_limit',
++        COMMAND_TIMEOUT: 'command_timeout',
++        PREVIEW: 'preview'
+     };
+ });
+ 
+@@ -39,7 +43,8 @@ define('two/farmOverflow/types/logs', [], function () {
+         INCLUDED_VILLAGE: 'included_village',
+         IGNORED_VILLAGE_REMOVED: 'ignored_village_removed',
+         INCLUDED_VILLAGE_REMOVED: 'included_village_removed',
+-        ATTACKED_VILLAGE: 'attacked_village'
++        ATTACKED_VILLAGE: 'attacked_village',
++        PLANNED_VILLAGE: 'planned_village'
+     };
+ });
+ 
+diff --git a/FARMING-CHANGES.md b/FARMING-CHANGES.md
+new file mode 100644
+index 0000000..45b3cd7
+--- /dev/null
++++ b/FARMING-CHANGES.md
+@@ -0,0 +1,51 @@
++# TW2Overflow farming improvements
++
++This local variant is based on upstream commit `ba49338011f5a6429f07290115dd6a1365540bdb` (version 2.1.500, June 25, 2021). It has been tested with mocked game services, not a live Tribal Wars 2 account. Current game compatibility is unverified.
++
++## What changed
++
++- Preset selection examines every affordable preset and uses the game's travel-time functions with barbarian, officer, and effect flags. The maximum travel limit now compares milliseconds with milliseconds.
++- By default, presets are ranked by carrying capacity divided by round-trip travel time. If you supply an estimated loot amount, the numerator becomes the smaller of that estimate and the preset's carrying capacity. This is an estimate, not measured loot or a guarantee of globally optimal farming. It does not model target resource regeneration or defense strength.
++- Barbarian-only mode rejects player-owned and unknown-owner villages, even when they belong to an include group. Target ownership, points, protection, cooldown, available troops, storage, and command slots are checked before sending using the available game models. Cached map data can still be stale; the server remains authoritative.
++- Report-based cooldowns apply after empty hauls and casualties/defeats, independently of an ignore group. They persist separately for each player/world and expire automatically. Only reports observed while this script is loaded are recorded; old reports are not imported. The existing ignore-group feature still supports permanent exclusions.
++- New controls expose unit reserves, a per-village cycle attack cap, timing jitter, an optional loot estimate, target-order variation, and preview mode. Saving settings pauses farming so a running step cannot mix old and new configuration.
++- Target distances no longer modify shared map data. Duplicate targets are removed. Removing a target no longer skips its successor.
++- Arrival spacing uses both locally known and server-loaded incoming attacks. Unknown arrival timestamps prevent another attack when spacing is enabled. Both same-farmer and other-farmer restrictions are applied.
++- Steps are invalidated when stopped, expired, or replaced. An unacknowledged send stops the whole farmer after 30 seconds without retrying. The watchdog also stops instead of restarting automatically. A timeout does not prove that the server rejected the command; check outgoing commands before restarting.
++- UI updates and countdowns use AngularJS `$evalAsync`; the cycle countdown uses the actual sampled cycle deadline.
++
++## Timing and target order
++
++The attack delay is the configured interval plus a random amount between zero and **Maximum extra delay between attacks**. The cycle delay works the same way. Both base intervals have a minimum of one second. Timing variation never subtracts from the configured interval. Set a jitter value to `0 seconds` to disable it.
++
++**Target score variation** shuffles targets only within bands bounded by that percentage of the band's best score. A value of 5 allows variation among similarly ranked targets while keeping distant, substantially lower-ranked targets behind them. Set it to 0 for deterministic ranking. The existing distance, points, and target-count filters still apply.
++
++These features vary scheduling. There is no evidence that they lower InnoGames' detection rate. Bots violate InnoGames' terms and can lead to account loss.
++
++## AngularJS and clicks
++
++The farmer uses the game's services and `SEND_PRESET` route, as upstream does. It does not simulate mouse input. `$evalAsync` integrates UI changes with AngularJS's digest cycle without forcing a nested `$apply`.
++
++Ordinary JavaScript cannot make `.click()` or `dispatchEvent(new MouseEvent(...))` produce `isTrusted=true`. The browser owns that read-only event flag. Browser-level input tools can generate trusted events in some environments, but the flag is not evidence of a human user and does not prevent server-side detection. This variant does not spoof it.
++
++## Review and use
++
++1. Disable other TW2Overflow copies and the old `tw2tools` auto-start wrappers to avoid running multiple versions together.
++2. Review the source and this document. The custom userscript uses a distinct namespace and disables upstream auto-updates so they cannot overwrite this local variant.
++3. Open the supplied userscript in your userscript manager. Select your farming presets and keep **Preview only** enabled initially. Start the farmer and inspect planned targets, selected presets, and rate estimates in its logs. Preview performs game-data reads but sends no attacks and does not assign presets.
++4. Adjust distance, points, travel limits, unit reserves, cooldowns, and intervals. For limited target loot, enter an estimate to avoid preferring oversized armies solely for their capacity.
++5. To send attacks, disable **Preview only**, save, and start again. That changes account state and retains the normal bot-related account risk.
++
++The distribution contains only FarmOverflow plus shared infrastructure. It excludes the usage-report module and other automation modules. It does not contact the old tracking endpoints. Other copies, forks, and upstream downloads are separate builds with potentially different behavior.
++
++## Validation and rebuilding
++
++Use Node.js 22 or later for the test command below. Install build dependencies with `npm ci --ignore-scripts` (configure an npm cache in a writable directory if needed).
++
++```sh
++node --test --test-isolation=none test/farming.test.cjs
++node make.js --only=farm_overflow --userscript --lint
++node --check dist/tw2overflow.user.js
++```
++
++The dependency-free tests load the actual AMD modules and settings class in a mocked game environment. They cover travel boundaries, preset scoring, loot estimates, reserves, malformed inputs, timing bounds, target-order bands, conquered targets, shared-distance isolation, duplicate targets, incoming attack spacing, cooldown persistence/expiry, cycle caps, stopping during initialization, stale callbacks after expiry/restart, and sends without acknowledgements. They do not establish compatibility with the live AngularJS version, game services, or anti-bot systems.
+diff --git a/src/modules/farm_overflow/src/policy.js b/src/modules/farm_overflow/src/policy.js
+new file mode 100644
+index 0000000..04ad539
+--- /dev/null
++++ b/src/modules/farm_overflow/src/policy.js
+@@ -0,0 +1,116 @@
++define('two/farmOverflow/policy', [], function () {
++    const MAX_TIMER = 2147483647;
++
++    const isBarbarian = function (target) {
++        return !!target && (target.character_id === null || target.character_id === 0 || target.character_id === '0');
++    };
++
++    const boundedDelay = function (base, jitter, minimum, random = Math.random) {
++        base = Number(base);
++        jitter = Number(jitter);
++        const safeBase = Number.isFinite(base) ? Math.max(minimum, base) : minimum;
++        const safeJitter = Number.isFinite(jitter) ? Math.max(0, jitter) : 0;
++        return Math.min(MAX_TIMER, Math.round(safeBase + safeJitter * random()));
++    };
++
++    // Without a supplied loot estimate this is capacity per round-trip second.
++    const choosePreset = function (presets, units, unitData, travelSeconds, options) {
++        if (!Number.isFinite(options.maxTravelMs) || options.maxTravelMs <= 0
++            || !Number.isFinite(options.reservePercent) || options.reservePercent < 0 || options.reservePercent > 100) {
++            return {reason: 'no_units'};
++        }
++
++        let best = null;
++        let affordable = false;
++
++        for (const preset of presets) {
++            let haul = 0;
++            let valid = !!preset.units && Object.keys(preset.units).length > 0;
++
++            for (const [name, amount] of Object.entries(preset.units || {})) {
++                if (!Number.isInteger(amount) || amount < 0) {
++                    valid = false;
++                    break;
++                }
++
++                if (!amount) {
++                    continue;
++                }
++
++                const stock = units[name] && units[name].in_town;
++                const load = unitData[name] && unitData[name].load;
++                const available = Math.floor(stock * (1 - options.reservePercent / 100));
++
++                if (!Number.isFinite(stock) || !Number.isFinite(load) || available < amount) {
++                    valid = false;
++                    break;
++                }
++
++                haul += amount * load;
++            }
++
++            if (!valid || haul <= 0) {
++                continue;
++            }
++
++            affordable = true;
++            const seconds = travelSeconds(preset);
++
++            if (!Number.isFinite(seconds) || seconds <= 0 || seconds * 1000 > options.maxTravelMs) {
++                continue;
++            }
++
++            const expectedHaul = Number.isFinite(options.expectedLoot) && options.expectedLoot > 0
++                ? Math.min(haul, options.expectedLoot) : haul;
++            const candidate = {preset, haul, expectedHaul, travelSeconds: seconds, score: expectedHaul / (2 * seconds)};
++
++            if (!best || (options.optimize ? candidate.score > best.score : seconds < best.travelSeconds)) {
++                best = candidate;
++            }
++        }
++
++        return best || {reason: affordable ? 'time_limit' : 'no_units'};
++    };
++
++    // Shuffle only within bands whose scores differ by at most the given percent.
++    const orderTargets = function (targets, scoreTarget, variationPercent, random = Math.random) {
++        const ranked = targets.map(target => ({target, score: scoreTarget(target)}))
++            .filter(item => Number.isFinite(item.score) && item.score > 0)
++            .sort((a, b) => b.score - a.score || a.target.id - b.target.id);
++        const tolerance = Math.min(25, Math.max(0, Number(variationPercent) || 0)) / 100;
++
++        if (tolerance) {
++            for (let start = 0; start < ranked.length;) {
++                let end = start + 1;
++                const minimum = ranked[start].score * (1 - tolerance);
++
++                while (end < ranked.length && ranked[end].score >= minimum) {
++                    end++;
++                }
++
++                for (let i = end - 1; i > start; i--) {
++                    const j = start + Math.floor(random() * (i - start + 1));
++                    [ranked[i], ranked[j]] = [ranked[j], ranked[i]];
++                }
++
++                start = end;
++            }
++        }
++
++        return ranked.map(item => item.target);
++    };
++
++    const arrivalIsBusy = function (arrivalSeconds, commands, minimumIntervalMs) {
++        if (minimumIntervalMs <= 0) {
++            return false;
++        }
++
++        return commands.some(function (command) {
++            const completed = command.time_completed;
++            // Unknown arrival time must not silently bypass duplicate protection.
++            return !Number.isFinite(completed) || Math.abs(arrivalSeconds - completed) * 1000 < minimumIntervalMs;
++        });
++    };
++
++    return {isBarbarian, boundedDelay, choosePreset, orderTargets, arrivalIsBusy};
++});
+diff --git a/test/farm-fixture.cjs b/test/farm-fixture.cjs
+new file mode 100644
+index 0000000..e169f83
+--- /dev/null
++++ b/test/farm-fixture.cjs
+@@ -0,0 +1,176 @@
++const fs = require('node:fs');
++const path = require('node:path');
++const vm = require('node:vm');
++
++const root = path.resolve(__dirname, '..');
++const copy = value => JSON.parse(JSON.stringify(value));
++const flush = () => new Promise(resolve => setImmediate(resolve));
++
++function fixture (options = {}) {
++    const definitions = new Map();
++    const modules = new Map();
++    const storage = new Map(options.storageEntries || []);
++    const listeners = new Map();
++    const timers = new Map();
++    const requests = [];
++    const deferredDetails = [];
++    const deferredVillages = [];
++    let clock = 1000000;
++    let timerId = 0;
++    const targets = copy(options.targets || [{id: 100, x: 1, y: 0, points: 100, character_id: null}]);
++    const freshTargets = copy(options.freshTargets || targets);
++    const units = options.units || {spear: {in_town: 100}};
++    const presets = options.presets || {1: {id: 1, units: {spear: 5}, fieldTime: 60}};
++    const localIncoming = options.localIncoming || [];
++    const villageIds = options.villageIds || [1];
++    const villages = Object.fromEntries(villageIds.map((id, i) => [id, {
++        readyState: {own: options.localReady !== false},
++        getId: () => id,
++        getPosition: () => ({x: i * 10, y: 0}),
++        getUnitInfo: () => ({getUnits: () => units}),
++        getCommandListModel: () => ({getOutgoingCommands: () => options.outgoing || []}),
++        getResources: () => ({
++            getComputed: () => Object.fromEntries(['wood', 'clay', 'iron'].map(type => [type, {currentStock: 0}])),
++            getMaxStorage: () => 1000
++        })
++    }]));
++    const player = {
++        getId: () => 7,
++        getWorldId: () => 101,
++        getVillage: id => villages[id],
++        getVillages: () => villages
++    };
++    const events = {
++        COMMAND_SENT: 'command_sent', MESSAGE_ERROR: 'message_error', REPORT_NEW: 'report_new',
++        ARMY_PRESET_UPDATE: 'preset_update', ARMY_PRESET_DELETED: 'preset_deleted',
++        GROUPS_VILLAGE_LINKED: 'group_linked', GROUPS_VILLAGE_UNLINKED: 'group_unlinked', GROUPS_DESTROYED: 'group_destroyed'
++    };
++    const routes = {SEND_PRESET: {type: 'send'}, ASSIGN_PRESETS: {type: 'assign'}, MAP_GET_VILLAGE_DETAILS: {type: 'details'}};
++    const rootScope = {
++        loc: {ale: 'en'},
++        $on: (event, handler) => {
++            if (!listeners.has(event)) listeners.set(event, []);
++            listeners.get(event).push(handler);
++        },
++        $broadcast: (event, data) => {
++            for (const handler of listeners.get(event) || []) handler(null, data);
++        }
++    };
++    const eventQueue = {trigger: rootScope.$broadcast, register: rootScope.$on};
++    const lockr = {
++        get: (key, fallback) => copy(storage.has(key) ? storage.get(key) : fallback),
++        set: (key, value) => storage.set(key, copy(value))
++    };
++    const context = vm.createContext({
++        console,
++        noop: () => {}, hasOwn: Object.prototype.hasOwnProperty,
++        angular: {copy, merge: (unused, defaults, values) => ({...copy(defaults), ...copy(values)}),
++            equals: (a, b) => JSON.stringify(a) === JSON.stringify(b), extend: Object.assign,
++            isObject: value => value !== null && typeof value === 'object'},
++        $rootScope: rootScope, eventTypeProvider: events, routeProvider: routes,
++        $filter: () => key => key,
++        modelDataService: {
++            getSelectedCharacter: () => player,
++            getVillages: () => villages,
++            getGameData: () => ({getUnitsObject: () => ({spear: {load: 25}})}),
++            getGroupList: () => ({getGroups: () => ({}), getGroupVillageIds: () => []}),
++            getPresetList: () => ({getPresets: () => presets, getPresetsByVillageId: () => presets})
++        },
++        villageService: {ensureVillageDataLoaded: (id, callback) => {
++            if (options.deferVillage) deferredVillages.push(callback);
++            else callback();
++        }},
++        armyService: {
++            calculateTravelTime: preset => preset.fieldTime,
++            getTravelTimeForDistance: (preset, fieldTime, distance) => fieldTime * distance
++        },
++        resourceService: {updateMaxStorage: () => {}},
++        villageInfoService: {getCommands: () => localIncoming},
++        socketService: {emit: (route, data, callback) => {
++            requests.push({route: route.type, data: copy(data)});
++            if (route === routes.SEND_PRESET && options.autoAck !== false) {
++                queueMicrotask(() => rootScope.$broadcast(events.COMMAND_SENT, {
++                    origin: {id: data.start_village}, target: {id: data.target_village}, direction: 'forward', type: 'attack'
++                }));
++            } else if (route === routes.MAP_GET_VILLAGE_DETAILS) {
++                const reply = () => callback({commands: {own: options.serverIncoming || []}});
++                if (options.deferDetails) deferredDetails.push(reply);
++                else reply();
++            } else if (callback) callback({});
++        }},
++        setTimeout: (fn, delay) => {
++            const id = ++timerId;
++            timers.set(id, {fn, date: clock + delay});
++            return id;
++        },
++        clearTimeout: id => timers.delete(id),
++        setInterval: (fn, interval) => {
++            const id = ++timerId;
++            timers.set(id, {fn, date: clock + interval, interval});
++            return id;
++        },
++        clearInterval: id => timers.delete(id),
++        define: (name, deps, factory) => {
++            if (typeof deps === 'function') { factory = deps; deps = []; }
++            definitions.set(name, {deps, factory});
++        }
++    });
++    vm.runInContext('Number.prototype.between = function (min, max) { return this >= min && this <= max; };', context);
++    const get = name => {
++        if (modules.has(name)) return modules.get(name);
++        const {deps, factory} = definitions.get(name) || {};
++        if (!factory) throw new Error(`Missing fixture module ${name}`);
++        const value = factory(...deps.map(get));
++        modules.set(name, value);
++        return value;
++    };
++    for (const file of ['src/libs/numbered.js', 'src/libs/human-interval.js', 'src/settings.js',
++        'src/modules/farm_overflow/src/settings.js', 'src/modules/farm_overflow/src/types.js',
++        'src/modules/farm_overflow/src/events.js', 'src/modules/farm_overflow/src/policy.js', 'src/modules/farm_overflow/src/core.js']) {
++        vm.runInContext(fs.readFileSync(path.join(root, file), 'utf8'), context, {filename: file});
++    }
++    modules.set('Lockr', lockr);
++    modules.set('two/utils', {
++        each: (object, fn) => { for (const [key, value] of Object.entries(object)) if (fn(value, key) === false) break; },
++        notif: () => {}
++    });
++    modules.set('two/debug', () => () => {});
++    modules.set('helper/math', {actualDistance: (a, b) => Math.hypot(a.x - b.x, a.y - b.y)});
++    modules.set('helper/time', {gameTime: () => clock});
++    modules.set('two/mapData', {load: callback => callback(targets)});
++    modules.set('two/ready', callback => callback());
++    modules.set('queues/EventQueue', eventQueue);
++    modules.set('conf/commandTypes', {TYPES: {ATTACK: 'attack'}});
++    modules.set('conf/village', {READY_STATES: {OWN_COMMANDS: 'own'}});
++    modules.set('conf/resourceTypes', {WOOD: 'wood', CLAY: 'clay', IRON: 'iron'});
++    modules.set('struct/MapData', {
++        getTownAt: (x, y) => freshTargets.find(t => t.x === x && t.y === y),
++        getTownAtAsync: (x, y, callback) => callback(freshTargets.find(t => t.x === x && t.y === y)),
++        loadTownData: () => {}
++    });
++    storage.set('farm_overflow_settings', {presets: Object.keys(presets).map(Number), target_order_variation: 0, ...options.settings});
++    get('two/farmOverflow/events');
++    const farm = get('two/farmOverflow');
++    farm.init();
++
++    const settle = async () => { for (let i = 0; i < 4; i++) await flush(); };
++    const tick = async milliseconds => {
++        const until = clock + milliseconds;
++        for (;;) {
++            const due = [...timers.entries()].filter(([, value]) => value.date <= until).sort((a, b) => a[1].date - b[1].date)[0];
++            if (!due) break;
++            const [id, timer] = due;
++            clock = timer.date;
++            timers.delete(id);
++            if (timer.interval) timers.set(id, {...timer, date: clock + timer.interval});
++            timer.fn();
++            await settle();
++        }
++        clock = until;
++        await settle();
++    };
++    return {farm, get, targets, freshTargets, presets, units, requests, storage, rootScope, events, deferredDetails, timers,
++        deferredVillages, settle, tick, sends: () => requests.filter(request => request.route === 'send')};
++}
++
++module.exports = {fixture};
+diff --git a/test/farming.test.cjs b/test/farming.test.cjs
+new file mode 100644
+index 0000000..4bc8cf2
+--- /dev/null
++++ b/test/farming.test.cjs
+@@ -0,0 +1,286 @@
++const assert = require('node:assert/strict');
++const test = require('node:test');
++const {fixture} = require('./farm-fixture.cjs');
++
++function choose (policy, presets, overrides = {}) {
++    return policy.choosePreset(presets, {spear: {in_town: 100}}, {spear: {load: 25}}, preset => preset.seconds,
++        {optimize: true, reservePercent: 0, maxTravelMs: 90000, ...overrides});
++}
++
++test('travel limit uses milliseconds and includes the exact boundary', () => {
++    const policy = fixture().get('two/farmOverflow/policy');
++    assert.equal(choose(policy, [{id: 1, units: {spear: 5}, seconds: 91}]).reason, 'time_limit');
++    assert.equal(choose(policy, [{id: 1, units: {spear: 5}, seconds: 90}]).preset.id, 1);
++});
++
++test('all affordable presets are examined and capacity per round trip wins', () => {
++    const policy = fixture().get('two/farmOverflow/policy');
++    const presets = [{id: 1, units: {spear: 5}, seconds: 30}, {id: 2, units: {spear: 20}, seconds: 60}];
++    assert.equal(choose(policy, presets).preset.id, 2);
++    assert.equal(choose(policy, presets, {optimize: false}).preset.id, 1);
++    assert.equal(choose(policy, [{...presets[0], seconds: 300}, presets[1]]).preset.id, 2);
++});
++
++test('a configured loot estimate avoids oversizing a slower farming army', () => {
++    const policy = fixture().get('two/farmOverflow/policy');
++    const presets = [{id: 1, units: {spear: 5}, seconds: 30}, {id: 2, units: {spear: 20}, seconds: 60}];
++    const choice = choose(policy, presets, {expectedLoot: 125});
++    assert.equal(choice.preset.id, 1);
++    assert.equal(choice.expectedHaul, 125);
++});
++
++test('missing units, negative units, empty presets, and invalid limits cannot send', () => {
++    const policy = fixture().get('two/farmOverflow/policy');
++    for (const units of [{unknown: 1}, {spear: -1}, {}, {spear: 0}]) {
++        assert.equal(choose(policy, [{units, seconds: 1}]).reason, 'no_units');
++    }
++    assert.equal(choose(policy, [{units: {spear: 1}, seconds: 1}], {maxTravelMs: NaN}).reason, 'no_units');
++    assert.equal(choose(policy, [{units: {spear: 51}, seconds: 1}], {reservePercent: 50}).reason, 'no_units');
++});
++
++test('barbarian ownership must be explicit; undefined ownership is not accepted', () => {
++    const policy = fixture().get('two/farmOverflow/policy');
++    for (const character_id of [null, 0, '0']) assert.equal(policy.isBarbarian({character_id}), true);
++    for (const character_id of [undefined, false, '', 7, '7']) assert.equal(policy.isBarbarian({character_id}), false);
++});
++
++test('timing jitter is additive, bounded, and subject to the minimum interval', () => {
++    const policy = fixture().get('two/farmOverflow/policy');
++    assert.equal(policy.boundedDelay(2000, 1000, 1000, () => 0), 2000);
++    assert.equal(policy.boundedDelay(2000, 1000, 1000, () => 0.5), 2500);
++    assert.equal(policy.boundedDelay(-100, -100, 1000, () => 0), 1000);
++    for (let i = 0; i < 1000; i++) {
++        const delay = policy.boundedDelay(2000, 1000, 1000);
++        assert.ok(delay >= 2000 && delay <= 3000);
++    }
++});
++
++test('target shuffling stays in score bands and preserves every target exactly once', () => {
++    const policy = fixture().get('two/farmOverflow/policy');
++    const targets = [{id: 1, score: 100}, {id: 2, score: 96}, {id: 3, score: 50}, {id: 4, score: 48}];
++    const result = policy.orderTargets(targets, t => t.score, 5, () => 0);
++    assert.deepEqual(Array.from(result, t => t.id), [2, 1, 4, 3]);
++    assert.deepEqual(Array.from(policy.orderTargets(targets, t => t.score, 0), t => t.id), [1, 2, 3, 4]);
++    assert.deepEqual(targets.map(t => t.id), [1, 2, 3, 4]);
++});
++
++test('arrival spacing uses seconds consistently and fails closed on unknown timestamps', () => {
++    const policy = fixture().get('two/farmOverflow/policy');
++    assert.equal(policy.arrivalIsBusy(100, [{time_completed: 101}], 2000), true);
++    assert.equal(policy.arrivalIsBusy(100, [{time_completed: 102}], 2000), false);
++    assert.equal(policy.arrivalIsBusy(100, [{}], 2000), true);
++});
++
++test('preview is the default and neither sends attacks nor assigns presets', async () => {
++    const f = fixture();
++    f.farm.start();
++    await f.settle();
++    assert.equal(f.sends().length, 0);
++    assert.equal(f.requests.filter(r => r.route === 'assign').length, 0);
++    assert.equal(f.farm.getLogs()[0].type, 'planned_village');
++    assert.equal(f.farm.getLogs()[0].ratePerHour, 3750);
++});
++
++test('the actual farmer selects the more efficient available preset', async () => {
++    const f = fixture({settings: {preview_only: false}, presets: {
++        1: {id: 1, units: {spear: 5}, fieldTime: 30},
++        2: {id: 2, units: {spear: 20}, fieldTime: 60}
++    }});
++    f.farm.start();
++    await f.settle();
++    assert.equal(f.sends()[0].data.army_preset_id, 2);
++});
++
++test('a travel limit shorter than the actual trip prevents a send', async () => {
++    const f = fixture({settings: {preview_only: false, max_travel_time: '30 seconds'}});
++    f.farm.start();
++    await f.settle();
++    assert.equal(f.sends().length, 0);
++});
++
++test('actual sends respect the base interval even with random timing enabled', async () => {
++    const f = fixture({settings: {preview_only: false}, targets: [
++        {id: 100, x: 1, y: 0, points: 100, character_id: null},
++        {id: 101, x: 2, y: 0, points: 100, character_id: null}
++    ]});
++    f.farm.start();
++    await f.settle();
++    assert.equal(f.sends().length, 1);
++    await f.tick(1999);
++    assert.equal(f.sends().length, 1);
++    await f.tick(1001);
++    assert.equal(f.sends().length, 2);
++});
++
++test('removing a target with invalid points does not skip the next target', async () => {
++    const targets = [
++        {id: 100, x: 1, y: 0, points: 100, character_id: null},
++        {id: 101, x: 2, y: 0, points: 100, character_id: null}
++    ];
++    const f = fixture({targets, freshTargets: [{...targets[0], points: 99999}, targets[1]], settings: {preview_only: false}});
++    f.farm.start();
++    await f.settle();
++    assert.equal(f.sends()[0].data.target_village, 101);
++});
++
++test('a newly conquered target is rejected using the current map data', async () => {
++    const f = fixture({settings: {preview_only: false}, freshTargets: [
++        {id: 100, x: 1, y: 0, points: 100, character_id: 8}
++    ]});
++    f.farm.start();
++    await f.settle();
++    assert.equal(f.sends().length, 0);
++});
++
++test('target distance calculation never mutates shared map entries', () => {
++    const f = fixture({villageIds: [1, 2]});
++    assert.equal(f.targets[0].distance, undefined);
++    assert.equal(f.farm.getFarmer(1).getTargets()[0].distance, 1);
++    assert.equal(f.farm.getFarmer(2).getTargets()[0].distance, 9);
++});
++
++test('duplicate target entries are removed', () => {
++    const target = {id: 100, x: 1, y: 0, points: 100, character_id: null};
++    const f = fixture({targets: [target, target]});
++    assert.equal(f.farm.getFarmer(1).getTargets().length, 1);
++});
++
++test('server-loaded incoming attacks enforce arrival spacing', async () => {
++    const f = fixture({localReady: false, settings: {preview_only: false}, serverIncoming: [
++        {type: 'attack', direction: 'forward', start_village_id: 2, time_completed: 1060}
++    ]});
++    f.farm.start();
++    await f.settle();
++    assert.equal(f.sends().length, 0);
++    assert.ok(f.requests.some(r => r.route === 'details'));
++});
++
++test('single-farmer restriction applies even when this farmer also has an attack', async () => {
++    const f = fixture({settings: {preview_only: false, target_behavior: 'targets_allow_single_farmer'}, localIncoming: [
++        {startCharacterId: 7, startVillageId: 1, type: 'attack', data: {direction: 'forward'}, time_completed: 5000},
++        {startCharacterId: 7, startVillageId: 2, type: 'attack', data: {direction: 'forward'}, time_completed: 5000}
++    ]});
++    f.farm.start();
++    await f.settle();
++    assert.equal(f.sends().length, 0);
++});
++
++test('a late callback from an expired validation step cannot issue an attack', async () => {
++    const f = fixture({localReady: false, deferDetails: true, settings: {preview_only: false}});
++    f.farm.start();
++    await f.settle();
++    assert.equal(f.deferredDetails.length, 1);
++    await f.tick(30000);
++    f.deferredDetails[0]();
++    await f.settle();
++    assert.equal(f.sends().length, 0);
++});
++
++test('a callback from a stopped run cannot issue an attack after restart', async () => {
++    const f = fixture({localReady: false, deferDetails: true, settings: {preview_only: false}});
++    f.farm.start();
++    await f.settle();
++    f.farm.stop();
++    f.farm.start();
++    await f.settle();
++    assert.equal(f.deferredDetails.length, 2);
++    f.deferredDetails[0]();
++    await f.settle();
++    assert.equal(f.sends().length, 0);
++    f.deferredDetails[1]();
++    await f.settle();
++    assert.equal(f.sends().length, 1);
++});
++
++test('stopping during initialization prevents a late start', async () => {
++    const f = fixture({deferVillage: true, settings: {preview_only: false}});
++    f.farm.start();
++    f.farm.stop();
++    for (const callback of f.deferredVillages) callback();
++    await f.settle();
++    assert.equal(f.farm.isRunning(), false);
++    assert.equal(f.sends().length, 0);
++});
++
++test('an unacknowledged send stops the whole farmer without retrying', async () => {
++    const f = fixture({autoAck: false, settings: {preview_only: false}});
++    f.farm.start();
++    await f.settle();
++    assert.equal(f.sends().length, 1);
++    await f.tick(30000);
++    assert.equal(f.farm.isRunning(), false);
++    assert.equal(f.farm.getFarmer(1).getStatus(), 'command_timeout');
++    await f.tick(600000);
++    assert.equal(f.sends().length, 1);
++});
++
++test('the target-count string saved by older releases is migrated', async () => {
++    const f = fixture({settings: {target_limit: '25'}});
++    assert.equal(f.farm.getSettings().get('target_limit'), 25);
++    f.farm.start();
++    await f.settle();
++    assert.equal(f.farm.getLogs()[0].type, 'planned_village');
++});
++
++test('empty haul causes a persistent cooldown without requiring an ignore group', async () => {
++    const f = fixture({settings: {preview_only: false}});
++    f.farm.start();
++    await f.settle();
++    f.rootScope.$broadcast(f.events.REPORT_NEW, {type: 'attack', target_village_id: 100, result: 1, haul: 'none'});
++    assert.ok(f.storage.get('farm_overflow_cooldowns_101_7')[100] > 1000000);
++    f.farm.stop();
++    f.farm.start();
++    await f.settle();
++    assert.equal(f.sends().length, 1);
++    const reloaded = fixture({storageEntries: [...f.storage.entries()], settings: {preview_only: false}});
++    reloaded.farm.start();
++    await reloaded.settle();
++    assert.equal(reloaded.sends().length, 0);
++    f.farm.stop();
++    await f.tick(20 * 60 * 1000);
++    f.farm.start();
++    await f.settle();
++    assert.equal(f.sends().length, 2);
++});
++
++test('the displayed next-cycle date matches the actual sampled timer', async () => {
++    const f = fixture();
++    f.farm.start();
++    await f.settle();
++    await f.tick(3000);
++    const next = f.farm.getNextCycleDate();
++    assert.ok(next >= 1302000 && next <= 1333000);
++    assert.equal([...f.timers.values()].filter(timer => !timer.interval && timer.date === next).length, 1);
++});
++
++test('per-village cycle cap stops before issuing another attack', async () => {
++    const f = fixture({settings: {preview_only: false, max_attacks_per_cycle: 1, attack_jitter: '0 seconds'}, targets: [
++        {id: 100, x: 1, y: 0, points: 100, character_id: null},
++        {id: 101, x: 2, y: 0, points: 100, character_id: null}
++    ]});
++    f.farm.start();
++    await f.settle();
++    await f.tick(2000);
++    assert.equal(f.sends().length, 1);
++    assert.equal(f.farm.getFarmer(1).getStatus(), 'cycle_attack_limit');
++});
++
++test('saving settings cancels an in-progress validation step', async () => {
++    const f = fixture({localReady: false, deferDetails: true, settings: {preview_only: false}});
++    f.farm.start();
++    await f.settle();
++    f.farm.getSettings().set('unit_reserve_percent', 50);
++    f.deferredDetails[0]();
++    await f.settle();
++    assert.equal(f.farm.isRunning(), false);
++    assert.equal(f.sends().length, 0);
++});
++
++test('invalid persisted settings fail closed', () => {
++    for (const settings of [{max_travel_time: 'invalid'}, {target_limit: null}, {unit_reserve_percent: 101},
++        {attack_jitter: '-1 seconds'}, {barbarians_only: 'true'}, {min_distance: 20, max_distance: 10}]) {
++        const f = fixture({settings});
++        assert.equal(f.farm.start(), false);
++        assert.equal(f.sends().length, 0);
++    }
++});

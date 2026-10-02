@@ -1,0 +1,6 @@
+image: node:14
+
+build:
+  script:
+    - npm install
+    - node make.js --lint
