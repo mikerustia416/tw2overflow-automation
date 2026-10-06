@@ -11,7 +11,8 @@ define('two/builderQueue', [
     'conf/locationTypes',
     'queues/EventQueue',
     'Lockr',
-    'helper/time'
+    'helper/time',
+    'two/resourceBudget'
 ], function (
     ready,
     utils,
@@ -25,7 +26,8 @@ define('two/builderQueue', [
     LOCATION_TYPES,
     eventQueue,
     Lockr,
-    timeHelper
+    timeHelper,
+    resourceBudget
 ) {
     const buildingService = injector.get('buildingService');
     const premiumActionService = injector.get('premiumActionService');
@@ -140,6 +142,9 @@ define('two/builderQueue', [
      * @param {VillageModel} village
      */
     const analyseVillageBuildings = function (village) {
+        if (resourceBudget.isBusy(village)) {
+            return false;
+        }
         const buildingLevels = angular.copy(village.buildingData.getBuildingLevels());
         const currentQueue = village.buildingQueue.getQueue();
         const sequence = angular.copy(VILLAGE_BUILDINGS);
@@ -202,12 +207,24 @@ define('two/builderQueue', [
     };
 
     const upgradeBuilding = function (village, buildingName, callback) {
+        const cost = village.getBuildingData().getDataForBuilding(buildingName).nextLevelCosts;
+        const reservation = resourceBudget.begin(village, cost);
+        if (!reservation) {
+            return;
+        }
         socketService.emit(routeProvider.VILLAGE_UPGRADE_BUILDING, {
             building: buildingName,
             village_id: village.getId(),
             location: LOCATION_TYPES.MASS_SCREEN,
             premium: false
-        }, callback);
+        }, function (data) {
+            if (data && data.error) {
+                resourceBudget.reject(village, reservation);
+            } else if (data && data.job) {
+                resourceBudget.acknowledge(village, reservation);
+            }
+            callback(data || {});
+        });
     };
 
     /**
@@ -451,6 +468,9 @@ define('two/builderQueue', [
             }
 
             setTimeout(function () {
+                if (!running) {
+                    return;
+                }
                 const village = $player.getVillage(data.village_id);
                 analyseVillageBuildings(village);
             }, 1000);

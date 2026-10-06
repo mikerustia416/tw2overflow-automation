@@ -131,6 +131,7 @@ define('two/farmOverflow/ui', [
         }
 
         const decoded = settings.decode($scope.settings);
+        decoded[SETTINGS.AUTO_PRESET_UNITS] = $scope.autoPresetUnits.filter(unit => unit.enabled).map(unit => unit.name);
         const validNumbers = Object.entries(settings.settingsMap).every(([id, map]) => {
             if (map.inputType !== 'number') {
                 return true;
@@ -141,13 +142,16 @@ define('two/farmOverflow/ui', [
         });
 
         if (!validNumbers || Number(decoded[SETTINGS.MIN_DISTANCE]) > Number(decoded[SETTINGS.MAX_DISTANCE])
-            || Number(decoded[SETTINGS.MIN_POINTS]) > Number(decoded[SETTINGS.MAX_POINTS])) {
+            || Number(decoded[SETTINGS.MIN_POINTS]) > Number(decoded[SETTINGS.MAX_POINTS])
+            || Number(decoded[SETTINGS.AUTO_PRESET_MIN_UNITS]) > Number(decoded[SETTINGS.AUTO_PRESET_MAX_UNITS])
+            || (decoded[SETTINGS.AUTO_PRESETS] && !decoded[SETTINGS.AUTO_PRESET_UNITS].length)) {
             return utils.notif('error', $filter('i18n')('invalid_farming_settings', $rootScope.loc.ale, 'farm_overflow'));
         }
 
         settings.setAll(decoded);
         $scope.saveButtonColor = 'orange';
         utils.notif('success', $filter('i18n')('settings_saved', $rootScope.loc.ale, 'farm_overflow'));
+        return true;
     };
 
     const resetSettings = function () {
@@ -385,6 +389,21 @@ define('two/farmOverflow/ui', [
         };
 
         settings.injectScope($scope, {textObject: 'farm_overflow'});
+        $scope.autoPresetUnits = Object.entries(modelDataService.getGameData().getUnitsObject())
+            .filter(([name, data]) => data.load > 0 && !['knight', 'snob', 'ram', 'catapult', 'trebuchet'].includes(name))
+            .map(([name]) => ({name, enabled: settings.get(SETTINGS.AUTO_PRESET_UNITS).includes(name)}));
+        $scope.autoPresetSettings = [SETTINGS.AUTO_PRESETS,
+            SETTINGS.AUTO_PRESET_MIN_UNITS,
+            SETTINGS.AUTO_PRESET_MAX_UNITS,
+            SETTINGS.AUTO_PRESET_CARRY];
+        $scope.previewAutoPresets = function () {
+            if (saveSettings() !== true) {
+                return;
+            }
+            farmOverflow.previewAutoPresets().then(plans => $scope.$evalAsync(() => {
+                $scope.autoPresetPlans = plans;
+            }));
+        };
         eventHandlers.updatePresets();
         eventHandlers.updateGroups();
         updateVisibleLogs();
@@ -437,6 +456,7 @@ define('two/farmOverflow/ui', [
         };
 
         $scope.$watch('settings', unsavedSettingsState(), true);
+        $scope.$watch('autoPresetUnits', unsavedSettingsState(), true);
 
         $scope.$watch('selectedFarmerBehavior', function (data) {
             $scope.settings[SETTINGS.FARMER_BEHAVIOR] = data;

@@ -1,5 +1,15 @@
 # TWOverflow Changelog
 
+## Unreleased — 2026-10-06 (userscript 2.1.500.3)
+
+- **Farmer:** Added configurable automatic local presets based on nearby barbarians, available troops, reserves, packet limits, and carrying capacity, with packet previews.
+- **Recruiter:** Added per-village barracks troop targets, queued-soldier accounting, protected resource savings, building budgets, population and spending limits, and preview mode.
+- **Spending:** Added a shared in-flight resource guard for Recruiter and custom builds containing BuilderQueue, plus persisted recruitment guards for uncertain server responses.
+- **AutoQuest:** Included the existing quest module and fixed the reward flow to open unread quest lines, select completed tasks marked with the exclamation icon, and then claim their rewards.
+- **Build:** Updated the userscript to include Farmer, Recruiter, and AutoQuest; fixed template output directory creation for modules without stylesheets.
+- **Documentation:** Consolidated feature descriptions, configuration, limitations, build instructions, and upstream references into README.md while retaining this changelog.
+- **Validation:** Added offline regression coverage for automatic presets, recruitment budgets and lifecycle guards, shared building spending, and quest task selection.
+
 ## 2.0.0
 
 *soon*

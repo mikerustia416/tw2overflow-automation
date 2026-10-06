@@ -20,7 +20,8 @@ define('two/farmOverflow', [
     'struct/MapData',
     'Lockr',
     'two/debug',
-    'two/farmOverflow/policy'
+    'two/farmOverflow/policy',
+    'two/farmOverflow/autoPresets'
 ], function (
     Settings,
     ERROR_TYPES,
@@ -43,7 +44,8 @@ define('two/farmOverflow', [
     $mapData,
     Lockr,
     setupDebug,
-    policy
+    policy,
+    autoPresets
 ) {
     let initialized = false;
     let running = false;
@@ -426,7 +428,7 @@ define('two/farmOverflow', [
     const presetListener = function () {
         processPresets();
 
-        if (!selectedPresets.length) {
+        if (!selectedPresets.length && !localSettings[SETTINGS.AUTO_PRESETS]) {
             eventQueue.trigger(eventTypeProvider.FARM_OVERFLOW_STOP, {
                 reason: ERROR_TYPES.NO_PRESETS
             });
@@ -628,7 +630,8 @@ define('two/farmOverflow', [
 
     const getPresetChoice = function (farmer, target) {
         const distance = math.actualDistance(farmer.village.getPosition(), target);
-        return policy.choosePreset(selectedPresets, farmer.village.getUnitInfo().getUnits(), unitsData, function (preset) {
+        const generated = policy.isBarbarian(target) ? farmer.generatedPresets || [] : [];
+        return policy.choosePreset(selectedPresets.concat(generated), farmer.village.getUnitInfo().getUnits(), unitsData, function (preset) {
             const fieldTime = armyService.calculateTravelTime(preset, {
                 barbarian: policy.isBarbarian(target),
                 officers: true,
@@ -673,6 +676,7 @@ define('two/farmOverflow', [
         this.status = STATUS.WAITING_CYCLE;
         this.stepVersion = 0;
         this.attacksThisCycle = 0;
+        this.generatedPresets = [];
     };
 
     Farmer.prototype.init = function () {
@@ -731,6 +735,7 @@ define('two/farmOverflow', [
         this.running = true;
         this.index = 0;
         this.attacksThisCycle = 0;
+        this.generatedPresets = this.buildAutoPresets();
         this.targets = policy.orderTargets(this.targets, target => {
             const choice = getPresetChoice(this, target);
             return choice.score || 1 / Math.max(1, target.distance);
@@ -739,11 +744,21 @@ define('two/farmOverflow', [
             villageId: this.villageId
         });
 
-        this.targetStep({
-            delay: false
-        });
-
+        this.targetStep({delay: false});
         return true;
+    };
+
+    Farmer.prototype.buildAutoPresets = function () {
+        return localSettings[SETTINGS.AUTO_PRESETS] ? autoPresets(this.villageId, this.targets || [], this.village.getUnitInfo().getUnits(), unitsData, {
+            unitNames: localSettings[SETTINGS.AUTO_PRESET_UNITS],
+            minimum: localSettings[SETTINGS.AUTO_PRESET_MIN_UNITS],
+            maximum: localSettings[SETTINGS.AUTO_PRESET_MAX_UNITS],
+            carry: localSettings[SETTINGS.AUTO_PRESET_CARRY],
+            reservePercent: localSettings[SETTINGS.UNIT_RESERVE_PERCENT],
+            attackLimit: localSettings[SETTINGS.MAX_ATTACKS_PER_CYCLE],
+            commandSlots: Math.max(1, VILLAGE_COMMAND_LIMIT - localSettings[SETTINGS.PRESERVE_COMMAND_SLOTS]
+                    - this.village.getCommandListModel().getOutgoingCommands(true, true).length)
+        }) : [];
     };
 
     Farmer.prototype.stop = function (reason) {
@@ -1044,6 +1059,7 @@ define('two/farmOverflow', [
                     targetId: target.id,
                     originId: this.villageId,
                     presetId: selectedPreset.id,
+                    units: {...selectedPreset.units},
                     capacity: selectedChoice.haul,
                     travelSeconds: selectedChoice.travelSeconds,
                     ratePerHour: Math.round(selectedChoice.score * 3600),
@@ -1067,6 +1083,22 @@ define('two/farmOverflow', [
                 }
             }, STEP_EXPIRE_TIME);
 
+            if (selectedPreset.generated) {
+                if (!routeProvider.SEND_CUSTOM_ARMY) {
+                    farmOverflow.stop(STATUS.COMMAND_ERROR);
+                    return;
+                }
+                socketService.emit(routeProvider.SEND_CUSTOM_ARMY, {
+                    start_village: this.villageId,
+                    target_village: target.id,
+                    units: selectedPreset.units,
+                    officers: {},
+                    icon: 0,
+                    catapult_target: false,
+                    type: COMMAND_TYPES.TYPES.ATTACK
+                });
+                return;
+            }
             socketService.emit(routeProvider.SEND_PRESET, {
                 start_village: this.villageId,
                 target_village: target.id,
@@ -1442,6 +1474,20 @@ define('two/farmOverflow', [
 
     const farmOverflow = {};
 
+    farmOverflow.previewAutoPresets = function () {
+        return Promise.all(farmers.map(farmer => new Promise(resolve => {
+            villageService.ensureVillageDataLoaded(farmer.villageId, () => farmer.loadTargets(() => {
+                resolve(farmer.buildAutoPresets().map(preset => ({
+                    villageId: farmer.villageId,
+                    name: preset.name,
+                    units: preset.units,
+                    nearbyTargets: preset.nearbyTargets,
+                    capacity: getPresetHaul(preset)
+                })));
+            }));
+        }))).then(plans => [].concat(...plans));
+    };
+
     farmOverflow.init = function () {
         debug(1, 'initialized');
 
@@ -1564,12 +1610,16 @@ define('two/farmOverflow', [
 
         if (!validSettings || localSettings[SETTINGS.MAX_TRAVEL_TIME] <= 0
             || localSettings[SETTINGS.MIN_DISTANCE] > localSettings[SETTINGS.MAX_DISTANCE]
-            || localSettings[SETTINGS.MIN_POINTS] > localSettings[SETTINGS.MAX_POINTS]) {
+            || localSettings[SETTINGS.MIN_POINTS] > localSettings[SETTINGS.MAX_POINTS]
+            || localSettings[SETTINGS.AUTO_PRESET_MIN_UNITS] > localSettings[SETTINGS.AUTO_PRESET_MAX_UNITS]
+            || (localSettings[SETTINGS.AUTO_PRESETS] && (!Array.isArray(localSettings[SETTINGS.AUTO_PRESET_UNITS])
+                || !localSettings[SETTINGS.AUTO_PRESET_UNITS].length
+                || localSettings[SETTINGS.AUTO_PRESET_UNITS].some(name => !unitsData[name])))) {
             utils.notif('error', $filter('i18n')('invalid_farming_settings', $rootScope.loc.ale, 'farm_overflow'));
             return false;
         }
 
-        if (!selectedPresets.length) {
+        if (!selectedPresets.length && !localSettings[SETTINGS.AUTO_PRESETS]) {
             debug(1, 'start: fail "%s"', ERROR_TYPES.NO_SELECTED_PRESET);
 
             eventQueue.trigger(eventTypeProvider.FARM_OVERFLOW_STOP, {

@@ -1,5 +1,9 @@
 {
     "farm_overflow": {
+        "auto_presets": "Create automatic farming presets",
+        "auto_preset_min_units": "Minimum soldiers per packet",
+        "auto_preset_max_units": "Maximum soldiers per packet",
+        "auto_preset_carry": "Desired packet carrying capacity",
         "farming_controls": "Farming controls",
         "farming_controls_help": "Preview records planned attacks without sending them. Capacity per hour estimates transport capacity, not actual loot. Saving settings pauses an active farmer.",
         "preview_only": "Preview only (no attacks)",

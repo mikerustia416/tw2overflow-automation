@@ -1,6 +1,11 @@
 define('two/farmOverflow/settings', [], function () {
     return {
         PRESETS: 'presets',
+        AUTO_PRESETS: 'auto_presets',
+        AUTO_PRESET_MIN_UNITS: 'auto_preset_min_units',
+        AUTO_PRESET_MAX_UNITS: 'auto_preset_max_units',
+        AUTO_PRESET_CARRY: 'auto_preset_carry',
+        AUTO_PRESET_UNITS: 'auto_preset_units',
         GROUP_IGNORE: 'group_ignore',
         GROUP_INCLUDE: 'group_include',
         GROUP_ONLY: 'group_only',
@@ -64,6 +69,11 @@ define('two/farmOverflow/settings/map', [
     TARGET_BEHAVIOR
 ) {
     return {
+        [SETTINGS.AUTO_PRESETS]: {default: false, updates: [], inputType: 'checkbox'},
+        [SETTINGS.AUTO_PRESET_MIN_UNITS]: {default: 5, updates: [], inputType: 'number', min: 1, max: 10000},
+        [SETTINGS.AUTO_PRESET_MAX_UNITS]: {default: 100, updates: [], inputType: 'number', min: 1, max: 10000},
+        [SETTINGS.AUTO_PRESET_CARRY]: {default: 1000, updates: [], inputType: 'number', min: 1, max: 1000000},
+        [SETTINGS.AUTO_PRESET_UNITS]: {default: ['spear', 'axe', 'light_cavalry'], updates: [], inputType: 'unit_list'},
         [SETTINGS.BARBARIANS_ONLY]: {
             default: true,
             updates: [UPDATES.TARGETS],

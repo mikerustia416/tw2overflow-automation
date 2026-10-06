@@ -39,6 +39,19 @@
                 <div class="settings" ng-show="selectedTab === TAB_TYPES.SETTINGS">
                     <table class="tbl-border-light tbl-content tbl-medium-height">
                         <colgroup><col><col width="270px"></colgroup>
+                        <tr><th colspan="2">Automatic farming presets</th></tr>
+                        <tr><td colspan="2">Farmer creates local troop packets for nearby barbarians each cycle, using troops in town after reserves. Carrying capacity estimates loot space; it does not estimate defenders. Manual presets remain available.</td></tr>
+                        <tr ng-repeat="settingId in autoPresetSettings" ng-switch="settingsMap[settingId].inputType">
+                            <td>{{ settingId | i18n:loc.ale:'farm_overflow' }}</td>
+                            <td ng-switch-when="checkbox"><div switch-slider="" enabled="true" border="true" value="settings[settingId]" vertical="false" size="'56x28'"></div></td>
+                            <td ng-switch-when="number"><input type="number" class="fit textfield-border text-center" ng-model="settings[settingId]" min="{{ settingsMap[settingId].min }}" max="{{ settingsMap[settingId].max }}" step="1"></td>
+                        </tr>
+                        <tr><td>Allowed unit types</td><td><label ng-repeat="unit in autoPresetUnits"><input type="checkbox" ng-model="unit.enabled"> {{ unit.name }} </label></td></tr>
+                        <tr><td colspan="2"><a href="#" class="btn-border btn-orange" ng-click="previewAutoPresets()">Save and preview packets</a></td></tr>
+                        <tr ng-repeat="plan in autoPresetPlans"><td>Village {{ plan.villageId }} — {{ plan.nearbyTargets }} barbarians</td><td>{{ plan.name }} — capacity {{ plan.capacity }}</td></tr>
+                    </table>
+                    <table class="tbl-border-light tbl-content tbl-medium-height">
+                        <colgroup><col><col width="270px"></colgroup>
                         <tr><th colspan="2">{{ 'farming_controls' | i18n:loc.ale:'farm_overflow' }}</th></tr>
                         <tr><td colspan="2">{{ 'farming_controls_help' | i18n:loc.ale:'farm_overflow' }}</td></tr>
                         <tr ng-repeat="settingId in farmingSettings" ng-switch="settingsMap[settingId].inputType">

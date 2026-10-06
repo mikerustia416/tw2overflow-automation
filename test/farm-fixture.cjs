@@ -45,7 +45,7 @@ function fixture (options = {}) {
         ARMY_PRESET_UPDATE: 'preset_update', ARMY_PRESET_DELETED: 'preset_deleted',
         GROUPS_VILLAGE_LINKED: 'group_linked', GROUPS_VILLAGE_UNLINKED: 'group_unlinked', GROUPS_DESTROYED: 'group_destroyed'
     };
-    const routes = {SEND_PRESET: {type: 'send'}, ASSIGN_PRESETS: {type: 'assign'}, MAP_GET_VILLAGE_DETAILS: {type: 'details'}};
+    const routes = {SEND_PRESET: {type: 'send'}, SEND_CUSTOM_ARMY: {type: 'custom'}, ASSIGN_PRESETS: {type: 'assign'}, MAP_GET_VILLAGE_DETAILS: {type: 'details'}};
     const rootScope = {
         loc: {ale: 'en'},
         $on: (event, handler) => {
@@ -72,7 +72,7 @@ function fixture (options = {}) {
         modelDataService: {
             getSelectedCharacter: () => player,
             getVillages: () => villages,
-            getGameData: () => ({getUnitsObject: () => ({spear: {load: 25}})}),
+            getGameData: () => ({getUnitsObject: () => options.unitData || {spear: {load: 25}}}),
             getGroupList: () => ({getGroups: () => ({}), getGroupVillageIds: () => []}),
             getPresetList: () => ({getPresets: () => presets, getPresetsByVillageId: () => presets})
         },
@@ -81,14 +81,14 @@ function fixture (options = {}) {
             else callback();
         }},
         armyService: {
-            calculateTravelTime: preset => preset.fieldTime,
+            calculateTravelTime: preset => preset.fieldTime || 60,
             getTravelTimeForDistance: (preset, fieldTime, distance) => fieldTime * distance
         },
         resourceService: {updateMaxStorage: () => {}},
         villageInfoService: {getCommands: () => localIncoming},
         socketService: {emit: (route, data, callback) => {
             requests.push({route: route.type, data: copy(data)});
-            if (route === routes.SEND_PRESET && options.autoAck !== false) {
+            if ((route === routes.SEND_PRESET || route === routes.SEND_CUSTOM_ARMY) && options.autoAck !== false) {
                 queueMicrotask(() => rootScope.$broadcast(events.COMMAND_SENT, {
                     origin: {id: data.start_village}, target: {id: data.target_village}, direction: 'forward', type: 'attack'
                 }));
@@ -126,7 +126,8 @@ function fixture (options = {}) {
     };
     for (const file of ['src/libs/numbered.js', 'src/libs/human-interval.js', 'src/settings.js',
         'src/modules/farm_overflow/src/settings.js', 'src/modules/farm_overflow/src/types.js',
-        'src/modules/farm_overflow/src/events.js', 'src/modules/farm_overflow/src/policy.js', 'src/modules/farm_overflow/src/core.js']) {
+        'src/modules/farm_overflow/src/events.js', 'src/modules/farm_overflow/src/policy.js',
+        'src/modules/farm_overflow/src/auto-presets.js', 'src/modules/farm_overflow/src/core.js']) {
         vm.runInContext(fs.readFileSync(path.join(root, file), 'utf8'), context, {filename: file});
     }
     modules.set('Lockr', lockr);
@@ -169,7 +170,9 @@ function fixture (options = {}) {
         clock = until;
         await settle();
     };
-    return {farm, get, targets, freshTargets, presets, units, requests, storage, rootScope, events, deferredDetails, timers,
+    return {farm, get, targets, freshTargets, presets, units, villages, requests, storage, rootScope, events, deferredDetails, timers,
+        context, setModule: (name, value) => modules.set(name, value),
+        loadSource: file => vm.runInContext(fs.readFileSync(path.join(root, file), 'utf8'), context, {filename: file}),
         deferredVillages, settle, tick, sends: () => requests.filter(request => request.route === 'send')};
 }
 

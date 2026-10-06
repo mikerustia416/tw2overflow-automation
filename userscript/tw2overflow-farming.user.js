@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name        TW2Overflow Farming Improvements
+// @name        TW2Overflow Farmer, Recruiter and Quest
 // @description Automating the boring stuff on Tribal Wars 2 with tools like auto farming, auto builder, command scheduler, minimap and more.
 // @namespace   local/tw2overflow-farming
-// @version     2.1.500.1
+// @version     2.1.500.3
 // @grant       unsafeWindow
 // @run-at      document-start
 // @include     https://*.tribalwars2.com/game.php*
@@ -11,7 +11,7 @@
 
 /*!
  * tw2overflow v2.1.500
- * Fri, 02 Oct 2026 06:16:46 GMT
+ * Tue, 06 Oct 2026 09:47:36 GMT
  * Developed by Relaxeaza <relaxeaza@outlook.com>
  *
  * This work is free. You can redistribute it and/or modify it under the
@@ -614,7 +614,17 @@ define('two/language', [
     // eslint-disable-next-line
     const languages = {
     "cs_cz": {
+        "auto_quest": {
+            "enabled": "Automatically collect ready quest rewards",
+            "check_interval": "Check interval (5 seconds to 5 minutes)",
+            "invalid_interval": "Enter a check interval between 5 seconds and 5 minutes.",
+            "help": "Save settings, then press Start. AutoQuest opens unread or ready quest lines, selects completed tasks marked with an exclamation icon to reveal their rewards, collects them, and closes the game's quest panel when none remain. Settings and the last running or stopped state are restored after reloading the page."
+        },
         "farm_overflow": {
+            "auto_presets": "Create automatic farming presets",
+            "auto_preset_min_units": "Minimum soldiers per packet",
+            "auto_preset_max_units": "Maximum soldiers per packet",
+            "auto_preset_carry": "Desired packet carrying capacity",
             "farming_controls": "Farming controls",
             "farming_controls_help": "Preview records planned attacks without sending them. Capacity per hour estimates transport capacity, not actual loot. Saving settings pauses an active farmer.",
             "preview_only": "Preview only (no attacks)",
@@ -803,7 +813,17 @@ define('two/language', [
         }
     },
     "de_de": {
+        "auto_quest": {
+            "enabled": "Automatically collect ready quest rewards",
+            "check_interval": "Check interval (5 seconds to 5 minutes)",
+            "invalid_interval": "Enter a check interval between 5 seconds and 5 minutes.",
+            "help": "Save settings, then press Start. AutoQuest opens unread or ready quest lines, selects completed tasks marked with an exclamation icon to reveal their rewards, collects them, and closes the game's quest panel when none remain. Settings and the last running or stopped state are restored after reloading the page."
+        },
         "farm_overflow": {
+            "auto_presets": "Create automatic farming presets",
+            "auto_preset_min_units": "Minimum soldiers per packet",
+            "auto_preset_max_units": "Maximum soldiers per packet",
+            "auto_preset_carry": "Desired packet carrying capacity",
             "farming_controls": "Farming controls",
             "farming_controls_help": "Preview records planned attacks without sending them. Capacity per hour estimates transport capacity, not actual loot. Saving settings pauses an active farmer.",
             "preview_only": "Preview only (no attacks)",
@@ -992,7 +1012,17 @@ define('two/language', [
         }
     },
     "el_gr": {
+        "auto_quest": {
+            "enabled": "Automatically collect ready quest rewards",
+            "check_interval": "Check interval (5 seconds to 5 minutes)",
+            "invalid_interval": "Enter a check interval between 5 seconds and 5 minutes.",
+            "help": "Save settings, then press Start. AutoQuest opens unread or ready quest lines, selects completed tasks marked with an exclamation icon to reveal their rewards, collects them, and closes the game's quest panel when none remain. Settings and the last running or stopped state are restored after reloading the page."
+        },
         "farm_overflow": {
+            "auto_presets": "Create automatic farming presets",
+            "auto_preset_min_units": "Minimum soldiers per packet",
+            "auto_preset_max_units": "Maximum soldiers per packet",
+            "auto_preset_carry": "Desired packet carrying capacity",
             "farming_controls": "Farming controls",
             "farming_controls_help": "Preview records planned attacks without sending them. Capacity per hour estimates transport capacity, not actual loot. Saving settings pauses an active farmer.",
             "preview_only": "Preview only (no attacks)",
@@ -1181,7 +1211,17 @@ define('two/language', [
         }
     },
     "en_us": {
+        "auto_quest": {
+            "enabled": "Automatically collect ready quest rewards",
+            "check_interval": "Check interval (5 seconds to 5 minutes)",
+            "invalid_interval": "Enter a check interval between 5 seconds and 5 minutes.",
+            "help": "Save settings, then press Start. AutoQuest opens unread or ready quest lines, selects completed tasks marked with an exclamation icon to reveal their rewards, collects them, and closes the game's quest panel when none remain. Settings and the last running or stopped state are restored after reloading the page."
+        },
         "farm_overflow": {
+            "auto_presets": "Create automatic farming presets",
+            "auto_preset_min_units": "Minimum soldiers per packet",
+            "auto_preset_max_units": "Maximum soldiers per packet",
+            "auto_preset_carry": "Desired packet carrying capacity",
             "farming_controls": "Farming controls",
             "farming_controls_help": "Preview records planned attacks without sending them. Capacity per hour estimates transport capacity, not actual loot. Saving settings pauses an active farmer.",
             "preview_only": "Preview only (no attacks)",
@@ -1370,7 +1410,17 @@ define('two/language', [
         }
     },
     "es_es": {
+        "auto_quest": {
+            "enabled": "Automatically collect ready quest rewards",
+            "check_interval": "Check interval (5 seconds to 5 minutes)",
+            "invalid_interval": "Enter a check interval between 5 seconds and 5 minutes.",
+            "help": "Save settings, then press Start. AutoQuest opens unread or ready quest lines, selects completed tasks marked with an exclamation icon to reveal their rewards, collects them, and closes the game's quest panel when none remain. Settings and the last running or stopped state are restored after reloading the page."
+        },
         "farm_overflow": {
+            "auto_presets": "Create automatic farming presets",
+            "auto_preset_min_units": "Minimum soldiers per packet",
+            "auto_preset_max_units": "Maximum soldiers per packet",
+            "auto_preset_carry": "Desired packet carrying capacity",
             "farming_controls": "Farming controls",
             "farming_controls_help": "Preview records planned attacks without sending them. Capacity per hour estimates transport capacity, not actual loot. Saving settings pauses an active farmer.",
             "preview_only": "Preview only (no attacks)",
@@ -1559,7 +1609,17 @@ define('two/language', [
         }
     },
     "fr_fr": {
+        "auto_quest": {
+            "enabled": "Automatically collect ready quest rewards",
+            "check_interval": "Check interval (5 seconds to 5 minutes)",
+            "invalid_interval": "Enter a check interval between 5 seconds and 5 minutes.",
+            "help": "Save settings, then press Start. AutoQuest opens unread or ready quest lines, selects completed tasks marked with an exclamation icon to reveal their rewards, collects them, and closes the game's quest panel when none remain. Settings and the last running or stopped state are restored after reloading the page."
+        },
         "farm_overflow": {
+            "auto_presets": "Create automatic farming presets",
+            "auto_preset_min_units": "Minimum soldiers per packet",
+            "auto_preset_max_units": "Maximum soldiers per packet",
+            "auto_preset_carry": "Desired packet carrying capacity",
             "farming_controls": "Farming controls",
             "farming_controls_help": "Preview records planned attacks without sending them. Capacity per hour estimates transport capacity, not actual loot. Saving settings pauses an active farmer.",
             "preview_only": "Preview only (no attacks)",
@@ -1748,7 +1808,17 @@ define('two/language', [
         }
     },
     "nl_nl": {
+        "auto_quest": {
+            "enabled": "Automatically collect ready quest rewards",
+            "check_interval": "Check interval (5 seconds to 5 minutes)",
+            "invalid_interval": "Enter a check interval between 5 seconds and 5 minutes.",
+            "help": "Save settings, then press Start. AutoQuest opens unread or ready quest lines, selects completed tasks marked with an exclamation icon to reveal their rewards, collects them, and closes the game's quest panel when none remain. Settings and the last running or stopped state are restored after reloading the page."
+        },
         "farm_overflow": {
+            "auto_presets": "Create automatic farming presets",
+            "auto_preset_min_units": "Minimum soldiers per packet",
+            "auto_preset_max_units": "Maximum soldiers per packet",
+            "auto_preset_carry": "Desired packet carrying capacity",
             "farming_controls": "Farming controls",
             "farming_controls_help": "Preview records planned attacks without sending them. Capacity per hour estimates transport capacity, not actual loot. Saving settings pauses an active farmer.",
             "preview_only": "Preview only (no attacks)",
@@ -1937,7 +2007,17 @@ define('two/language', [
         }
     },
     "pl_pl": {
+        "auto_quest": {
+            "enabled": "Automatically collect ready quest rewards",
+            "check_interval": "Check interval (5 seconds to 5 minutes)",
+            "invalid_interval": "Enter a check interval between 5 seconds and 5 minutes.",
+            "help": "Save settings, then press Start. AutoQuest opens unread or ready quest lines, selects completed tasks marked with an exclamation icon to reveal their rewards, collects them, and closes the game's quest panel when none remain. Settings and the last running or stopped state are restored after reloading the page."
+        },
         "farm_overflow": {
+            "auto_presets": "Create automatic farming presets",
+            "auto_preset_min_units": "Minimum soldiers per packet",
+            "auto_preset_max_units": "Maximum soldiers per packet",
+            "auto_preset_carry": "Desired packet carrying capacity",
             "farming_controls": "Farming controls",
             "farming_controls_help": "Preview records planned attacks without sending them. Capacity per hour estimates transport capacity, not actual loot. Saving settings pauses an active farmer.",
             "preview_only": "Preview only (no attacks)",
@@ -2126,7 +2206,17 @@ define('two/language', [
         }
     },
     "pt_br": {
+        "auto_quest": {
+            "enabled": "Automatically collect ready quest rewards",
+            "check_interval": "Check interval (5 seconds to 5 minutes)",
+            "invalid_interval": "Enter a check interval between 5 seconds and 5 minutes.",
+            "help": "Save settings, then press Start. AutoQuest opens unread or ready quest lines, selects completed tasks marked with an exclamation icon to reveal their rewards, collects them, and closes the game's quest panel when none remain. Settings and the last running or stopped state are restored after reloading the page."
+        },
         "farm_overflow": {
+            "auto_presets": "Create automatic farming presets",
+            "auto_preset_min_units": "Minimum soldiers per packet",
+            "auto_preset_max_units": "Maximum soldiers per packet",
+            "auto_preset_carry": "Desired packet carrying capacity",
             "farming_controls": "Farming controls",
             "farming_controls_help": "Preview records planned attacks without sending them. Capacity per hour estimates transport capacity, not actual loot. Saving settings pauses an active farmer.",
             "preview_only": "Preview only (no attacks)",
@@ -2315,7 +2405,17 @@ define('two/language', [
         }
     },
     "ro_ro": {
+        "auto_quest": {
+            "enabled": "Automatically collect ready quest rewards",
+            "check_interval": "Check interval (5 seconds to 5 minutes)",
+            "invalid_interval": "Enter a check interval between 5 seconds and 5 minutes.",
+            "help": "Save settings, then press Start. AutoQuest opens unread or ready quest lines, selects completed tasks marked with an exclamation icon to reveal their rewards, collects them, and closes the game's quest panel when none remain. Settings and the last running or stopped state are restored after reloading the page."
+        },
         "farm_overflow": {
+            "auto_presets": "Create automatic farming presets",
+            "auto_preset_min_units": "Minimum soldiers per packet",
+            "auto_preset_max_units": "Maximum soldiers per packet",
+            "auto_preset_carry": "Desired packet carrying capacity",
             "farming_controls": "Farming controls",
             "farming_controls_help": "Preview records planned attacks without sending them. Capacity per hour estimates transport capacity, not actual loot. Saving settings pauses an active farmer.",
             "preview_only": "Preview only (no attacks)",
@@ -2504,7 +2604,17 @@ define('two/language', [
         }
     },
     "ru_ru": {
+        "auto_quest": {
+            "enabled": "Automatically collect ready quest rewards",
+            "check_interval": "Check interval (5 seconds to 5 minutes)",
+            "invalid_interval": "Enter a check interval between 5 seconds and 5 minutes.",
+            "help": "Save settings, then press Start. AutoQuest opens unread or ready quest lines, selects completed tasks marked with an exclamation icon to reveal their rewards, collects them, and closes the game's quest panel when none remain. Settings and the last running or stopped state are restored after reloading the page."
+        },
         "farm_overflow": {
+            "auto_presets": "Create automatic farming presets",
+            "auto_preset_min_units": "Minimum soldiers per packet",
+            "auto_preset_max_units": "Maximum soldiers per packet",
+            "auto_preset_carry": "Desired packet carrying capacity",
             "farming_controls": "Farming controls",
             "farming_controls_help": "Preview records planned attacks without sending them. Capacity per hour estimates transport capacity, not actual loot. Saving settings pauses an active farmer.",
             "preview_only": "Preview only (no attacks)",
@@ -2712,7 +2822,7 @@ define('two/language', [
         }
 
         initialized = true;
-        
+
         selectLanguage($rootScope.loc.ale);
 
         // trigger eventTypeProvider.LANGUAGE_SELECTED_CHANGED you dumb fucks
@@ -3189,6 +3299,78 @@ define('two/Settings', [
     return Settings;
 });
 
+define('two/resourceBudget', [], function () {
+    const pending = new Map();
+    const resources = ['wood', 'clay', 'iron', 'food'];
+    const stock = village => village.getResources().getComputed();
+    const isBusy = function (village) {
+        const entry = pending.get(village.getId());
+        if (!entry) {
+            return false;
+        }
+        const current = stock(village);
+        if (entry.acknowledged && resources.every(type => !entry.cost[type]
+            || (current[type] && Number.isFinite(current[type].currentStock)
+                && current[type].currentStock <= entry.before[type] - entry.cost[type]))) {
+            pending.delete(village.getId());
+            return false;
+        }
+        return true;
+    };
+    return {
+        isBusy,
+        begin: function (village, cost) {
+            if (!cost || !resources.every(type => Number.isFinite(Number(cost[type])) && Number(cost[type]) >= 0)
+                || isBusy(village)) {
+                return false;
+            }
+            const current = stock(village);
+            cost = Object.fromEntries(resources.map(type => [type, Number(cost[type])]));
+            const entry = {cost, before: {}, acknowledged: false};
+            for (const type of resources) {
+                if (cost[type] && (!current[type] || !Number.isFinite(current[type].currentStock)
+                    || current[type].currentStock < cost[type])) {
+                    return false;
+                }
+                entry.before[type] = current[type] ? current[type].currentStock : 0;
+            }
+            pending.set(village.getId(), entry);
+            return entry;
+        },
+        acknowledge: function (village, entry) {
+            if (pending.get(village.getId()) === entry) {
+                entry.acknowledged = true;
+            }
+        },
+        reject: function (village, entry) {
+            if (pending.get(village.getId()) === entry) {
+                pending.delete(village.getId());
+            }
+        },
+        clear: function (villageId) {
+            pending.delete(Number(villageId));
+        }
+    };
+});
+
+define('two/moduleState', [
+    'Lockr',
+    'queues/EventQueue'
+], function (Lockr, eventQueue) {
+    return function (module, storageKey, startEvent, stopEvent) {
+        eventQueue.register(startEvent, function () {
+            Lockr.set(storageKey, true);
+        });
+        eventQueue.register(stopEvent, function () {
+            Lockr.set(storageKey, false);
+        });
+
+        if (Lockr.get(storageKey, false) === true) {
+            module.start();
+        }
+    };
+});
+
 define('two/mapData', [
     'conf/conf'
 ], function (
@@ -3278,7 +3460,7 @@ define('two/mapData', [
             loaded = true;
 
             $rootScope.$broadcast(eventTypeProvider.MAP_DATA_LOADED);
-            
+
             callbackQueue.forEach(function (queuedCallback) {
                 queuedCallback(villages);
             });
@@ -3416,7 +3598,7 @@ define('two/ui', [
             });
         }
 
-        return $menu.appendChild($button);
+        return $button;
     };
 
     interfaceOverflow.addDivisor = function (order) {
@@ -3453,6 +3635,32 @@ require([
     ready(function () {
         twoLanguage.init();
     });
+});
+
+// Load core modules immediately
+require([
+    'two/farmOverflow',
+    'two/builderQueue',
+    'two/autoQuest',
+    'two/ui'
+], function (
+    farmOverflow,
+    builderQueue,
+    autoQuest,
+    interfaceOverflow
+) {
+    // Initialize modules as soon as possible
+    if (farmOverflow && !farmOverflow.isInitialized()) {
+        farmOverflow.init();
+    }
+
+    if (builderQueue && !builderQueue.isInitialized()) {
+        builderQueue.init();
+    }
+
+    if (autoQuest && !autoQuest.isInitialized()) {
+        autoQuest.init();
+    }
 });
 
 /**
@@ -3499,7 +3707,7 @@ define('Lockr', function (root, Lockr) {
                 value = null;
             }
         }
-        
+
         if (value === null) {
             return missing;
         } else if (typeof value === 'object' && typeof value.data !== 'undefined') {
@@ -3826,6 +4034,372 @@ define('humanInterval', [
     };
 });
 
+define('two/autoQuest', [
+    'two/Settings',
+    'two/autoQuest/settings',
+    'two/autoQuest/settings/map',
+    'two/autoQuest/settings/updates',
+    'queues/EventQueue',
+    'two/autoQuest/events'
+], function (Settings, SETTINGS, SETTINGS_MAP, UPDATES, eventQueue) {
+    let initialized = false;
+    let running = false;
+    let settings;
+    let localSettings;
+    let intervalId;
+    let windowCheckId;
+    let actionTimeoutId;
+    let pendingAction;
+
+    const isAvailable = function (button) {
+        return !button.disabled && button.getAttribute('aria-disabled') !== 'true'
+            && !button.classList.contains('btn-grey') && button.getClientRects().length > 0;
+    };
+
+    const questModelFor = function (button) {
+        const scope = angular.element(button).scope();
+        return scope && scope.data && scope.data.questModel;
+    };
+
+    const questRows = function () {
+        return Array.from(document.querySelectorAll('[ng-controller="ModalQuestLineController"] [ng-click*="selectQuest"]'))
+            .filter(button => /^\s*selectQuest\(\$index\)\s*;?\s*$/.test(button.getAttribute('ng-click')));
+    };
+
+    const isReadyTask = function (button) {
+        return isAvailable(button) && !button.classList.contains('selected')
+            && !!button.querySelector('.icon-44x44-quest-ready-to-finish')
+            && !button.querySelector('.icon-44x44-quest-finished');
+    };
+
+    const isClaimable = function (button) {
+        if (!isAvailable(button)) {
+            return false;
+        }
+
+        const questModel = questModelFor(button);
+        return questModel && typeof questModel.isFinishable === 'function'
+            ? questModel.isFinishable() && !(typeof questModel.isClosed === 'function' && questModel.isClosed())
+            : button.classList.contains('btn-green');
+    };
+
+    const scheduleCheck = function (delay = 1000) {
+        clearTimeout(windowCheckId);
+        windowCheckId = setTimeout(checkAndFinishQuests, delay);
+    };
+
+    const act = function (button, type) {
+        clearTimeout(actionTimeoutId);
+        pendingAction = {button, type, questModel: type === 'claim' ? questModelFor(button) : null};
+        // Wait for the game to acknowledge a claim before attempting it again.
+        actionTimeoutId = setTimeout(function () {
+            pendingAction = null;
+        }, 10000);
+        button.click();
+        scheduleCheck();
+    };
+
+    const checkAndFinishQuests = function () {
+        if (!running || !localSettings[SETTINGS.ENABLED]) {
+            return;
+        }
+        // Native clicks invoke Angular's ng-click $apply. Run after the current
+        // digest rather than nesting another $apply inside the Start handler.
+        if ($rootScope.$$phase) {
+            scheduleCheck(0);
+            return;
+        }
+        if (pendingAction && pendingAction.type === 'claim'
+            && (!pendingAction.button.isConnected || !isClaimable(pendingAction.button))) {
+            clearTimeout(actionTimeoutId);
+            pendingAction = null;
+        }
+        const tasks = questRows();
+        if (pendingAction && ((pendingAction.type === 'open' && tasks.length)
+            || (pendingAction.type === 'select' && (!pendingAction.button.isConnected
+                || pendingAction.button.classList.contains('selected'))))) {
+            clearTimeout(actionTimeoutId);
+            pendingAction = null;
+        }
+
+        const finishButton = Array.from(document.querySelectorAll('[ng-click*="finishQuest"]')).find(function (button) {
+            return /^\s*finishQuest\(\)\s*;?\s*$/.test(button.getAttribute('ng-click')) && isClaimable(button);
+        });
+
+        if (finishButton) {
+            if (pendingAction && pendingAction.type === 'claim' && pendingAction.button === finishButton
+                && pendingAction.questModel === questModelFor(finishButton)) {
+                return;
+            }
+            return act(finishButton, 'claim');
+        }
+
+        // Selecting the exclamation-mark task updates data.questModel and
+        // reveals its reward. Never select unfinished or already closed tasks.
+        const readyTask = tasks.find(isReadyTask);
+        if (readyTask) {
+            if (!pendingAction) {
+                act(readyTask, 'select');
+            }
+            return;
+        }
+        // An open panel with no claimable/ready tasks can be closed without
+        // reopening a different toolbar line while this one is displayed.
+        if (tasks.length) {
+            const closeButton = Array.from(document.querySelectorAll(
+                '[ng-controller="ModalQuestLineController"] [ng-click="closeWindow()"]'
+            )).find(isAvailable);
+            if (closeButton && !pendingAction) {
+                act(closeButton, 'close');
+            }
+            return;
+        }
+
+        const questLine = Array.from(document.querySelectorAll('.quest-line-finishable[ng-click], .quest-line-unread[ng-click]')).find(function (button) {
+            return /^\s*openQuestLineModal\(questLineModel\)\s*;?\s*$/.test(button.getAttribute('ng-click')) && isAvailable(button);
+        });
+        if (questLine && !pendingAction) {
+            act(questLine, 'open');
+        } else if (!questLine && (!pendingAction || pendingAction.type !== 'open')) {
+            clearTimeout(actionTimeoutId);
+            pendingAction = null;
+            const closeButton = Array.from(document.querySelectorAll(
+                '[ng-controller="ModalQuestLineController"] [ng-click="closeWindow()"]'
+            )).find(isAvailable);
+            if (closeButton) {
+                act(closeButton, 'close');
+            }
+        }
+    };
+
+    const stopChecker = function () {
+        clearInterval(intervalId);
+        clearTimeout(windowCheckId);
+        clearTimeout(actionTimeoutId);
+        pendingAction = null;
+        intervalId = null;
+        windowCheckId = null;
+    };
+
+    const startChecker = function () {
+        const configuredInterval = localSettings[SETTINGS.CHECK_INTERVAL];
+        const interval = Number.isFinite(configuredInterval)
+            ? Math.min(300000, Math.max(5000, configuredInterval)) : 30000;
+        intervalId = setInterval(checkAndFinishQuests, interval);
+        checkAndFinishQuests();
+    };
+
+    const autoQuest = {};
+
+    autoQuest.init = function () {
+        if (initialized) {
+            return false;
+        }
+
+        settings = new Settings({
+            settingsMap: SETTINGS_MAP,
+            storageKey: 'auto_quest_settings'
+        });
+        settings.store();
+        localSettings = settings.getAll();
+
+        settings.onChange(function (changes, updates) {
+            localSettings = settings.getAll();
+
+            if (running && updates && updates[UPDATES.CHECK_INTERVAL]) {
+                stopChecker();
+                startChecker();
+            }
+        });
+
+        $rootScope.$on(eventTypeProvider.WINDOW_OPENED, function () {
+            if (running) {
+                scheduleCheck();
+            }
+        });
+        initialized = true;
+    };
+
+    autoQuest.start = function () {
+        if (!initialized || running) {
+            return false;
+        }
+
+        running = true;
+        startChecker();
+        eventQueue.trigger(eventTypeProvider.AUTO_QUEST_START);
+    };
+
+    autoQuest.stop = function () {
+        if (!running) {
+            return false;
+        }
+
+        running = false;
+        stopChecker();
+        eventQueue.trigger(eventTypeProvider.AUTO_QUEST_STOP);
+    };
+
+    autoQuest.getSettings = function () {
+        return settings;
+    };
+
+    autoQuest.isInitialized = function () {
+        return initialized;
+    };
+
+    autoQuest.isRunning = function () {
+        return running;
+    };
+
+    return autoQuest;
+});
+
+define('two/autoQuest/events', [], function () {
+    angular.extend(eventTypeProvider, {
+        AUTO_QUEST_START: 'auto_quest_start',
+        AUTO_QUEST_STOP: 'auto_quest_stop'
+    });
+});
+
+define('two/autoQuest/settings', [], function () {
+    return {
+        ENABLED: 'enabled',
+        CHECK_INTERVAL: 'check_interval'
+    };
+});
+
+define('two/autoQuest/settings/updates', function () {
+    return {
+        ENABLED: 'enabled',
+        CHECK_INTERVAL: 'check_interval'
+    };
+});
+
+define('two/autoQuest/settings/map', [
+    'two/autoQuest/settings',
+    'two/autoQuest/settings/updates'
+], function (SETTINGS, UPDATES) {
+    return {
+        [SETTINGS.ENABLED]: {
+            default: true,
+            updates: [UPDATES.ENABLED],
+            inputType: 'checkbox'
+        },
+        [SETTINGS.CHECK_INTERVAL]: {
+            default: '30 seconds',
+            updates: [UPDATES.CHECK_INTERVAL],
+            inputType: 'readable_time',
+            min: '5 seconds',
+            max: '5 minutes'
+        }
+    };
+});
+
+define('two/autoQuest/ui', [
+    'two/ui',
+    'two/autoQuest',
+    'two/autoQuest/settings',
+    'two/EventScope',
+    'two/utils',
+    'queues/EventQueue',
+    'humanInterval'
+], function (interfaceOverflow, autoQuest, SETTINGS, EventScope, utils, eventQueue, humanInterval) {
+    let settings;
+    let $button;
+
+    const init = function () {
+        if ($button) {
+            return false;
+        }
+
+        settings = autoQuest.getSettings();
+        interfaceOverflow.addTemplate('twoverflow_auto_quest_window', `<div id=\"two-auto-quest\" class=\"win-content two-window\"><header class=\"win-head\"><h2>AutoQuest</h2><ul class=\"list-btn\"><li><a href=\"#\" class=\"size-34x34 btn-red icon-26x26-close\" ng-click=\"closeWindow()\"></a></ul></header><div class=\"win-main\" scrollbar=\"\"><div class=\"box-paper footer\"><div class=\"scroll-wrap\"><table class=\"settings tbl-border-light tbl-striped tbl-medium-height\"><col><col width=\"270px\"><tr><th colspan=\"2\">{{ 'settings' | i18n:loc.ale:'common' }}<tr><td>{{ 'enabled' | i18n:loc.ale:'auto_quest' }}<td><div switch-slider=\"\" enabled=\"true\" border=\"true\" value=\"enabled\" vertical=\"false\" size=\"'56x28'\"></div><tr><td>{{ 'check_interval' | i18n:loc.ale:'auto_quest' }}<td><input class=\"fit textfield-border text-center\" ng-model=\"checkInterval\" tooltip=\"\" tooltip-content=\"{{ 'readable_time_format' | i18n:loc.ale:'common' }}\"><tr><td colspan=\"2\">{{ 'help' | i18n:loc.ale:'auto_quest' }}</table></div></div></div><footer class=\"win-foot\"><ul class=\"list-btn list-center\"><li><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"saveSettings()\">{{ 'save' | i18n:loc.ale:'common' }}</a><li><a href=\"#\" class=\"btn-border\" ng-class=\"{'btn-red': running, 'btn-orange': !running}\" ng-click=\"switchState()\">{{ (running ? 'stop' : 'start') | i18n:loc.ale:'common' }}</a></ul></footer></div>`);
+        $button = interfaceOverflow.addMenuButton('Quest', 20);
+        $button.addEventListener('click', buildWindow);
+
+        eventQueue.register(eventTypeProvider.AUTO_QUEST_START, function () {
+            $button.classList.remove('btn-orange');
+            $button.classList.add('btn-red');
+        });
+        eventQueue.register(eventTypeProvider.AUTO_QUEST_STOP, function () {
+            $button.classList.remove('btn-red');
+            $button.classList.add('btn-orange');
+        });
+    };
+
+    const buildWindow = function () {
+        const scope = $rootScope.$new();
+        scope.running = autoQuest.isRunning();
+        scope.enabled = settings.getRaw(SETTINGS.ENABLED);
+        scope.checkInterval = settings.getRaw(SETTINGS.CHECK_INTERVAL);
+
+        scope.switchState = function () {
+            if (autoQuest.isRunning()) {
+                autoQuest.stop();
+            } else {
+                autoQuest.start();
+            }
+        };
+
+        scope.saveSettings = function () {
+            const interval = humanInterval(scope.checkInterval);
+            if (!settings.valid('readable_time', scope.checkInterval)
+                || !Number.isFinite(interval) || interval < 5000 || interval > 300000) {
+                return utils.notif('error', $filter('i18n')('invalid_interval', $rootScope.loc.ale, 'auto_quest'));
+            }
+
+            settings.setAll({
+                [SETTINGS.ENABLED]: scope.enabled,
+                [SETTINGS.CHECK_INTERVAL]: scope.checkInterval
+            });
+            utils.notif('success', $filter('i18n')('settings_saved', $rootScope.loc.ale, 'common'));
+        };
+
+        const eventScope = new EventScope('twoverflow_auto_quest_window');
+        eventScope.register(eventTypeProvider.AUTO_QUEST_START, function () {
+            scope.$evalAsync(function () {
+                scope.running = true;
+            });
+        });
+        eventScope.register(eventTypeProvider.AUTO_QUEST_STOP, function () {
+            scope.$evalAsync(function () {
+                scope.running = false;
+            });
+        });
+        scope.$on('$destroy', function () {
+            eventScope.destroy();
+        });
+
+        windowManagerService.getScreenWithInjectedScope('!twoverflow_auto_quest_window', scope);
+    };
+
+    return init;
+});
+
+require([
+    'two/ready',
+    'two/autoQuest',
+    'two/autoQuest/ui',
+    'two/moduleState',
+    'two/autoQuest/events'
+], function (
+    ready,
+    autoQuest,
+    autoQuestInterface,
+    restoreModuleState
+) {
+    if (autoQuest.isInitialized()) {
+        return false;
+    }
+
+    ready(function () {
+        autoQuest.init();
+        autoQuestInterface();
+        restoreModuleState(autoQuest, 'auto_quest_active', eventTypeProvider.AUTO_QUEST_START, eventTypeProvider.AUTO_QUEST_STOP);
+    }, ['map']);
+});
+
 define('two/farmOverflow', [
     'two/Settings',
     'two/farmOverflow/types/errors',
@@ -3848,7 +4422,8 @@ define('two/farmOverflow', [
     'struct/MapData',
     'Lockr',
     'two/debug',
-    'two/farmOverflow/policy'
+    'two/farmOverflow/policy',
+    'two/farmOverflow/autoPresets'
 ], function (
     Settings,
     ERROR_TYPES,
@@ -3871,7 +4446,8 @@ define('two/farmOverflow', [
     $mapData,
     Lockr,
     setupDebug,
-    policy
+    policy,
+    autoPresets
 ) {
     let initialized = false;
     let running = false;
@@ -4047,7 +4623,7 @@ define('two/farmOverflow', [
         let modified = false;
 
         exceptionVillages.forEach(function (villageId) {
-            if (!hasOwn.call(exceptionLogs, villageId)) { 
+            if (!hasOwn.call(exceptionLogs, villageId)) {
                 exceptionLogs[villageId] = {
                     time: timeHelper.gameTime(),
                     report: false
@@ -4058,7 +4634,7 @@ define('two/farmOverflow', [
 
         utils.each(exceptionLogs, function (time, villageId) {
             villageId = parseInt(villageId, 10);
-            
+
             if (!exceptionVillages.includes(villageId)) {
                 delete exceptionLogs[villageId];
                 modified = true;
@@ -4254,7 +4830,7 @@ define('two/farmOverflow', [
     const presetListener = function () {
         processPresets();
 
-        if (!selectedPresets.length) {
+        if (!selectedPresets.length && !localSettings[SETTINGS.AUTO_PRESETS]) {
             eventQueue.trigger(eventTypeProvider.FARM_OVERFLOW_STOP, {
                 reason: ERROR_TYPES.NO_PRESETS
             });
@@ -4456,7 +5032,8 @@ define('two/farmOverflow', [
 
     const getPresetChoice = function (farmer, target) {
         const distance = math.actualDistance(farmer.village.getPosition(), target);
-        return policy.choosePreset(selectedPresets, farmer.village.getUnitInfo().getUnits(), unitsData, function (preset) {
+        const generated = policy.isBarbarian(target) ? farmer.generatedPresets || [] : [];
+        return policy.choosePreset(selectedPresets.concat(generated), farmer.village.getUnitInfo().getUnits(), unitsData, function (preset) {
             const fieldTime = armyService.calculateTravelTime(preset, {
                 barbarian: policy.isBarbarian(target),
                 officers: true,
@@ -4501,6 +5078,7 @@ define('two/farmOverflow', [
         this.status = STATUS.WAITING_CYCLE;
         this.stepVersion = 0;
         this.attacksThisCycle = 0;
+        this.generatedPresets = [];
     };
 
     Farmer.prototype.init = function () {
@@ -4559,6 +5137,7 @@ define('two/farmOverflow', [
         this.running = true;
         this.index = 0;
         this.attacksThisCycle = 0;
+        this.generatedPresets = this.buildAutoPresets();
         this.targets = policy.orderTargets(this.targets, target => {
             const choice = getPresetChoice(this, target);
             return choice.score || 1 / Math.max(1, target.distance);
@@ -4567,11 +5146,21 @@ define('two/farmOverflow', [
             villageId: this.villageId
         });
 
-        this.targetStep({
-            delay: false
-        });
-
+        this.targetStep({delay: false});
         return true;
+    };
+
+    Farmer.prototype.buildAutoPresets = function () {
+        return localSettings[SETTINGS.AUTO_PRESETS] ? autoPresets(this.villageId, this.targets || [], this.village.getUnitInfo().getUnits(), unitsData, {
+            unitNames: localSettings[SETTINGS.AUTO_PRESET_UNITS],
+            minimum: localSettings[SETTINGS.AUTO_PRESET_MIN_UNITS],
+            maximum: localSettings[SETTINGS.AUTO_PRESET_MAX_UNITS],
+            carry: localSettings[SETTINGS.AUTO_PRESET_CARRY],
+            reservePercent: localSettings[SETTINGS.UNIT_RESERVE_PERCENT],
+            attackLimit: localSettings[SETTINGS.MAX_ATTACKS_PER_CYCLE],
+            commandSlots: Math.max(1, VILLAGE_COMMAND_LIMIT - localSettings[SETTINGS.PRESERVE_COMMAND_SLOTS]
+                    - this.village.getCommandListModel().getOutgoingCommands(true, true).length)
+        }) : [];
     };
 
     Farmer.prototype.stop = function (reason) {
@@ -4872,6 +5461,7 @@ define('two/farmOverflow', [
                     targetId: target.id,
                     originId: this.villageId,
                     presetId: selectedPreset.id,
+                    units: {...selectedPreset.units},
                     capacity: selectedChoice.haul,
                     travelSeconds: selectedChoice.travelSeconds,
                     ratePerHour: Math.round(selectedChoice.score * 3600),
@@ -4895,6 +5485,22 @@ define('two/farmOverflow', [
                 }
             }, STEP_EXPIRE_TIME);
 
+            if (selectedPreset.generated) {
+                if (!routeProvider.SEND_CUSTOM_ARMY) {
+                    farmOverflow.stop(STATUS.COMMAND_ERROR);
+                    return;
+                }
+                socketService.emit(routeProvider.SEND_CUSTOM_ARMY, {
+                    start_village: this.villageId,
+                    target_village: target.id,
+                    units: selectedPreset.units,
+                    officers: {},
+                    icon: 0,
+                    catapult_target: false,
+                    type: COMMAND_TYPES.TYPES.ATTACK
+                });
+                return;
+            }
             socketService.emit(routeProvider.SEND_PRESET, {
                 start_village: this.villageId,
                 target_village: target.id,
@@ -5003,7 +5609,7 @@ define('two/farmOverflow', [
                 .catch(reject);
         });
 
-        const expirePromise = new Promise((resolve, reject) => {    
+        const expirePromise = new Promise((resolve, reject) => {
             commandExpireTimer = setTimeout(() => {
                 if (isActive()) {
                     reject(STATUS.EXPIRED_STEP);
@@ -5270,6 +5876,20 @@ define('two/farmOverflow', [
 
     const farmOverflow = {};
 
+    farmOverflow.previewAutoPresets = function () {
+        return Promise.all(farmers.map(farmer => new Promise(resolve => {
+            villageService.ensureVillageDataLoaded(farmer.villageId, () => farmer.loadTargets(() => {
+                resolve(farmer.buildAutoPresets().map(preset => ({
+                    villageId: farmer.villageId,
+                    name: preset.name,
+                    units: preset.units,
+                    nearbyTargets: preset.nearbyTargets,
+                    capacity: getPresetHaul(preset)
+                })));
+            }));
+        }))).then(plans => [].concat(...plans));
+    };
+
     farmOverflow.init = function () {
         debug(1, 'initialized');
 
@@ -5392,12 +6012,16 @@ define('two/farmOverflow', [
 
         if (!validSettings || localSettings[SETTINGS.MAX_TRAVEL_TIME] <= 0
             || localSettings[SETTINGS.MIN_DISTANCE] > localSettings[SETTINGS.MAX_DISTANCE]
-            || localSettings[SETTINGS.MIN_POINTS] > localSettings[SETTINGS.MAX_POINTS]) {
+            || localSettings[SETTINGS.MIN_POINTS] > localSettings[SETTINGS.MAX_POINTS]
+            || localSettings[SETTINGS.AUTO_PRESET_MIN_UNITS] > localSettings[SETTINGS.AUTO_PRESET_MAX_UNITS]
+            || (localSettings[SETTINGS.AUTO_PRESETS] && (!Array.isArray(localSettings[SETTINGS.AUTO_PRESET_UNITS])
+                || !localSettings[SETTINGS.AUTO_PRESET_UNITS].length
+                || localSettings[SETTINGS.AUTO_PRESET_UNITS].some(name => !unitsData[name])))) {
             utils.notif('error', $filter('i18n')('invalid_farming_settings', $rootScope.loc.ale, 'farm_overflow'));
             return false;
         }
 
-        if (!selectedPresets.length) {
+        if (!selectedPresets.length && !localSettings[SETTINGS.AUTO_PRESETS]) {
             debug(1, 'start: fail "%s"', ERROR_TYPES.NO_SELECTED_PRESET);
 
             eventQueue.trigger(eventTypeProvider.FARM_OVERFLOW_STOP, {
@@ -5523,6 +6147,52 @@ define('two/farmOverflow', [
     farmOverflow.getCycleInterval = getCycleInterval;
 
     return farmOverflow;
+});
+
+define('two/farmOverflow/autoPresets', ['two/farmOverflow/policy'], function (policy) {
+    // Farmer-owned packets use SEND_CUSTOM_ARMY and never modify native presets.
+    return function (villageId, targets, units, unitData, options) {
+        if (!Array.isArray(options.unitNames) || !Number.isFinite(options.reservePercent)
+            || options.reservePercent < 0 || options.reservePercent > 100
+            || !Number.isInteger(options.minimum) || !Number.isInteger(options.maximum)
+            || options.minimum < 1 || options.maximum < options.minimum
+            || !Number.isFinite(options.carry) || options.carry <= 0) {
+            return [];
+        }
+        const nearby = targets.filter(policy.isBarbarian);
+        if (!nearby.length) {
+            return [];
+        }
+        const packets = Math.max(1, Math.min(nearby.length, options.commandSlots, options.attackLimit));
+        if (!Number.isInteger(packets)) {
+            return [];
+        }
+        const result = [];
+        for (const name of new Set(options.unitNames)) {
+            const data = unitData[name];
+            const stock = units[name] && units[name].in_town;
+            if (!data || !Number.isFinite(data.load) || data.load <= 0 || !Number.isInteger(stock) || stock < 0) {
+                continue;
+            }
+            const available = Math.floor(stock * (1 - options.reservePercent / 100));
+            const cap = Math.min(available, options.maximum, Math.ceil(options.carry / data.load));
+            if (cap < options.minimum) {
+                continue;
+            }
+            const base = Math.min(cap, Math.max(options.minimum, Math.floor(available / packets)));
+            for (const amount of new Set([base, Math.min(cap, base * 2), cap])) {
+                result.push({
+                    id: `auto:${villageId}:${name}:${amount}`,
+                    name: `Auto ${name} × ${amount}`,
+                    units: {[name]: amount},
+                    officers: {},
+                    generated: true,
+                    nearbyTargets: nearby.length
+                });
+            }
+        }
+        return result;
+    };
 });
 
 define('two/farmOverflow/events', [], function () {
@@ -5682,6 +6352,7 @@ define('two/farmOverflow/ui', [
         }
 
         const decoded = settings.decode($scope.settings);
+        decoded[SETTINGS.AUTO_PRESET_UNITS] = $scope.autoPresetUnits.filter(unit => unit.enabled).map(unit => unit.name);
         const validNumbers = Object.entries(settings.settingsMap).every(([id, map]) => {
             if (map.inputType !== 'number') {
                 return true;
@@ -5692,13 +6363,16 @@ define('two/farmOverflow/ui', [
         });
 
         if (!validNumbers || Number(decoded[SETTINGS.MIN_DISTANCE]) > Number(decoded[SETTINGS.MAX_DISTANCE])
-            || Number(decoded[SETTINGS.MIN_POINTS]) > Number(decoded[SETTINGS.MAX_POINTS])) {
+            || Number(decoded[SETTINGS.MIN_POINTS]) > Number(decoded[SETTINGS.MAX_POINTS])
+            || Number(decoded[SETTINGS.AUTO_PRESET_MIN_UNITS]) > Number(decoded[SETTINGS.AUTO_PRESET_MAX_UNITS])
+            || (decoded[SETTINGS.AUTO_PRESETS] && !decoded[SETTINGS.AUTO_PRESET_UNITS].length)) {
             return utils.notif('error', $filter('i18n')('invalid_farming_settings', $rootScope.loc.ale, 'farm_overflow'));
         }
 
         settings.setAll(decoded);
         $scope.saveButtonColor = 'orange';
         utils.notif('success', $filter('i18n')('settings_saved', $rootScope.loc.ale, 'farm_overflow'));
+        return true;
     };
 
     const resetSettings = function () {
@@ -5874,7 +6548,7 @@ define('two/farmOverflow/ui', [
             $button.classList.add('btn-orange');
         });
 
-        interfaceOverflow.addTemplate('twoverflow_farm_overflow_window', `<div id=\"two-farmoverflow\" class=\"win-content two-window\"><header class=\"win-head\"><h2>FarmOverflow</h2><ul class=\"list-btn\"><li><a href=\"#\" class=\"size-34x34 btn-red icon-26x26-close\" ng-click=\"closeWindow()\"></a></ul></header><div class=\"win-main\" scrollbar=\"\"><div class=\"tabs tabs-bg\"><div class=\"tabs-three-col\"><div class=\"tab\" ng-click=\"selectTab(TAB_TYPES.SETTINGS)\" ng-class=\"{'tab-active': selectedTab == TAB_TYPES.SETTINGS}\"><div class=\"tab-inner\"><div ng-class=\"{'box-border-light': selectedTab === TAB_TYPES.SETTINGS}\"><a href=\"#\" ng-class=\"{'btn-icon btn-orange': selectedTab !== TAB_TYPES.SETTINGS}\">{{ TAB_TYPES.SETTINGS | i18n:loc.ale:'common' }}</a></div></div></div><div class=\"tab\" ng-click=\"selectTab(TAB_TYPES.VILLAGES)\" ng-class=\"{'tab-active': selectedTab == TAB_TYPES.VILLAGES}\"><div class=\"tab-inner\"><div ng-class=\"{'box-border-light': selectedTab === TAB_TYPES.VILLAGES}\"><a href=\"#\" ng-class=\"{'btn-icon btn-orange': selectedTab !== TAB_TYPES.VILLAGES}\">{{ TAB_TYPES.VILLAGES | i18n:loc.ale:'common' }}</a></div></div></div><div class=\"tab\" ng-click=\"selectTab(TAB_TYPES.LOGS)\" ng-class=\"{'tab-active': selectedTab == TAB_TYPES.LOGS}\"><div class=\"tab-inner\"><div ng-class=\"{'box-border-light': selectedTab === TAB_TYPES.LOGS}\"><a href=\"#\" ng-class=\"{'btn-icon btn-orange': selectedTab !== TAB_TYPES.LOGS}\">{{ TAB_TYPES.LOGS | i18n:loc.ale:'common' }}</a></div></div></div></div></div><div class=\"box-paper footer\"><div class=\"scroll-wrap\"><div class=\"settings\" ng-show=\"selectedTab === TAB_TYPES.SETTINGS\"><table class=\"tbl-border-light tbl-content tbl-medium-height\"><col><col width=\"270px\"><tr><th colspan=\"2\">{{ 'farming_controls' | i18n:loc.ale:'farm_overflow' }}<tr><td colspan=\"2\">{{ 'farming_controls_help' | i18n:loc.ale:'farm_overflow' }}<tr ng-repeat=\"settingId in farmingSettings\" ng-switch=\"settingsMap[settingId].inputType\"><td>{{ settingId | i18n:loc.ale:'farm_overflow' }}<td ng-switch-when=\"checkbox\"><div switch-slider=\"\" enabled=\"true\" border=\"true\" value=\"settings[settingId]\" vertical=\"false\" size=\"'56x28'\"></div><td ng-switch-when=\"number\"><input type=\"number\" class=\"fit textfield-border text-center\" ng-model=\"settings[settingId]\" min=\"{{ settingsMap[settingId].min }}\" max=\"{{ settingsMap[settingId].max }}\" step=\"1\"><td ng-switch-when=\"readable_time\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[settingId]\" tooltip=\"\" tooltip-content=\"{{ 'readable_time_format' | i18n:loc.ale:'common' }}\"></table><table class=\"tbl-border-light tbl-content tbl-medium-height\"><col width=\"*\"><col width=\"270px\"><tr><th colspan=\"2\">{{ 'step_cycle_header' | i18n:loc.ale:'farm_overflow' }}<tr><td><span class=\"ff-cell-fix\">{{ 'farmer_behavior' | i18n:loc.ale:'farm_overflow' }}</span><td><div select=\"\" list=\"farmerBehaviorList\" selected=\"selectedFarmerBehavior\" drop-down=\"true\"></div><tr><td><span class=\"ff-cell-fix\">{{ 'target_behavior' | i18n:loc.ale:'farm_overflow' }}</span><td><div select=\"\" list=\"targetBehaviorList\" selected=\"selectedTargetBehavior\" drop-down=\"true\"></div><tr><td><span class=\"ff-cell-fix\">{{ 'multiple_attacks_interval' | i18n:loc.ale:'farm_overflow' }}</span><td><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.MULTIPLE_ATTACKS_INTERVAL]\" tooltip=\"\" tooltip-content=\"{{ 'readable_time_format' | i18n:loc.ale:'common' }}\"></table><table class=\"tbl-border-light tbl-content tbl-medium-height\"><col width=\"*\"><col width=\"270px\"><tr><th colspan=\"2\">{{ 'groups_presets' | i18n:loc.ale:'farm_overflow' }}<tr><td><span class=\"ff-cell-fix\">{{ 'presets' | i18n:loc.ale:'farm_overflow' }}</span><td><div select=\"\" list=\"presets\" selected=\"settings[SETTINGS.PRESETS]\" drop-down=\"true\"></div><tr><td><span class=\"ff-cell-fix\">{{ 'group_ignored' | i18n:loc.ale:'farm_overflow' }}</span><td class=\"snowflake\"><div select=\"\" list=\"groupsWithDisabled\" selected=\"settings[SETTINGS.GROUP_IGNORE]\" drop-down=\"true\"></div><tr><td><span class=\"ff-cell-fix\">{{ 'group_include' | i18n:loc.ale:'farm_overflow' }}</span><td><div select=\"\" list=\"groups\" selected=\"settings[SETTINGS.GROUP_INCLUDE]\" drop-down=\"true\"></div><tr><td><span class=\"ff-cell-fix\">{{ 'group_only' | i18n:loc.ale:'farm_overflow' }}</span><td><div select=\"\" list=\"groups\" selected=\"settings[SETTINGS.GROUP_ONLY]\" drop-down=\"true\"></div></table><table class=\"tbl-border-light tbl-content tbl-medium-height\"><col><col width=\"200px\"><col width=\"60px\"><tr><th colspan=\"3\">{{ 'misc' | i18n:loc.ale:'farm_overflow' }}<tr><td><span class=\"ff-cell-fix\">{{ 'attack_interval' | i18n:loc.ale:'farm_overflow' }}</span><td colspan=\"2\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.ATTACK_INTERVAL]\" tooltip=\"\" tooltip-content=\"{{ 'readable_time_format' | i18n:loc.ale:'common' }}\"><tr><td><span class=\"ff-cell-fix\">{{ 'farmer_cycle_interval' | i18n:loc.ale:'farm_overflow' }}</span><td colspan=\"2\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.FARMER_CYCLE_INTERVAL]\" tooltip=\"\" tooltip-content=\"{{ 'readable_time_format' | i18n:loc.ale:'common' }}\"><tr><td><span class=\"ff-cell-fix\">{{ 'preserve_command_slots' | i18n:loc.ale:'farm_overflow' }}</span><td><div range-slider=\"\" min=\"settingsMap[SETTINGS.PRESERVE_COMMAND_SLOTS].min\" max=\"settingsMap[SETTINGS.PRESERVE_COMMAND_SLOTS].max\" value=\"settings[SETTINGS.PRESERVE_COMMAND_SLOTS]\" enabled=\"true\"></div><td class=\"cell-bottom\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.PRESERVE_COMMAND_SLOTS]\"><tr><td colspan=\"2\"><span class=\"ff-cell-fix\">{{ 'ignore_on_loss' | i18n:loc.ale:'farm_overflow' }}</span><td><div switch-slider=\"\" enabled=\"settings[SETTINGS.GROUP_IGNORE].value\" border=\"true\" value=\"settings[SETTINGS.IGNORE_ON_LOSS]\" vertical=\"false\" size=\"'56x28'\" tooltip=\"\" tooltip-content=\"{{ 'ignore_on_loss_tip' | i18n:loc.ale:'farm_overflow' }}\"></div><tr><td colspan=\"2\"><span class=\"ff-cell-fix\">{{ 'ignore_full_storage' | i18n:loc.ale:'farm_overflow' }}</span><td><div switch-slider=\"\" enabled=\"true\" border=\"true\" value=\"settings[SETTINGS.IGNORE_FULL_STORAGE]\" vertical=\"false\" size=\"'56x28'\"></div><tr><td><span class=\"ff-cell-fix\">{{ 'target_limit_per_village' | i18n:loc.ale:'farm_overflow' }}</span><td><div range-slider=\"\" min=\"settingsMap[SETTINGS.TARGET_LIMIT].min\" max=\"settingsMap[SETTINGS.TARGET_LIMIT].max\" value=\"settings[SETTINGS.TARGET_LIMIT]\" enabled=\"true\"></div><td class=\"cell-bottom\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.TARGET_LIMIT]\"></table><table class=\"tbl-border-light tbl-content tbl-medium-height\"><col><col width=\"200px\"><col width=\"60px\"><tr><th colspan=\"3\">{{ 'target_filters' | i18n:loc.ale:'farm_overflow' }}<tr><td><span class=\"ff-cell-fix\">{{ 'min_distance' | i18n:loc.ale:'farm_overflow' }}</span><td><div range-slider=\"\" min=\"settingsMap[SETTINGS.MIN_DISTANCE].min\" max=\"settingsMap[SETTINGS.MIN_DISTANCE].max\" value=\"settings[SETTINGS.MIN_DISTANCE]\" enabled=\"true\"></div><td class=\"cell-bottom\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.MIN_DISTANCE]\"><tr><td><span class=\"ff-cell-fix\">{{ 'max_distance' | i18n:loc.ale:'farm_overflow' }}</span><td><div range-slider=\"\" min=\"settingsMap[SETTINGS.MAX_DISTANCE].min\" max=\"settingsMap[SETTINGS.MAX_DISTANCE].max\" value=\"settings[SETTINGS.MAX_DISTANCE]\" enabled=\"true\"></div><td class=\"cell-bottom\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.MAX_DISTANCE]\"><tr><td><span class=\"ff-cell-fix\">{{ 'min_points' | i18n:loc.ale:'farm_overflow' }}</span><td><div range-slider=\"\" min=\"settingsMap[SETTINGS.MIN_POINTS].min\" max=\"settingsMap[SETTINGS.MIN_POINTS].max\" value=\"settings[SETTINGS.MIN_POINTS]\" enabled=\"true\"></div><td class=\"cell-bottom\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.MIN_POINTS]\"><tr><td><span class=\"ff-cell-fix\">{{ 'max_points' | i18n:loc.ale:'farm_overflow' }}</span><td><div range-slider=\"\" min=\"settingsMap[SETTINGS.MAX_POINTS].min\" max=\"settingsMap[SETTINGS.MAX_POINTS].max\" value=\"settings[SETTINGS.MAX_POINTS]\" enabled=\"true\"></div><td class=\"cell-bottom\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.MAX_POINTS]\"><tr><td><span class=\"ff-cell-fix\">{{ 'max_travel_time' | i18n:loc.ale:'farm_overflow' }}</span><td colspan=\"2\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.MAX_TRAVEL_TIME]\" tooltip=\"\" tooltip-content=\"{{ 'readable_time_format' | i18n:loc.ale:'common' }}\"></table><table class=\"tbl-border-light tbl-content tbl-medium-height\"><col><col width=\"200px\"><col width=\"60px\"><tr><th colspan=\"3\">{{ 'others' | i18n:loc.ale:'common' }}<tr><td><span class=\"ff-cell-fix\">{{ 'logs_limit' | i18n:loc.ale:'farm_overflow' }}</span><td><div range-slider=\"\" min=\"settingsMap[SETTINGS.LOGS_LIMIT].min\" max=\"settingsMap[SETTINGS.LOGS_LIMIT].max\" value=\"settings[SETTINGS.LOGS_LIMIT]\" enabled=\"true\"></div><td class=\"cell-bottom\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.LOGS_LIMIT]\"></table></div><div class=\"villages rich-text\" ng-show=\"selectedTab === TAB_TYPES.VILLAGES\"><p ng-show=\"showCycleTimer\" class=\"text-center\">{{ 'next_cycle_in' | i18n:loc.ale:'farm_overflow' }}: {{ nextCycleCountdown | readableMillisecondsFilter }}<h5 class=\"twx-section\">{{ 'farmer_villages' | i18n:loc.ale:'farm_overflow' }}</h5><p ng-show=\"!farmers.length\" class=\"text-center\">{{ 'no_farmer_villages' | i18n:loc.ale:'farm_overflow' }}<table class=\"tbl-border-light tbl-striped\" ng-show=\"farmers.length\"><col><col width=\"40%\"><col width=\"20%\"><tr><th>{{ 'villages' | i18n:loc.ale:'common' }}<th>{{ 'last_status' | i18n:loc.ale:'farm_overflow' }}<th>{{ 'target' | i18n:loc.ale:'common':2 }}<tr ng-repeat=\"farmer in farmers\"><td><span ng-class=\"{true:'icon-20x20-queue-indicator-long', false:'icon-20x20-queue-indicator-short'}[farmer.isRunning()]\"></span> <a class=\"link\" ng-click=\"openVillageInfo(farmer.getVillage().getId())\"><span class=\"icon-20x20-village\"></span> {{ farmer.getVillage().getName() }} ({{ farmer.getVillage().getX() }}|{{ farmer.getVillage().getY() }})</a><td>{{ 'status_' + farmer.getStatus() | i18n:loc.ale:'farm_overflow' }}<td ng-if=\"farmer.getTargets()\"><span ng-if=\"farmer.isRunning()\">{{ farmer.getIndex() }} / </span><span>{{ farmer.getTargets().length }}</span><td ng-if=\"!farmer.getTargets()\">{{ 'not_loaded' | i18n:loc.ale:'farm_overflow' }}</table><h5 class=\"twx-section\">{{ 'ignored_targets' | i18n:loc.ale:'farm_overflow' }}</h5><p ng-if=\"!exceptionVillages.ignored.length\" class=\"text-center\">{{ 'no_ignored_targets' | i18n:loc.ale:'farm_overflow' }}<table class=\"ignored-villages tbl-border-light tbl-striped\" ng-show=\"exceptionVillages.ignored.length\"><col><col width=\"15%\"><col width=\"15%\"><col width=\"30px\"><tr><th>{{ 'villages' | i18n:loc.ale:'common' }}<th>{{ 'date' | i18n:loc.ale:'farm_overflow' }}<th>{{ 'reports' | i18n:loc.ale:'farm_overflow' }}<th><tr ng-repeat=\"villageId in exceptionVillages.ignored track by $index\"><td><a class=\"link\" ng-click=\"openVillageInfo(villageId)\"><span class=\"icon-20x20-village\"></span> {{ villagesLabel[villageId] }}</a><td>{{ exceptionLogs[villageId].time | readableDateFilter:loc.ale:GAME_TIMEZONE:GAME_TIME_OFFSET }}<td><span ng-if=\"exceptionLogs[villageId].report\"><a class=\"link\" ng-click=\"showReport(exceptionLogs[villageId].report.id)\" tooltip=\"\" tooltip-content=\"{{ exceptionLogs[villageId].report.title }}\"><span class=\"icon-20x20-report\"></span> {{ 'open_report' | i18n:loc.ale:'farm_overflow' }}</a> <span ng-class=\"{2:'icon-20x20-queue-indicator-medium', 3:'icon-20x20-queue-indicator-short'}[exceptionLogs[villageId].report.result]\"></span> <span ng-class=\"{'full': 'icon-26x26-capacity', 'partial':'icon-26x26-capacity-low', 'none':'hidden'}[exceptionLogs[villageId].report.haul]\"></span> </span><span ng-if=\"!exceptionLogs[villageId].report\">{{ 'no_report' | i18n:loc.ale:'farm_overflow' }}</span><td><a href=\"#\" class=\"size-20x20 btn-red icon-20x20-close\" ng-click=\"removeIgnored(villageId)\" tooltip=\"\" tooltip-content=\"\"></a></table><h5 class=\"twx-section\">{{ 'included_targets' | i18n:loc.ale:'farm_overflow' }}</h5><p ng-if=\"!exceptionVillages.included.length\" class=\"text-center\">{{ 'no_included_targets' | i18n:loc.ale:'farm_overflow' }}<table class=\"tbl-border-light tbl-striped\" ng-show=\"exceptionVillages.included.length\"><col><col width=\"15%\"><col width=\"30px\"><tr><th>{{ 'villages' | i18n:loc.ale:'common' }}<th>{{ 'date' | i18n:loc.ale:'farm_overflow' }}<th><tr ng-repeat=\"villageId in exceptionVillages.included track by $index\"><td><a class=\"link\" ng-click=\"openVillageInfo(villageId)\"><span class=\"icon-20x20-village\"></span> {{ villagesLabel[villageId] }}</a><td>{{ exceptionLogs[villageId].time | readableDateFilter:loc.ale:GAME_TIMEZONE:GAME_TIME_OFFSET }}<td><a href=\"#\" class=\"size-20x20 btn-red icon-20x20-close\" ng-click=\"removeIncluded(villageId)\" tooltip=\"\" tooltip-content=\"\"></a></table></div><div class=\"logs rich-text\" ng-show=\"selectedTab === TAB_TYPES.LOGS\"><div class=\"page-wrap\" pagination=\"pagination\"></div><p class=\"text-center\" ng-show=\"!visibleLogs.length\">{{ 'no_logs' | i18n:loc.ale:'farm_overflow' }}<table class=\"log-list tbl-border-light tbl-striped\" ng-show=\"visibleLogs.length\"><col width=\"100px\"><col width=\"30px\"><col><tr ng-repeat=\"log in visibleLogs track by $index\"><td>{{ log.time | readableDateFilter:loc.ale:GAME_TIMEZONE:GAME_TIME_OFFSET }}<td><span class=\"icon-bg-black\" ng-class=\"{
+        interfaceOverflow.addTemplate('twoverflow_farm_overflow_window', `<div id=\"two-farmoverflow\" class=\"win-content two-window\"><header class=\"win-head\"><h2>FarmOverflow</h2><ul class=\"list-btn\"><li><a href=\"#\" class=\"size-34x34 btn-red icon-26x26-close\" ng-click=\"closeWindow()\"></a></ul></header><div class=\"win-main\" scrollbar=\"\"><div class=\"tabs tabs-bg\"><div class=\"tabs-three-col\"><div class=\"tab\" ng-click=\"selectTab(TAB_TYPES.SETTINGS)\" ng-class=\"{'tab-active': selectedTab == TAB_TYPES.SETTINGS}\"><div class=\"tab-inner\"><div ng-class=\"{'box-border-light': selectedTab === TAB_TYPES.SETTINGS}\"><a href=\"#\" ng-class=\"{'btn-icon btn-orange': selectedTab !== TAB_TYPES.SETTINGS}\">{{ TAB_TYPES.SETTINGS | i18n:loc.ale:'common' }}</a></div></div></div><div class=\"tab\" ng-click=\"selectTab(TAB_TYPES.VILLAGES)\" ng-class=\"{'tab-active': selectedTab == TAB_TYPES.VILLAGES}\"><div class=\"tab-inner\"><div ng-class=\"{'box-border-light': selectedTab === TAB_TYPES.VILLAGES}\"><a href=\"#\" ng-class=\"{'btn-icon btn-orange': selectedTab !== TAB_TYPES.VILLAGES}\">{{ TAB_TYPES.VILLAGES | i18n:loc.ale:'common' }}</a></div></div></div><div class=\"tab\" ng-click=\"selectTab(TAB_TYPES.LOGS)\" ng-class=\"{'tab-active': selectedTab == TAB_TYPES.LOGS}\"><div class=\"tab-inner\"><div ng-class=\"{'box-border-light': selectedTab === TAB_TYPES.LOGS}\"><a href=\"#\" ng-class=\"{'btn-icon btn-orange': selectedTab !== TAB_TYPES.LOGS}\">{{ TAB_TYPES.LOGS | i18n:loc.ale:'common' }}</a></div></div></div></div></div><div class=\"box-paper footer\"><div class=\"scroll-wrap\"><div class=\"settings\" ng-show=\"selectedTab === TAB_TYPES.SETTINGS\"><table class=\"tbl-border-light tbl-content tbl-medium-height\"><col><col width=\"270px\"><tr><th colspan=\"2\">Automatic farming presets<tr><td colspan=\"2\">Farmer creates local troop packets for nearby barbarians each cycle, using troops in town after reserves. Carrying capacity estimates loot space; it does not estimate defenders. Manual presets remain available.<tr ng-repeat=\"settingId in autoPresetSettings\" ng-switch=\"settingsMap[settingId].inputType\"><td>{{ settingId | i18n:loc.ale:'farm_overflow' }}<td ng-switch-when=\"checkbox\"><div switch-slider=\"\" enabled=\"true\" border=\"true\" value=\"settings[settingId]\" vertical=\"false\" size=\"'56x28'\"></div><td ng-switch-when=\"number\"><input type=\"number\" class=\"fit textfield-border text-center\" ng-model=\"settings[settingId]\" min=\"{{ settingsMap[settingId].min }}\" max=\"{{ settingsMap[settingId].max }}\" step=\"1\"><tr><td>Allowed unit types<td><label ng-repeat=\"unit in autoPresetUnits\"><input type=\"checkbox\" ng-model=\"unit.enabled\"> {{ unit.name }}</label><tr><td colspan=\"2\"><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"previewAutoPresets()\">Save and preview packets</a><tr ng-repeat=\"plan in autoPresetPlans\"><td>Village {{ plan.villageId }} — {{ plan.nearbyTargets }} barbarians<td>{{ plan.name }} — capacity {{ plan.capacity }}</table><table class=\"tbl-border-light tbl-content tbl-medium-height\"><col><col width=\"270px\"><tr><th colspan=\"2\">{{ 'farming_controls' | i18n:loc.ale:'farm_overflow' }}<tr><td colspan=\"2\">{{ 'farming_controls_help' | i18n:loc.ale:'farm_overflow' }}<tr ng-repeat=\"settingId in farmingSettings\" ng-switch=\"settingsMap[settingId].inputType\"><td>{{ settingId | i18n:loc.ale:'farm_overflow' }}<td ng-switch-when=\"checkbox\"><div switch-slider=\"\" enabled=\"true\" border=\"true\" value=\"settings[settingId]\" vertical=\"false\" size=\"'56x28'\"></div><td ng-switch-when=\"number\"><input type=\"number\" class=\"fit textfield-border text-center\" ng-model=\"settings[settingId]\" min=\"{{ settingsMap[settingId].min }}\" max=\"{{ settingsMap[settingId].max }}\" step=\"1\"><td ng-switch-when=\"readable_time\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[settingId]\" tooltip=\"\" tooltip-content=\"{{ 'readable_time_format' | i18n:loc.ale:'common' }}\"></table><table class=\"tbl-border-light tbl-content tbl-medium-height\"><col width=\"*\"><col width=\"270px\"><tr><th colspan=\"2\">{{ 'step_cycle_header' | i18n:loc.ale:'farm_overflow' }}<tr><td><span class=\"ff-cell-fix\">{{ 'farmer_behavior' | i18n:loc.ale:'farm_overflow' }}</span><td><div select=\"\" list=\"farmerBehaviorList\" selected=\"selectedFarmerBehavior\" drop-down=\"true\"></div><tr><td><span class=\"ff-cell-fix\">{{ 'target_behavior' | i18n:loc.ale:'farm_overflow' }}</span><td><div select=\"\" list=\"targetBehaviorList\" selected=\"selectedTargetBehavior\" drop-down=\"true\"></div><tr><td><span class=\"ff-cell-fix\">{{ 'multiple_attacks_interval' | i18n:loc.ale:'farm_overflow' }}</span><td><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.MULTIPLE_ATTACKS_INTERVAL]\" tooltip=\"\" tooltip-content=\"{{ 'readable_time_format' | i18n:loc.ale:'common' }}\"></table><table class=\"tbl-border-light tbl-content tbl-medium-height\"><col width=\"*\"><col width=\"270px\"><tr><th colspan=\"2\">{{ 'groups_presets' | i18n:loc.ale:'farm_overflow' }}<tr><td><span class=\"ff-cell-fix\">{{ 'presets' | i18n:loc.ale:'farm_overflow' }}</span><td><div select=\"\" list=\"presets\" selected=\"settings[SETTINGS.PRESETS]\" drop-down=\"true\"></div><tr><td><span class=\"ff-cell-fix\">{{ 'group_ignored' | i18n:loc.ale:'farm_overflow' }}</span><td class=\"snowflake\"><div select=\"\" list=\"groupsWithDisabled\" selected=\"settings[SETTINGS.GROUP_IGNORE]\" drop-down=\"true\"></div><tr><td><span class=\"ff-cell-fix\">{{ 'group_include' | i18n:loc.ale:'farm_overflow' }}</span><td><div select=\"\" list=\"groups\" selected=\"settings[SETTINGS.GROUP_INCLUDE]\" drop-down=\"true\"></div><tr><td><span class=\"ff-cell-fix\">{{ 'group_only' | i18n:loc.ale:'farm_overflow' }}</span><td><div select=\"\" list=\"groups\" selected=\"settings[SETTINGS.GROUP_ONLY]\" drop-down=\"true\"></div></table><table class=\"tbl-border-light tbl-content tbl-medium-height\"><col><col width=\"200px\"><col width=\"60px\"><tr><th colspan=\"3\">{{ 'misc' | i18n:loc.ale:'farm_overflow' }}<tr><td><span class=\"ff-cell-fix\">{{ 'attack_interval' | i18n:loc.ale:'farm_overflow' }}</span><td colspan=\"2\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.ATTACK_INTERVAL]\" tooltip=\"\" tooltip-content=\"{{ 'readable_time_format' | i18n:loc.ale:'common' }}\"><tr><td><span class=\"ff-cell-fix\">{{ 'farmer_cycle_interval' | i18n:loc.ale:'farm_overflow' }}</span><td colspan=\"2\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.FARMER_CYCLE_INTERVAL]\" tooltip=\"\" tooltip-content=\"{{ 'readable_time_format' | i18n:loc.ale:'common' }}\"><tr><td><span class=\"ff-cell-fix\">{{ 'preserve_command_slots' | i18n:loc.ale:'farm_overflow' }}</span><td><div range-slider=\"\" min=\"settingsMap[SETTINGS.PRESERVE_COMMAND_SLOTS].min\" max=\"settingsMap[SETTINGS.PRESERVE_COMMAND_SLOTS].max\" value=\"settings[SETTINGS.PRESERVE_COMMAND_SLOTS]\" enabled=\"true\"></div><td class=\"cell-bottom\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.PRESERVE_COMMAND_SLOTS]\"><tr><td colspan=\"2\"><span class=\"ff-cell-fix\">{{ 'ignore_on_loss' | i18n:loc.ale:'farm_overflow' }}</span><td><div switch-slider=\"\" enabled=\"settings[SETTINGS.GROUP_IGNORE].value\" border=\"true\" value=\"settings[SETTINGS.IGNORE_ON_LOSS]\" vertical=\"false\" size=\"'56x28'\" tooltip=\"\" tooltip-content=\"{{ 'ignore_on_loss_tip' | i18n:loc.ale:'farm_overflow' }}\"></div><tr><td colspan=\"2\"><span class=\"ff-cell-fix\">{{ 'ignore_full_storage' | i18n:loc.ale:'farm_overflow' }}</span><td><div switch-slider=\"\" enabled=\"true\" border=\"true\" value=\"settings[SETTINGS.IGNORE_FULL_STORAGE]\" vertical=\"false\" size=\"'56x28'\"></div><tr><td><span class=\"ff-cell-fix\">{{ 'target_limit_per_village' | i18n:loc.ale:'farm_overflow' }}</span><td><div range-slider=\"\" min=\"settingsMap[SETTINGS.TARGET_LIMIT].min\" max=\"settingsMap[SETTINGS.TARGET_LIMIT].max\" value=\"settings[SETTINGS.TARGET_LIMIT]\" enabled=\"true\"></div><td class=\"cell-bottom\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.TARGET_LIMIT]\"></table><table class=\"tbl-border-light tbl-content tbl-medium-height\"><col><col width=\"200px\"><col width=\"60px\"><tr><th colspan=\"3\">{{ 'target_filters' | i18n:loc.ale:'farm_overflow' }}<tr><td><span class=\"ff-cell-fix\">{{ 'min_distance' | i18n:loc.ale:'farm_overflow' }}</span><td><div range-slider=\"\" min=\"settingsMap[SETTINGS.MIN_DISTANCE].min\" max=\"settingsMap[SETTINGS.MIN_DISTANCE].max\" value=\"settings[SETTINGS.MIN_DISTANCE]\" enabled=\"true\"></div><td class=\"cell-bottom\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.MIN_DISTANCE]\"><tr><td><span class=\"ff-cell-fix\">{{ 'max_distance' | i18n:loc.ale:'farm_overflow' }}</span><td><div range-slider=\"\" min=\"settingsMap[SETTINGS.MAX_DISTANCE].min\" max=\"settingsMap[SETTINGS.MAX_DISTANCE].max\" value=\"settings[SETTINGS.MAX_DISTANCE]\" enabled=\"true\"></div><td class=\"cell-bottom\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.MAX_DISTANCE]\"><tr><td><span class=\"ff-cell-fix\">{{ 'min_points' | i18n:loc.ale:'farm_overflow' }}</span><td><div range-slider=\"\" min=\"settingsMap[SETTINGS.MIN_POINTS].min\" max=\"settingsMap[SETTINGS.MIN_POINTS].max\" value=\"settings[SETTINGS.MIN_POINTS]\" enabled=\"true\"></div><td class=\"cell-bottom\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.MIN_POINTS]\"><tr><td><span class=\"ff-cell-fix\">{{ 'max_points' | i18n:loc.ale:'farm_overflow' }}</span><td><div range-slider=\"\" min=\"settingsMap[SETTINGS.MAX_POINTS].min\" max=\"settingsMap[SETTINGS.MAX_POINTS].max\" value=\"settings[SETTINGS.MAX_POINTS]\" enabled=\"true\"></div><td class=\"cell-bottom\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.MAX_POINTS]\"><tr><td><span class=\"ff-cell-fix\">{{ 'max_travel_time' | i18n:loc.ale:'farm_overflow' }}</span><td colspan=\"2\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.MAX_TRAVEL_TIME]\" tooltip=\"\" tooltip-content=\"{{ 'readable_time_format' | i18n:loc.ale:'common' }}\"></table><table class=\"tbl-border-light tbl-content tbl-medium-height\"><col><col width=\"200px\"><col width=\"60px\"><tr><th colspan=\"3\">{{ 'others' | i18n:loc.ale:'common' }}<tr><td><span class=\"ff-cell-fix\">{{ 'logs_limit' | i18n:loc.ale:'farm_overflow' }}</span><td><div range-slider=\"\" min=\"settingsMap[SETTINGS.LOGS_LIMIT].min\" max=\"settingsMap[SETTINGS.LOGS_LIMIT].max\" value=\"settings[SETTINGS.LOGS_LIMIT]\" enabled=\"true\"></div><td class=\"cell-bottom\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.LOGS_LIMIT]\"></table></div><div class=\"villages rich-text\" ng-show=\"selectedTab === TAB_TYPES.VILLAGES\"><p ng-show=\"showCycleTimer\" class=\"text-center\">{{ 'next_cycle_in' | i18n:loc.ale:'farm_overflow' }}: {{ nextCycleCountdown | readableMillisecondsFilter }}<h5 class=\"twx-section\">{{ 'farmer_villages' | i18n:loc.ale:'farm_overflow' }}</h5><p ng-show=\"!farmers.length\" class=\"text-center\">{{ 'no_farmer_villages' | i18n:loc.ale:'farm_overflow' }}<table class=\"tbl-border-light tbl-striped\" ng-show=\"farmers.length\"><col><col width=\"40%\"><col width=\"20%\"><tr><th>{{ 'villages' | i18n:loc.ale:'common' }}<th>{{ 'last_status' | i18n:loc.ale:'farm_overflow' }}<th>{{ 'target' | i18n:loc.ale:'common':2 }}<tr ng-repeat=\"farmer in farmers\"><td><span ng-class=\"{true:'icon-20x20-queue-indicator-long', false:'icon-20x20-queue-indicator-short'}[farmer.isRunning()]\"></span> <a class=\"link\" ng-click=\"openVillageInfo(farmer.getVillage().getId())\"><span class=\"icon-20x20-village\"></span> {{ farmer.getVillage().getName() }} ({{ farmer.getVillage().getX() }}|{{ farmer.getVillage().getY() }})</a><td>{{ 'status_' + farmer.getStatus() | i18n:loc.ale:'farm_overflow' }}<td ng-if=\"farmer.getTargets()\"><span ng-if=\"farmer.isRunning()\">{{ farmer.getIndex() }} / </span><span>{{ farmer.getTargets().length }}</span><td ng-if=\"!farmer.getTargets()\">{{ 'not_loaded' | i18n:loc.ale:'farm_overflow' }}</table><h5 class=\"twx-section\">{{ 'ignored_targets' | i18n:loc.ale:'farm_overflow' }}</h5><p ng-if=\"!exceptionVillages.ignored.length\" class=\"text-center\">{{ 'no_ignored_targets' | i18n:loc.ale:'farm_overflow' }}<table class=\"ignored-villages tbl-border-light tbl-striped\" ng-show=\"exceptionVillages.ignored.length\"><col><col width=\"15%\"><col width=\"15%\"><col width=\"30px\"><tr><th>{{ 'villages' | i18n:loc.ale:'common' }}<th>{{ 'date' | i18n:loc.ale:'farm_overflow' }}<th>{{ 'reports' | i18n:loc.ale:'farm_overflow' }}<th><tr ng-repeat=\"villageId in exceptionVillages.ignored track by $index\"><td><a class=\"link\" ng-click=\"openVillageInfo(villageId)\"><span class=\"icon-20x20-village\"></span> {{ villagesLabel[villageId] }}</a><td>{{ exceptionLogs[villageId].time | readableDateFilter:loc.ale:GAME_TIMEZONE:GAME_TIME_OFFSET }}<td><span ng-if=\"exceptionLogs[villageId].report\"><a class=\"link\" ng-click=\"showReport(exceptionLogs[villageId].report.id)\" tooltip=\"\" tooltip-content=\"{{ exceptionLogs[villageId].report.title }}\"><span class=\"icon-20x20-report\"></span> {{ 'open_report' | i18n:loc.ale:'farm_overflow' }}</a> <span ng-class=\"{2:'icon-20x20-queue-indicator-medium', 3:'icon-20x20-queue-indicator-short'}[exceptionLogs[villageId].report.result]\"></span> <span ng-class=\"{'full': 'icon-26x26-capacity', 'partial':'icon-26x26-capacity-low', 'none':'hidden'}[exceptionLogs[villageId].report.haul]\"></span> </span><span ng-if=\"!exceptionLogs[villageId].report\">{{ 'no_report' | i18n:loc.ale:'farm_overflow' }}</span><td><a href=\"#\" class=\"size-20x20 btn-red icon-20x20-close\" ng-click=\"removeIgnored(villageId)\" tooltip=\"\" tooltip-content=\"\"></a></table><h5 class=\"twx-section\">{{ 'included_targets' | i18n:loc.ale:'farm_overflow' }}</h5><p ng-if=\"!exceptionVillages.included.length\" class=\"text-center\">{{ 'no_included_targets' | i18n:loc.ale:'farm_overflow' }}<table class=\"tbl-border-light tbl-striped\" ng-show=\"exceptionVillages.included.length\"><col><col width=\"15%\"><col width=\"30px\"><tr><th>{{ 'villages' | i18n:loc.ale:'common' }}<th>{{ 'date' | i18n:loc.ale:'farm_overflow' }}<th><tr ng-repeat=\"villageId in exceptionVillages.included track by $index\"><td><a class=\"link\" ng-click=\"openVillageInfo(villageId)\"><span class=\"icon-20x20-village\"></span> {{ villagesLabel[villageId] }}</a><td>{{ exceptionLogs[villageId].time | readableDateFilter:loc.ale:GAME_TIMEZONE:GAME_TIME_OFFSET }}<td><a href=\"#\" class=\"size-20x20 btn-red icon-20x20-close\" ng-click=\"removeIncluded(villageId)\" tooltip=\"\" tooltip-content=\"\"></a></table></div><div class=\"logs rich-text\" ng-show=\"selectedTab === TAB_TYPES.LOGS\"><div class=\"page-wrap\" pagination=\"pagination\"></div><p class=\"text-center\" ng-show=\"!visibleLogs.length\">{{ 'no_logs' | i18n:loc.ale:'farm_overflow' }}<table class=\"log-list tbl-border-light tbl-striped\" ng-show=\"visibleLogs.length\"><col width=\"100px\"><col width=\"30px\"><col><tr ng-repeat=\"log in visibleLogs track by $index\"><td>{{ log.time | readableDateFilter:loc.ale:GAME_TIMEZONE:GAME_TIME_OFFSET }}<td><span class=\"icon-bg-black\" ng-class=\"{
                                 'icon-26x26-dot-green': log.type === LOG_TYPES.FARM_START,
                                 'icon-26x26-dot-red': log.type === LOG_TYPES.FARM_STOP,
                                 'icon-26x26-check-negative': log.type === LOG_TYPES.IGNORED_VILLAGE || log.type === LOG_TYPES.INCLUDED_VILLAGE_REMOVED,
@@ -5941,6 +6615,21 @@ define('two/farmOverflow/ui', [
         };
 
         settings.injectScope($scope, {textObject: 'farm_overflow'});
+        $scope.autoPresetUnits = Object.entries(modelDataService.getGameData().getUnitsObject())
+            .filter(([name, data]) => data.load > 0 && !['knight', 'snob', 'ram', 'catapult', 'trebuchet'].includes(name))
+            .map(([name]) => ({name, enabled: settings.get(SETTINGS.AUTO_PRESET_UNITS).includes(name)}));
+        $scope.autoPresetSettings = [SETTINGS.AUTO_PRESETS,
+            SETTINGS.AUTO_PRESET_MIN_UNITS,
+            SETTINGS.AUTO_PRESET_MAX_UNITS,
+            SETTINGS.AUTO_PRESET_CARRY];
+        $scope.previewAutoPresets = function () {
+            if (saveSettings() !== true) {
+                return;
+            }
+            farmOverflow.previewAutoPresets().then(plans => $scope.$evalAsync(() => {
+                $scope.autoPresetPlans = plans;
+            }));
+        };
         eventHandlers.updatePresets();
         eventHandlers.updateGroups();
         updateVisibleLogs();
@@ -5993,6 +6682,7 @@ define('two/farmOverflow/ui', [
         };
 
         $scope.$watch('settings', unsavedSettingsState(), true);
+        $scope.$watch('autoPresetUnits', unsavedSettingsState(), true);
 
         $scope.$watch('selectedFarmerBehavior', function (data) {
             $scope.settings[SETTINGS.FARMER_BEHAVIOR] = data;
@@ -6021,7 +6711,140 @@ define('two/farmOverflow/policy', [], function () {
         return Math.min(MAX_TIMER, Math.round(safeBase + safeJitter * random()));
     };
 
-    // Without a supplied loot estimate this is capacity per round-trip second.
+    // Estimate barbarian village power based on available data
+    const estimateBarbarianPower = function (target, estimateMethod) {
+        if (!target) return 0;
+
+        // Use village points as the primary power indicator
+        if (!Number.isFinite(target.points) || target.points <= 0) {
+            return 100; // Default power for unknown villages
+        }
+
+        if (estimateMethod === 'buildings') {
+            // Building levels correlate with village strength
+            const basePower = target.points * 10;
+            return Math.round(basePower);
+        }
+
+        // Default: use village points directly
+        return Math.round(target.points * 50);
+    };
+
+    // Calculate distance penalty - longer travel time = lower priority
+    const calculateDistancePenalty = function (distance, baseTravelSeconds) {
+        // Penalize based on round-trip travel time
+        const roundTrip = baseTravelSeconds * 2;
+        // 10% penalty per 100 seconds of travel
+        const penaltyFactor = 1 - (Math.min(roundTrip, 3600) / 3600) * 0.3;
+        return Math.max(0.1, penaltyFactor);
+    };
+
+    // Score a target considering power, distance, and loot
+    const scoreTarget = function (target, options) {
+        if (!target || !Number.isFinite(target.distance)) {
+            return 0;
+        }
+
+        const powerWeight = Number(options.powerWeight) || 20;
+        const powerEstimate = options.powerEstimate || 'points';
+        const distancePenalty = calculateDistancePenalty(target.distance, options.baseTravelSeconds || 60);
+
+        // Base score: loot per round-trip second
+        const baseScore = (options.capacity || 1000) / (2 * (options.baseTravelSeconds || 60));
+
+        // Apply power factor - higher power targets are worth more but riskier
+        const powerEstimateValue = estimateBarbarianPower(target, powerEstimate);
+        const powerFactor = 1 + (powerWeight / 100) * Math.log10(powerEstimateValue + 1);
+
+        // Final score with distance penalty
+        return baseScore * powerFactor * distancePenalty;
+    };
+
+    // Select preset based on target power and overkill percentage
+    const choosePresetForTarget = function (presets, units, unitData, travelSeconds, target, options) {
+        if (!Number.isFinite(options.maxTravelMs) || options.maxTravelMs <= 0
+            || !Number.isFinite(options.reservePercent) || options.reservePercent < 0 || options.reservePercent > 100) {
+            return {reason: 'no_units'};
+        }
+
+        let best = null;
+        let affordable = false;
+
+        // Estimate target power for preset selection
+        const targetPower = estimateBarbarianPower(target, options.powerEstimate || 'points');
+        const overkillPercent = Number(options.overkillPercent) || 20;
+        const powerBuffer = 1 + (overkillPercent / 100);
+
+        for (const preset of presets) {
+            let haul = 0;
+            let valid = !!preset.units && Object.keys(preset.units).length > 0;
+
+            // Calculate required power to handle target with buffer
+            let requiredPower = Math.round(targetPower * powerBuffer);
+
+            for (const [name, amount] of Object.entries(preset.units || {})) {
+                if (!Number.isInteger(amount) || amount < 0) {
+                    valid = false;
+                    break;
+                }
+
+                if (!amount) {
+                    continue;
+                }
+
+                const stock = units[name] && units[name].in_town;
+                const load = unitData[name] && unitData[name].load;
+                const available = Math.floor(stock * (1 - options.reservePercent / 100));
+
+                if (!Number.isFinite(stock) || !Number.isFinite(load) || available < amount) {
+                    valid = false;
+                    break;
+                }
+
+                haul += amount * load;
+
+                // Estimate unit power (simplified: assume 1 power per 5 load)
+                const unitPower = (load / 5) * amount;
+                requiredPower -= unitPower;
+            }
+
+            if (!valid || haul <= 0) {
+                continue;
+            }
+
+            affordable = true;
+            const seconds = travelSeconds(preset);
+
+            if (!Number.isFinite(seconds) || seconds <= 0 || seconds * 1000 > options.maxTravelMs) {
+                continue;
+            }
+
+            // Score considers power efficiency
+            const expectedHaul = Number.isFinite(options.expectedLoot) && options.expectedLoot > 0
+                ? Math.min(haul, options.expectedLoot) : haul;
+
+            // Power-adjusted score: favor presets that match target power
+            const powerEfficiency = requiredPower <= 0 ? 1.2 : (1 - Math.min(1, -requiredPower / targetPower) * 0.3);
+
+            const candidate = {
+                preset,
+                haul,
+                expectedHaul,
+                travelSeconds: seconds,
+                powerEstimate: targetPower,
+                requiredPower: Math.round(targetPower * powerBuffer),
+                score: (expectedHaul / (2 * seconds)) * powerEfficiency
+            };
+
+            if (!best || (options.optimize ? candidate.score > best.score : seconds < best.travelSeconds)) {
+                best = candidate;
+            }
+        }
+
+        return best || {reason: affordable ? 'time_limit' : 'no_units'};
+    };
+
+    // Original choosePreset - kept for backwards compatibility
     const choosePreset = function (presets, units, unitData, travelSeconds, options) {
         if (!Number.isFinite(options.maxTravelMs) || options.maxTravelMs <= 0
             || !Number.isFinite(options.reservePercent) || options.reservePercent < 0 || options.reservePercent > 100) {
@@ -6120,18 +6943,31 @@ define('two/farmOverflow/policy', [], function () {
         });
     };
 
-    return {isBarbarian, boundedDelay, choosePreset, orderTargets, arrivalIsBusy};
+    return {
+        isBarbarian,
+        boundedDelay,
+        choosePreset,
+        choosePresetForTarget,
+        scoreTarget,
+        estimateBarbarianPower,
+        orderTargets,
+        arrivalIsBusy
+    };
 });
-
 define('two/farmOverflow/settings', [], function () {
     return {
         PRESETS: 'presets',
+        AUTO_PRESETS: 'auto_presets',
+        AUTO_PRESET_MIN_UNITS: 'auto_preset_min_units',
+        AUTO_PRESET_MAX_UNITS: 'auto_preset_max_units',
+        AUTO_PRESET_CARRY: 'auto_preset_carry',
+        AUTO_PRESET_UNITS: 'auto_preset_units',
         GROUP_IGNORE: 'group_ignore',
         GROUP_INCLUDE: 'group_include',
         GROUP_ONLY: 'group_only',
         MAX_DISTANCE: 'max_distance',
         MIN_DISTANCE: 'min_distance',
-        IGNORE_FULL_STORAGE: 'ignore_full_storage',        
+        IGNORE_FULL_STORAGE: 'ignore_full_storage',
         ATTACK_INTERVAL: 'attack_interval',
         MAX_TRAVEL_TIME: 'max_travel_time',
         MULTIPLE_ATTACKS_INTERVAL: 'multiple_attacks_interval',
@@ -6154,7 +6990,13 @@ define('two/farmOverflow/settings', [], function () {
         EMPTY_HAUL_COOLDOWN: 'empty_haul_cooldown',
         LOSS_COOLDOWN: 'loss_cooldown',
         MAX_ATTACKS_PER_CYCLE: 'max_attacks_per_cycle',
-        PREVIEW_ONLY: 'preview_only'
+        PREVIEW_ONLY: 'preview_only',
+        AUTO_FREE_SPEEDUP: 'auto_free_speedup',
+
+        // Intelligent farming settings
+        BARBARIAN_POWER_WEIGHT: 'barbarian_power_weight',
+        BARBARIAN_POWER_ESTIMATE: 'barbarian_power_estimate',
+        ATTACK_OVERKILL_PERCENT: 'attack_overkill_percent'
     };
 });
 
@@ -6183,6 +7025,11 @@ define('two/farmOverflow/settings/map', [
     TARGET_BEHAVIOR
 ) {
     return {
+        [SETTINGS.AUTO_PRESETS]: {default: false, updates: [], inputType: 'checkbox'},
+        [SETTINGS.AUTO_PRESET_MIN_UNITS]: {default: 5, updates: [], inputType: 'number', min: 1, max: 10000},
+        [SETTINGS.AUTO_PRESET_MAX_UNITS]: {default: 100, updates: [], inputType: 'number', min: 1, max: 10000},
+        [SETTINGS.AUTO_PRESET_CARRY]: {default: 1000, updates: [], inputType: 'number', min: 1, max: 1000000},
+        [SETTINGS.AUTO_PRESET_UNITS]: {default: ['spear', 'axe', 'light_cavalry'], updates: [], inputType: 'unit_list'},
         [SETTINGS.BARBARIANS_ONLY]: {
             default: true,
             updates: [UPDATES.TARGETS],
@@ -6242,6 +7089,11 @@ define('two/farmOverflow/settings/map', [
             max: 1000
         },
         [SETTINGS.PREVIEW_ONLY]: {
+            default: true,
+            updates: [],
+            inputType: 'checkbox'
+        },
+        [SETTINGS.AUTO_FREE_SPEEDUP]: {
             default: true,
             updates: [],
             inputType: 'checkbox'
@@ -6394,6 +7246,30 @@ define('two/farmOverflow/settings/map', [
             updates: [],
             inputType: 'select',
             disabledOption: false
+        },
+        [SETTINGS.BARBARIAN_POWER_WEIGHT]: {
+            default: 20,
+            updates: [UPDATES.TARGETS],
+            inputType: 'number',
+            min: 0,
+            max: 100
+        },
+        [SETTINGS.BARBARIAN_POWER_ESTIMATE]: {
+            default: 'points',
+            updates: [UPDATES.TARGETS],
+            inputType: 'select',
+            disabledOption: false,
+            options: [
+                {name: 'Village Points', value: 'points'},
+                {name: 'Building Levels', value: 'buildings'}
+            ]
+        },
+        [SETTINGS.ATTACK_OVERKILL_PERCENT]: {
+            default: 20,
+            updates: [],
+            inputType: 'number',
+            min: 0,
+            max: 200
         }
     };
 });
@@ -6480,6 +7356,460 @@ require([
         farmOverflow.init();
         farmOverflowInterface();
     }, ['map', 'presets']);
+});
+
+define('two/recruiter', [
+    'two/Settings',
+    'two/recruiter/settings/map',
+    'two/recruiter/policy',
+    'two/resourceBudget',
+    'two/ready',
+    'queues/EventQueue',
+    'Lockr'
+], function (Settings, settingsMap, policy, resourceBudget, ready, eventQueue, Lockr) {
+    let initialized = false;
+    let running = false;
+    let settings;
+    let config;
+    let timer;
+    let version = 0;
+    let pending;
+    let pendingKey;
+    let plans = [];
+    const resources = ['wood', 'clay', 'iron', 'food'];
+    const timers = new Map();
+    const publish = () => eventQueue.trigger('two_recruiter_updated');
+    const unitData = () => modelDataService.getGameData().getUnitsObject();
+    const buildingData = () => modelDataService.getGameData().getBuildings();
+    const valid = () => policy.validSettings(config, settingsMap, unitData(), buildingData());
+
+    const villages = function () {
+        const player = modelDataService.getSelectedCharacter();
+        const groups = modelDataService.getGroupList();
+        const ids = config.enabled_groups.length
+            ? [...new Set(config.enabled_groups.flatMap(id => groups.getGroupVillageIds(id)))]
+            : Object.keys(player.getVillages());
+        return ids.map(id => player.getVillage(id)).filter(Boolean);
+    };
+
+    const snapshot = function (village) {
+        buildingService.compute(village);
+        const computed = village.getResources().getComputed();
+        const stock = Object.fromEntries(resources.map(type => [type, computed[type] && computed[type].currentStock]));
+        const data = village.getBuildingData();
+        const barracks = data.getDataForBuilding('barracks');
+        const queue = village.getRecruitingQueue('barracks');
+        const jobs = queue && (typeof queue.getQueue === 'function' ? queue.getQueue() : queue.jobs);
+        const buildingCosts = {wood: 0, clay: 0, iron: 0, food: 0};
+        const buildingQueue = village.buildingQueue;
+        if (config.protect_buildings.length && (!buildingQueue || typeof buildingQueue.getQueue !== 'function')) {
+            throw new Error('Building queue unavailable');
+        }
+        const buildingJobs = buildingQueue ? buildingQueue.getQueue() : [];
+        for (const name of new Set(config.protect_buildings)) {
+            // A queued upgrade is already paid; protect its following level once it completes.
+            if (buildingJobs.some(job => job.building === name)) {
+                continue;
+            }
+            const building = data.getDataForBuilding(name);
+            if (building && building.level >= Number(buildingData()[name].max_level)) {
+                continue;
+            }
+            const cost = building && building.nextLevelCosts;
+            for (const type of resources) {
+                if (!cost || !Number.isFinite(Number(cost[type])) || Number(cost[type]) < 0) {
+                    throw new Error('Next building costs unavailable');
+                }
+                buildingCosts[type] += Number(cost[type]);
+            }
+        }
+        return {stock, buildingCosts, barracksLevel: barracks && barracks.level,
+            jobs: Array.isArray(jobs) ? jobs.map(job => job.data || job) : null,
+            units: village.getUnitInfo().getUnits()};
+    };
+
+    const reconcile = function (village, state) {
+        const entry = pending[village.getId()];
+        if (!entry) {
+            return !resourceBudget.isBusy(village);
+        }
+        // Wait for both the server job and resource debit before permitting another order.
+        const observed = entry.jobId && state.jobs && state.jobs.some(job => String(job.job_id || job.id) === String(entry.jobId));
+        if (observed && resources.every(type => !entry.cost[type]
+            || state.stock[type] <= entry.before[type] - entry.cost[type])) {
+            delete pending[village.getId()];
+            Lockr.set(pendingKey, pending);
+            clearTimeout(timers.get(village.getId()));
+            timers.delete(village.getId());
+            return !resourceBudget.isBusy(village);
+        }
+        return false;
+    };
+
+    const cycle = function () {
+        if (!running) {
+            return;
+        }
+        plans = [];
+        if (!valid()) {
+            recruiter.stop('Invalid recruitment settings');
+            return;
+        }
+        for (const village of villages()) {
+            if (!running) {
+                break;
+            }
+            try {
+                const state = snapshot(village);
+                const plan = policy.plan(state, config, unitData());
+                plan.villageId = village.getId();
+                plans.push(plan);
+                if (!config.preview_only && !reconcile(village, state)) {
+                    plan.reason = 'Waiting for an earlier spend to appear in game data';
+                    if (pending[village.getId()] && Date.now() - pending[village.getId()].sentAt >= 30000) {
+                        recruiter.stop('Pending recruitment needs a queue/resource check');
+                        break;
+                    }
+                    continue;
+                }
+                if (running && !config.preview_only && plan.orders.length) {
+                    // One batch per village/cycle; next cycle replans against fresh game data.
+                    send(village, state, plan.orders[0]);
+                }
+            } catch (error) {
+                plans.push({villageId: village.getId(), reason: error.message, orders: []});
+            }
+        }
+        publish();
+    };
+
+    const send = function (village, state, order) {
+        if (!routeProvider.BARRACKS_RECRUIT) {
+            recruiter.stop('Recruitment route unavailable');
+            return;
+        }
+        const reservation = resourceBudget.begin(village, order.cost);
+        if (!reservation) {
+            return;
+        }
+        const entry = {before: state.stock, cost: order.cost, sentAt: Date.now(), unit: order.unit_type, amount: order.amount};
+        pending[village.getId()] = entry;
+        Lockr.set(pendingKey, pending);
+        timers.set(village.getId(), setTimeout(() => {
+            try {
+                if (!reconcile(village, snapshot(village))) {
+                    recruiter.stop('Recruitment acknowledgement or resource update missing; inspect the game queue');
+                }
+            } catch (error) {
+                recruiter.stop(error.message);
+            }
+        }, 30000));
+        // Keep uncertain reservations on stop/restart and reload. Never automatically retry.
+        socketService.emit(routeProvider.BARRACKS_RECRUIT, {
+            village_id: village.getId(), unit_type: order.unit_type, amount: order.amount
+        }, data => {
+            if (pending[village.getId()] !== entry) {
+                return;
+            }
+            if (data && data.error) {
+                delete pending[village.getId()];
+                Lockr.set(pendingKey, pending);
+                resourceBudget.reject(village, reservation);
+                clearTimeout(timers.get(village.getId()));
+                timers.delete(village.getId());
+                recruiter.stop('Recruitment rejected by the server');
+                return;
+            }
+            const job = data && (data.job || data);
+            if (job && job.job_id && Number(job.village_id) === Number(village.getId())
+                && job.unit_type === order.unit_type && job.amount === order.amount) {
+                entry.jobId = job.job_id;
+                Lockr.set(pendingKey, pending);
+                resourceBudget.acknowledge(village, reservation);
+            }
+            publish();
+        });
+    };
+
+    const recruiter = {
+        status: 'Stopped',
+        init: function () {
+            if (initialized) {
+                return;
+            }
+            initialized = true;
+            const player = modelDataService.getSelectedCharacter();
+            const suffix = `${player.getWorldId()}_${player.getId()}`;
+            pendingKey = `recruiter_pending_${suffix}`;
+            pending = Lockr.get(pendingKey, {});
+            settings = new Settings({settingsMap, storageKey: `recruiter_settings_${suffix}`});
+            config = settings.getAll();
+            settings.onChange(() => {
+                recruiter.stop('Settings saved; start again to apply');
+                config = settings.getAll();
+            });
+        },
+        start: function () {
+            if (running || !valid()) {
+                return false;
+            }
+            running = true;
+            recruiter.status = config.preview_only ? 'Previewing recruitment' : 'Recruiting';
+            const token = ++version;
+            ready(() => {
+                if (!running || token !== version) {
+                    return;
+                }
+                cycle();
+                if (running && token === version) {
+                    timer = setInterval(cycle, config.check_interval);
+                }
+            }, 'all_villages_ready');
+            publish();
+            return true;
+        },
+        stop: function (reason = 'Stopped') {
+            running = false;
+            version++;
+            clearInterval(timer);
+            recruiter.status = reason;
+            publish();
+        },
+        isRunning: () => running,
+        isInitialized: () => initialized,
+        getSettings: () => settings,
+        resolvePending: function (villageId) {
+            if (running) {
+                return false;
+            }
+            delete pending[villageId];
+            Lockr.set(pendingKey, pending);
+            resourceBudget.clear(villageId);
+            clearTimeout(timers.get(Number(villageId)));
+            timers.delete(Number(villageId));
+            recruiter.status = 'Guard cleared after manual check; start again';
+            publish();
+            return true;
+        },
+        getPlans: () => plans,
+        getPending: () => pending
+    };
+    return recruiter;
+});
+
+define('two/recruiter/ui', [
+    'two/ui', 'two/recruiter', 'two/recruiter/policy', 'two/Settings', 'two/EventScope', 'two/utils', 'humanInterval'
+], function (ui, recruiter, policy, Settings, EventScope, utils, humanInterval) {
+    const labels = {
+        preview_only: 'Preview only', check_interval: 'Check interval', spend_percent: 'Maximum share of spendable resources per cycle (%)',
+        max_batch: 'Maximum soldiers per batch', max_queue_jobs: 'Maximum barracks queue jobs',
+        preserve_wood: 'Wood savings', preserve_clay: 'Clay savings', preserve_iron: 'Iron savings', preserve_food: 'Free population to preserve',
+        building_wood: 'Additional wood budget for buildings', building_clay: 'Additional clay budget for buildings',
+        building_iron: 'Additional iron budget for buildings', building_food: 'Additional population budget for buildings'
+    };
+    return function () {
+        const button = ui.addMenuButton('Recruiter', 50);
+        ui.addTemplate('two_recruiter_window', `<div id=\"two-recruiter\" class=\"win-content two-window\"><header class=\"win-head\"><h2>Recruiter</h2><ul class=\"list-btn\"><li><a href=\"#\" class=\"size-34x34 btn-red icon-26x26-close\" ng-click=\"closeWindow()\"></a></ul></header><div class=\"win-main\" scrollbar=\"\"><div class=\"box-paper footer\"><div class=\"scroll-wrap\"><p>Maintain troop targets per village. Targets include owned troops away from home and soldiers still in training. Zero disables a unit type. Each cycle sends at most one batch per village; types are considered in the order shown.<p>Spendable budget = current stock − savings − additional building budget − selected upcoming upgrade costs. Queued buildings and troops are already paid and are not charged twice. Food means free population.<table class=\"tbl-border-light tbl-content tbl-medium-height\"><tr><td>Village groups (empty = all owned villages)<td><div select=\"\" list=\"groups\" selected=\"settings.enabled_groups\" drop-down=\"true\"></div><tr ng-repeat=\"id in controls\" ng-switch=\"map[id].inputType\"><td>{{ labels[id] }}<td ng-switch-when=\"checkbox\"><div switch-slider=\"\" enabled=\"true\" border=\"true\" value=\"settings[id]\" vertical=\"false\" size=\"'56x28'\"></div><td ng-switch-when=\"number\"><input type=\"number\" class=\"fit textfield-border\" ng-model=\"settings[id]\" min=\"{{ map[id].min }}\" max=\"{{ map[id].max }}\" step=\"1\"><td ng-switch-when=\"readable_time\"><input class=\"fit textfield-border\" ng-model=\"settings[id]\"><tr><th>Unit kind<th>Target soldiers per village<tr ng-repeat=\"unit in units\"><td>{{ unit.name }}<td><input type=\"number\" class=\"fit textfield-border\" min=\"0\" max=\"1000000\" step=\"1\" ng-model=\"unit.target\"></table><h3>Save for upcoming building upgrades</h3><p>Reserve the next level cost of each selected building. A building with an upgrade already in the queue is skipped until that upgrade finishes. Use additional building budgets above to save for further levels or other spending.<div class=\"building-choices\"><label ng-repeat=\"building in buildings\"><input type=\"checkbox\" ng-model=\"building.enabled\"> {{ building.name }}</label></div><h3>{{ status }}</h3><div ng-repeat=\"(villageId, entry) in pending\"><p>Village {{ villageId }}: pending {{ entry.amount }} {{ entry.unit }}.</p><a href=\"#\" ng-show=\"!running\" class=\"btn-border btn-orange\" ng-click=\"resolvePending(villageId)\">Resolve guard after checking game</a></div><div ng-repeat=\"plan in plans\" class=\"recruit-plan\"><h3>Village {{ plan.villageId }} — {{ plan.reason }}</h3><p>Protected: {{ plan.protected }}<br>Upcoming buildings: {{ plan.buildingCosts }}<br>Cycle budget: {{ plan.budget }}<table class=\"tbl-border-light tbl-content\"><tr><th>Unit<th>Owned<th>In training<th>Target<th>Missing<tr ng-repeat=\"item in plan.deficits\"><td>{{ item.name }}<td>{{ item.owned }}<td>{{ item.queued }}<td>{{ item.target }}<td>{{ item.deficit }}</table><p ng-repeat=\"order in plan.orders\">{{ $first ? 'Next batch' : 'Later priority' }}: {{ order.amount }} {{ order.unit_type }} — cost {{ order.cost }}</div></div></div></div><footer class=\"win-foot\"><ul class=\"list-btn list-center\"><li><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"save()\">Save</a><li><a href=\"#\" class=\"btn-border\" ng-class=\"running ? 'btn-red' : 'btn-green'\" ng-click=\"toggle()\">{{ running ? 'Pause' : 'Start' }}</a></ul></footer></div>`);
+        ui.addStyle('#two-recruiter .scroll-wrap{padding:12px}#two-recruiter p{margin:10px 0}#two-recruiter h3{margin-top:16px}#two-recruiter .building-choices label{display:inline-block;width:180px;padding:5px}#two-recruiter .recruit-plan{border-top:1px solid #bca475;margin-top:16px}');
+        button.addEventListener('click', function () {
+            const scope = $rootScope.$new();
+            const settings = recruiter.getSettings();
+            const map = settings.settingsMap;
+            const units = modelDataService.getGameData().getUnitsObject();
+            const buildings = modelDataService.getGameData().getBuildings();
+            settings.injectScope(scope);
+            scope.labels = labels;
+            scope.map = map;
+            scope.controls = Object.keys(labels);
+            scope.groups = Settings.encodeList(modelDataService.getGroupList().getGroups(), {disabled: false, type: 'groups'});
+            scope.units = Object.entries(units).filter(([name, data]) => data.building === 'barracks')
+                .map(([name]) => ({name, target: settings.get('targets')[name] || 0}));
+            scope.buildings = Object.keys(buildings).map(name => ({name, enabled: settings.get('protect_buildings').includes(name)}));
+            const update = function () {
+                scope.running = recruiter.isRunning();
+                scope.status = recruiter.status;
+                scope.plans = recruiter.getPlans();
+                scope.pending = recruiter.getPending();
+                button.classList.toggle('btn-red', scope.running);
+                button.classList.toggle('btn-orange', !scope.running);
+            };
+            scope.save = function () {
+                const values = settings.decode(scope.settings);
+                values.targets = Object.fromEntries(scope.units.map(unit => [unit.name, unit.target]));
+                values.protect_buildings = scope.buildings.filter(building => building.enabled).map(building => building.name);
+                const parsed = {...values, check_interval: humanInterval(values.check_interval)};
+                if (!policy.validSettings(parsed, map, units, buildings)) {
+                    utils.notif('error', 'Use whole, non-negative troop counts and budgets. Check interval must be 10 seconds to 24 hours.');
+                    return false;
+                }
+                settings.setAll(values);
+                utils.notif('success', 'Recruiter settings saved');
+                return true;
+            };
+            scope.toggle = function () {
+                if (recruiter.isRunning()) {
+                    recruiter.stop();
+                } else if (scope.save()) {
+                    if (!recruiter.start()) {
+                        utils.notif('error', 'Recruiter could not start; check settings');
+                    }
+                }
+                update();
+            };
+            scope.resolvePending = function (villageId) {
+                const modal = $rootScope.$new();
+                modal.title = 'Resolve pending recruitment';
+                modal.text = 'Check the village barracks queue, owned troop totals, and resources in the game first. Clearing this guard allows another batch and may repeat an earlier order if game data is still stale.';
+                modal.submitText = 'I checked the game; clear guard';
+                modal.cancelText = 'Cancel';
+                modal.submit = function () {
+                    modal.closeWindow();
+                    recruiter.resolvePending(villageId);
+                    update();
+                };
+                modal.cancel = () => modal.closeWindow();
+                windowManagerService.getModal('modal_attention', modal);
+            };
+            update();
+            const events = new EventScope('two_recruiter_window', noop);
+            events.register('two_recruiter_updated', () => scope.$evalAsync(() => {
+                if (!scope.$$destroyed) {
+                    update();
+                }
+            }));
+            windowManagerService.getScreenWithInjectedScope('!two_recruiter_window', scope);
+        });
+    };
+});
+
+define('two/recruiter/policy', [], function () {
+    const resources = ['wood', 'clay', 'iron', 'food'];
+    const validCount = value => Number.isSafeInteger(value) && value >= 0;
+
+    const validSettings = function (settings, map, unitData, buildings) {
+        return Object.entries(map).every(([id, item]) => {
+            const value = settings[id];
+            if (item.inputType === 'number') {
+                return validCount(value) && value >= item.min && value <= item.max;
+            }
+            if (item.inputType === 'checkbox') {
+                return typeof value === 'boolean';
+            }
+            if (item.inputType === 'readable_time') {
+                return Number.isFinite(value) && value >= 10000 && value <= 86400000;
+            }
+            return true;
+        }) && settings.targets && !Array.isArray(settings.targets) && typeof settings.targets === 'object'
+            && Object.entries(settings.targets).every(([name, amount]) => unitData[name]
+                && unitData[name].building === 'barracks' && validCount(amount) && amount <= 1000000)
+            && Array.isArray(settings.enabled_groups)
+            && Array.isArray(settings.protect_buildings) && settings.protect_buildings.every(name => buildings[name]);
+    };
+
+    const plan = function (snapshot, settings, unitData) {
+        const empty = reason => ({reason, orders: [], budget: {}, protected: {}});
+        if (!Number.isInteger(snapshot.barracksLevel) || snapshot.barracksLevel < 1) {
+            return empty('Barracks unavailable');
+        }
+        if (!Array.isArray(snapshot.jobs) || snapshot.jobs.length >= settings.max_queue_jobs) {
+            return empty('Recruitment queue full or unavailable');
+        }
+        const budget = {};
+        const protectedResources = {};
+        for (const type of resources) {
+            const stock = snapshot.stock[type];
+            const building = snapshot.buildingCosts[type];
+            if (!Number.isFinite(stock) || stock < 0 || !Number.isFinite(building) || building < 0) {
+                return empty('Resources or building costs unavailable');
+            }
+            protectedResources[type] = settings[`preserve_${type}`] + settings[`building_${type}`] + building;
+            budget[type] = Math.floor(Math.max(0, stock - protectedResources[type])
+                * (type === 'food' ? 1 : settings.spend_percent / 100));
+        }
+        const remaining = {...budget};
+        const queued = {};
+        for (const job of snapshot.jobs) {
+            if (!job || !validCount(job.amount) || !validCount(job.recruited) || job.recruited > job.amount
+                || !unitData[job.unit_type]) {
+                return empty('Recruitment queue data unavailable');
+            }
+            queued[job.unit_type] = (queued[job.unit_type] || 0) + job.amount - job.recruited;
+        }
+        const orders = [];
+        const deficits = [];
+        // Settings order is recruitment priority; zero targets disable a kind.
+        for (const [name, target] of Object.entries(settings.targets)) {
+            if (!target) {
+                continue;
+            }
+            const data = unitData[name];
+            const count = snapshot.units[name] && snapshot.units[name].total;
+            if (!validCount(count)) {
+                return empty('Owned troop totals unavailable');
+            }
+            const deficit = Math.max(0, target - count - (queued[name] || 0));
+            deficits.push({name, target, owned: count, queued: queued[name] || 0, deficit});
+            if (!data || data.building !== 'barracks' || !validCount(data.required_level)
+                || snapshot.barracksLevel < data.required_level || snapshot.barracksLevel < 1
+                || orders.length + snapshot.jobs.length >= settings.max_queue_jobs) {
+                continue;
+            }
+            // World unit data supplies costs. No hard-coded troop prices.
+            const cost = Object.fromEntries(resources.map(type => [type, Number(data[type])]));
+            if (!resources.every(type => Number.isFinite(cost[type]) && cost[type] >= 0) || cost.food <= 0) {
+                return empty('Troop costs unavailable');
+            }
+            let amount = Math.min(deficit, settings.max_batch);
+            for (const type of resources) {
+                if (cost[type] > 0) {
+                    amount = Math.min(amount, Math.floor(remaining[type] / cost[type]));
+                }
+            }
+            if (amount <= 0) {
+                continue;
+            }
+            const totalCost = {};
+            for (const type of resources) {
+                totalCost[type] = amount * cost[type];
+                remaining[type] -= totalCost[type];
+            }
+            orders.push({unit_type: name, amount, cost: totalCost});
+        }
+        return {reason: orders.length ? 'Ready' : 'Targets met, units locked, or budget reserved', orders,
+            deficits, budget, remaining, protected: protectedResources, buildingCosts: snapshot.buildingCosts};
+    };
+    return {plan, validSettings};
+});
+
+define('two/recruiter/settings/map', [], function () {
+    const number = (value, max) => ({default: value, updates: [], inputType: 'number', min: 0, max});
+    return {
+        preview_only: {default: true, updates: [], inputType: 'checkbox'},
+        check_interval: {default: '1 minute', updates: [], inputType: 'readable_time'},
+        enabled_groups: {default: [], updates: [], inputType: 'select', multiSelect: true, type: 'groups', disabledOption: true},
+        targets: {default: {}, updates: [], inputType: 'targets'},
+        preserve_wood: number(5000, 10000000),
+        preserve_clay: number(5000, 10000000),
+        preserve_iron: number(5000, 10000000),
+        preserve_food: number(0, 10000000),
+        building_wood: number(0, 10000000),
+        building_clay: number(0, 10000000),
+        building_iron: number(0, 10000000),
+        building_food: number(0, 10000000),
+        protect_buildings: {default: [], updates: [], inputType: 'building_list'},
+        spend_percent: number(25, 100),
+        max_batch: {default: 50, updates: [], inputType: 'number', min: 1, max: 10000},
+        max_queue_jobs: {default: 5, updates: [], inputType: 'number', min: 1, max: 100}
+    };
+});
+
+require(['two/ready', 'two/recruiter', 'two/recruiter/ui'], function (ready, recruiter, ui) {
+    ready(function () {
+        if (!recruiter.isInitialized()) {
+            recruiter.init();
+            ui();
+        }
+    }, 'all_villages_ready');
 });
 
 });

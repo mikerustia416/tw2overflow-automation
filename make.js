@@ -91,7 +91,7 @@ function concatCode () {
         console.log('Concatenating scripts');
 
         const code = overflow.js.map(function (file) {
-            return fs.readFileSync(path.join(__dirname, file), 'utf8');
+            return fs.readFileSync(path.join(__dirname, file), 'utf8').replace(/[\t ]+$/gm, '');
         });
 
         fs.writeFileSync(path.join(__dirname, 'dist', 'tw2overflow.js'), code.join('\n'), 'utf8');
@@ -145,6 +145,8 @@ function minifyHTML () {
         for (const destination in overflow.html) {
             const sourceLocation = overflow.html[destination];
             const source = fs.readFileSync(path.join(__dirname, sourceLocation), 'utf8');
+
+            fs.mkdirSync(path.dirname(path.join(__dirname, destination)), {recursive: true});
 
             let output = require('html-minifier').minify(source, {
                 removeRedundantAttributes: true,
@@ -460,6 +462,8 @@ function generateOverflowModule () {
         `/src/ready.js`,
         `/src/language.js`,
         `/src/settings.js`,
+        `/src/resource-budget.js`,
+        `/src/module-state.js`,
         `/src/map-data.js`,
         `/src/ui.js`,
         `/src/init.js`,
