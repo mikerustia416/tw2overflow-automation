@@ -2,7 +2,7 @@
 // @name        TW2Overflow Farmer, Recruiter and Quest
 // @description Automating the boring stuff on Tribal Wars 2 with tools like auto farming, auto builder, command scheduler, minimap and more.
 // @namespace   local/tw2overflow-farming
-// @version     2.1.500.3
+// @version     2.1.500.4
 // @grant       unsafeWindow
 // @run-at      document-start
 // @include     https://*.tribalwars2.com/game.php*
@@ -11,7 +11,7 @@
 
 /*!
  * tw2overflow v2.1.500
- * Tue, 06 Oct 2026 09:47:36 GMT
+ * Tue, 06 Oct 2026 10:08:20 GMT
  * Developed by Relaxeaza <relaxeaza@outlook.com>
  *
  * This work is free. You can redistribute it and/or modify it under the
@@ -3637,31 +3637,7 @@ require([
     });
 });
 
-// Load core modules immediately
-require([
-    'two/farmOverflow',
-    'two/builderQueue',
-    'two/autoQuest',
-    'two/ui'
-], function (
-    farmOverflow,
-    builderQueue,
-    autoQuest,
-    interfaceOverflow
-) {
-    // Initialize modules as soon as possible
-    if (farmOverflow && !farmOverflow.isInitialized()) {
-        farmOverflow.init();
-    }
-
-    if (builderQueue && !builderQueue.isInitialized()) {
-        builderQueue.init();
-    }
-
-    if (autoQuest && !autoQuest.isInitialized()) {
-        autoQuest.init();
-    }
-});
+// Each included module initializes itself from its own src/init.js.
 
 /**
  * https://github.com/tsironis/lockr

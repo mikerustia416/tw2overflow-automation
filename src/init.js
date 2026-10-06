@@ -10,28 +10,4 @@ require([
     });
 });
 
-// Load core modules immediately
-require([
-    'two/farmOverflow',
-    'two/builderQueue',
-    'two/autoQuest',
-    'two/ui'
-], function (
-    farmOverflow,
-    builderQueue,
-    autoQuest,
-    interfaceOverflow
-) {
-    // Initialize modules as soon as possible
-    if (farmOverflow && !farmOverflow.isInitialized()) {
-        farmOverflow.init();
-    }
-    
-    if (builderQueue && !builderQueue.isInitialized()) {
-        builderQueue.init();
-    }
-    
-    if (autoQuest && !autoQuest.isInitialized()) {
-        autoQuest.init();
-    }
-});
+// Each included module initializes itself from its own src/init.js.

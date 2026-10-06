@@ -179,7 +179,9 @@ The check interval defaults to 30 seconds and supports 5 seconds to 5 minutes. S
 
 ## Compatibility and account considerations
 
-The source has offline tests with mocked game services. The AutoQuest task selector and completion icon were inspected in a live quest panel, but the updated combined userscript has not been verified end to end against the live game. Current game services, AngularJS rendering, costs, and server responses can differ from the assumptions tested offline.
+The source has offline tests with mocked game services. Live Chrome preview checks on 2026-10-06 verified module startup, six automatic packet options from 25 nearby barbarians, five planned farming attacks without sending them, and Recruiter troop deficits and protected budgets. With 2,285 of each resource, 1,000 savings, 500 additional building budget, and a 25% spending share, Recruiter proposed three spearmen; reserving the timber camp next upgrade reduced the batch to two. Test settings were restored afterward.
+
+AutoQuest loaded and restored its running state. Its task selector and completion icon were inspected earlier in a live quest panel, but no ready reward was available during the latest check. Actual attack/recruitment submissions and the updated AutoQuest reward sequence remain unverified end to end against the live game. Current game services, AngularJS rendering, costs, and server responses can differ from the assumptions tested offline.
 
 Recruitment integrations follow the repository's game-model conventions, historic [game-message examples](https://gist.github.com/rampadc/d719d60a2e359670808f862712bcb9ae), and the queue model used in [TW2Tools source](https://gist.github.com/wellbritto98/936e5e7ad1e345716baea4932dfd0221).
 
