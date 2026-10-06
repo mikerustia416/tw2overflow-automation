@@ -111,7 +111,7 @@ define('two/ui', [
             });
         }
 
-        return $menu.appendChild($button);
+        return $button;
     };
 
     interfaceOverflow.addDivisor = function (order) {

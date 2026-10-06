@@ -29,7 +29,13 @@ define('two/farmOverflow/settings', [], function () {
         EMPTY_HAUL_COOLDOWN: 'empty_haul_cooldown',
         LOSS_COOLDOWN: 'loss_cooldown',
         MAX_ATTACKS_PER_CYCLE: 'max_attacks_per_cycle',
-        PREVIEW_ONLY: 'preview_only'
+        PREVIEW_ONLY: 'preview_only',
+        AUTO_FREE_SPEEDUP: 'auto_free_speedup',
+        
+        // Intelligent farming settings
+        BARBARIAN_POWER_WEIGHT: 'barbarian_power_weight',
+        BARBARIAN_POWER_ESTIMATE: 'barbarian_power_estimate',
+        ATTACK_OVERKILL_PERCENT: 'attack_overkill_percent'
     };
 });
 
@@ -117,6 +123,11 @@ define('two/farmOverflow/settings/map', [
             max: 1000
         },
         [SETTINGS.PREVIEW_ONLY]: {
+            default: true,
+            updates: [],
+            inputType: 'checkbox'
+        },
+        [SETTINGS.AUTO_FREE_SPEEDUP]: {
             default: true,
             updates: [],
             inputType: 'checkbox'
@@ -269,6 +280,30 @@ define('two/farmOverflow/settings/map', [
             updates: [],
             inputType: 'select',
             disabledOption: false
+        },
+        [SETTINGS.BARBARIAN_POWER_WEIGHT]: {
+            default: 20,
+            updates: [UPDATES.TARGETS],
+            inputType: 'number',
+            min: 0,
+            max: 100
+        },
+        [SETTINGS.BARBARIAN_POWER_ESTIMATE]: {
+            default: 'points',
+            updates: [UPDATES.TARGETS],
+            inputType: 'select',
+            disabledOption: false,
+            options: [
+                {name: 'Village Points', value: 'points'},
+                {name: 'Building Levels', value: 'buildings'}
+            ]
+        },
+        [SETTINGS.ATTACK_OVERKILL_PERCENT]: {
+            default: 20,
+            updates: [],
+            inputType: 'number',
+            min: 0,
+            max: 200
         }
     };
 });
