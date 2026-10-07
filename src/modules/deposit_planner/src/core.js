@@ -137,7 +137,7 @@ define('two/depositPlanner', [
                 Lockr.set(KEYS.cycle, cycle);
                 state = {...state, rerollsUsed: cycle.spent};
             }
-            if (state.jobs.length === 6 && !state.current && !state.collectible.length && state.jobs.every(policy.validJob)) {
+            if (!config.fixed_yield_rerolls && state.jobs.length === 6 && !state.current && !state.collectible.length && state.jobs.every(policy.validJob)) {
                 const key = JSON.stringify([adapter.boardKey(state), state.context, state.cycleId, state.errandsReset, boardRevision]);
                 if (!samples.some(sample => sample.key === key)) {
                     samples.push({key, context: state.context, at: state.now,

@@ -1,5 +1,10 @@
 # TWOverflow Changelog
 
+## Unreleased — 2026-10-07 (userscript 2.1.500.14)
+
+- **Deposit Planner:** Default to a configurable fixed forecast of 850 resources per reroll. Skip history collection, simulations and percentage gates in fixed mode, so a historical 0% result cannot block a supported resource plan. Show the forecast total across usable items, next milestone, target coverage and rerolls needed. Collect useful visible errands first, reroll one board at a time and recalculate actual rewards. Keep item reserves, cycle limits, pending guards, early-reroll capability checks and actual errand deadlines. Retain history mode as an option and preserve the configured target during lower-milestone fallback.
+- **Validation:** All 203 offline tests, source lint, userscript syntax, startup dependencies, artifact comparison and diff checks pass. Regressions verify bypassing history and percentage checks, resource arithmetic, lower milestones, visible rewards, reserves, limits, reset buffers, running-job capability, one pending inventory request and recalculation from confirmed board/inventory changes. Browser installation and live fixed-mode rerolls remain unverified.
+
 ## Unreleased — 2026-10-07 (userscript 2.1.500.13)
 
 - **Deposit Planner:** Add a persistent information or warning box when the current plan advises keeping reroll items. Explain target coverage, collection, free resets, timing, pending confirmations, inventory reserves, cycle limits, learning and forecast confidence, improvement or item-value checks. Update the notice with current saved settings; hide it when rerolling is recommended.

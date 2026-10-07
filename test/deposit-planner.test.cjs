@@ -5,6 +5,9 @@ const plain = value => JSON.parse(JSON.stringify(value));
 
 function setup(options = {}) {
     const f = fixture({deferFarmInit: true, storageEntries: options.storageEntries, separateEventQueue: true});
+    // Existing forecasting regressions exercise history mode explicitly.
+    f.storage.set('deposit_planner_settings', {fixed_yield_rerolls: options.fixedYield === true,
+        ...f.storage.get('deposit_planner_settings')});
     const clock = f.get('helper/time');
     f.context.Date = class extends Date { static now() { return clock.gameTime(); } };
     const data = {jobs: [], progress: 0, cap: 10000, reset: 5000, milestones: 10000, ...options.data};
@@ -128,6 +131,105 @@ test('reroll forecast respects item reserves, cycle limits, disabled rerolls and
     assert.equal(f.policy.plan({...state, rerollsUsed: 3}, config, history(state)).action, 'wait');
     assert.equal(f.policy.plan(state, {...config, auto_reroll: false}, history(state)).action, 'wait');
     assert.equal(f.policy.plan({...state, target: 10000, milestonesReset: 1050}, config, history(state)).action, 'wait');
+});
+
+test('reroll resource forecast uses 850 per usable item and preserves uncollected progress', () => {
+    const f = setup();
+    const state = {...f.sampleState(), progress: 5982, target: 10000,
+        milestones: [{target: 6000, achieved: false}, {target: 10000, achieved: false}], itemCount: 6, rerollsUsed: 0};
+    const config = {...f.planner.getSettings().getAll(), fallback_minimum_resources: 850, max_rerolls: 20, reserve_items: 1};
+    const estimate = f.policy.fallbackRerollEstimate(state, config, 83);
+    assert.equal(estimate.availableRerolls, 5);
+    assert.equal(estimate.rerollProgress, 4250);
+    assert.equal(estimate.projectedProgress, 10315);
+    assert.equal(state.progress, 5982);
+    assert.equal(estimate.nextMilestone.target, 6000);
+    assert.equal(estimate.nextMilestoneReachable, true);
+    assert.equal(estimate.targetReachable, true);
+    assert.equal(estimate.resourceOnly, true);
+    assert.equal(f.policy.fallbackRerollEstimate({...state, itemCount: 1}, config, 83).availableRerolls, 0);
+});
+
+test('fixed 850 forecast bypasses all history and percentage checks for ordinary and early rerolls', () => {
+    const f = setup({fixedYield: true});
+    const state = {...f.sampleState(), progress: 5982, target: 10000, itemCount: 6,
+        current: {...job('running', 20, 83), completedAt: 1020}, jobs: [], runningRerollAllowed: true};
+    const config = {...f.planner.getSettings().getAll(), auto_reroll: true, max_rerolls: 20,
+        success_percent: 100, min_samples: 30, min_improvement: 100};
+    const predict = () => {throw Error('History forecast must not run');};
+    const early = f.policy.plan(state, config, [], predict);
+    assert.equal(early.action, 'reroll');
+    assert.equal(early.earlyReroll, true);
+    assert.equal(early.goalTarget, 10000);
+    assert.equal(early.fallbackRerollEstimate.projectedProgress, 10315);
+    assert.equal(early.fallbackRerollEstimate.rerollsNeeded, 5);
+    assert.equal(early.forecast, null);
+    const ordinary = f.policy.plan({...state, progress: 6065, current: null}, config, [], predict);
+    assert.equal(ordinary.action, 'reroll');
+    assert.equal(ordinary.earlyReroll, false);
+    assert.match(ordinary.reason, /850 resources per reroll/);
+});
+
+test('fixed yield retains reserves, limits, deadline buffers, capability and reachable milestone decisions', () => {
+    const f = setup({fixedYield: true});
+    const state = {...f.sampleState(), target: 10000, progress: 6065, itemCount: 6, jobs: []};
+    const config = {...f.planner.getSettings().getAll(), auto_reroll: true, max_rerolls: 20};
+    for (const [snapshot, options] of [[{...state, itemCount: 1}, config],
+        [{...state, rerollsUsed: 20}, config], [{...state, itemId: null}, config],
+        [{...state, errandsReset: state.now + config.deadline_buffer}, config],
+        [{...state, milestonesReset: state.now + config.deadline_buffer}, config],
+        [state, {...config, auto_reroll: false}], [state, {...config, min_gain_per_item: 851}]]) {
+        assert.notEqual(f.policy.plan(snapshot, options).action, 'reroll');
+    }
+    const active = {...state, progress: 5982, current: {...job('running', 20, 83), completedAt: 1020}};
+    assert.equal(f.policy.plan({...active, runningRerollAllowed: false}, config).action, 'wait');
+    assert.equal(f.policy.plan({...active, runningRerollAllowed: true, jobs: [job(2, 20, 100)]}, config).action, 'wait');
+    const outOfReach = {...state, progress: 300, itemCount: 4};
+    assert.equal(f.policy.plan(outOfReach, config).action, 'wait');
+    const lower = f.policy.plan(outOfReach, {...config, milestone_fallback: true});
+    assert.equal(lower.action, 'reroll');
+    assert.equal(lower.goalTarget, 1500);
+    assert.equal(lower.fallback, true);
+    assert.equal(lower.state.target, 10000);
+});
+
+test('fixed yield consumes useful visible errands and collects before spending another item', () => {
+    const f = setup({fixedYield: true});
+    const state = {...f.sampleState(), progress: 6065, itemCount: 6, jobs: [job(1, 20, 900)]};
+    const config = {...f.planner.getSettings().getAll(), auto_reroll: true, max_rerolls: 20};
+    const visible = f.policy.plan(state, config);
+    assert.equal(visible.action, 'start');
+    assert.equal(visible.job.id, 1);
+    assert.equal(visible.fallbackRerollEstimate.baseline, 900);
+    assert.equal(f.policy.plan({...state, jobs: [], collectible: [{...job(1, 20, 900), completedAt: state.now}]}, config).action, 'collect');
+    const covered = f.policy.plan({...state, jobs: [job(2, 20, 4000)]}, config);
+    assert.equal(covered.action, 'start');
+    assert.equal(covered.fallbackRerollEstimate.rerollsNeeded, 0);
+    assert.equal(covered.knownEta, state.now + 22);
+});
+
+test('fixed mode sends one inventory reroll without history, confirms it and recalculates the actual board', async () => {
+    const f = setup({fixedYield: true, data: {progress: 6065, jobs: []}});
+    f.setItem({id: 42, type: 'resource_deposit_reroll', amount: 6});
+    f.planner.getSettings().setAll({auto_reroll: true, max_rerolls: 20});
+    f.receiveInfo();
+    f.planner.start();
+    await f.tick(1000);
+    assert.equal(f.sends().length, 1);
+    assert.equal(f.sends()[0].route, 'PREMIUM_USE_ITEM');
+    assert.equal(f.storage.get('deposit_planner_cycle').spent, 1);
+    f.sends()[0].callback({});
+    await f.tick(1000);
+    assert.equal(f.sends().length, 1, 'An acknowledgement alone cannot trigger another spend');
+    f.setItem({id: 42, type: 'resource_deposit_reroll', amount: 5});
+    f.data.jobs = Array.from({length: 6}, (_, id) => job(id, 10, 150));
+    f.receiveInfo();
+    await f.tick(1000);
+    assert.equal(f.sends().length, 2);
+    assert.equal(f.sends()[1].route, 'RESOURCE_DEPOSIT_START_JOB');
+    assert.equal(f.planner.getPlan().fallbackRerollEstimate.baseline, 900);
+    assert.equal(f.planner.getPlan().forecast, null);
+    assert.equal(f.storage.has('deposit_planner_samples'), false);
 });
 
 test('known reachable targets need no rerolls; running errands have conditional forecast ETAs', () => {

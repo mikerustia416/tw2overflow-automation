@@ -58,6 +58,10 @@ define('two/depositPlanner/rerollNotice', ['two/depositPlanner/policy'], functio
             }
             return result();
         }
+        if (plan.fixedYield) {
+            add(plan.reason, plan.goalTarget === undefined && !!(plan.fallbackRerollEstimate && plan.fallbackRerollEstimate.availableRerolls));
+            return result();
+        }
         const forecast = plan.forecast;
         if (forecast && !forecast.ready) {
             add('Only ' + forecast.sampleCount + '/' + config.min_samples + ' matching complete boards are learned. There is not enough history to assess an item reroll.', true);

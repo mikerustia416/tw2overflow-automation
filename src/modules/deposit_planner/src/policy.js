@@ -87,10 +87,85 @@ define('two/depositPlanner/policy', [], function () {
     const budgetFor = (state, config) => Math.max(0, Math.min(config.max_rerolls - state.rerollsUsed,
         state.itemCount - config.reserve_items));
 
+    const fallbackRerollEstimate = function (state, config, baseline = 0) {
+        const milestones = (state.milestones || []).filter(item => !item.achieved && Number.isFinite(item.target)
+            && item.target > state.progress).sort((a, b) => a.target - b.target);
+        const availableRerolls = state.itemId ? budgetFor(state, config) : 0;
+        const resourcesPerReroll = Math.max(0, config.fallback_minimum_resources || 0);
+        const rerollProgress = availableRerolls * resourcesPerReroll;
+        const projectedProgress = state.progress + Math.max(0, baseline) + rerollProgress;
+        const reachable = milestones.filter(item => item.target <= projectedProgress);
+        const nextMilestone = milestones[0] || null;
+        return {
+            baseline: Math.max(0, baseline), availableRerolls, resourcesPerReroll,
+            rerollProgress, projectedProgress, nextMilestone,
+            highestReachable: reachable.length ? reachable[reachable.length - 1] : null,
+            nextMilestoneReachable: !!nextMilestone && projectedProgress >= nextMilestone.target,
+            targetReachable: projectedProgress >= state.target,
+            automaticEnabled: config.auto_reroll, resourceOnly: true
+        };
+    };
+
     const canRerollRunning = (state, config) => !!(state.runningRerollAllowed && state.current && validJob(state.current)
         && state.current.completedAt > state.now && !state.jobs.length && !state.collectible.length
         && state.current.completedAt + config.action_delay <= Math.min(state.errandsReset, state.milestonesReset) - config.deadline_buffer
         && state.progress + state.current.amount < state.target && config.auto_reroll && budgetFor(state, config) > 0 && state.itemId);
+
+    const fixedYieldPlan = function (state, config, base) {
+        const deadline = Math.min(state.errandsReset, state.milestonesReset) - config.deadline_buffer;
+        const completion = state.current ? state.current.completedAt + config.action_delay : state.now;
+        const validCompletion = !state.current || validJob(state.current) && completion <= deadline;
+        const runningReward = state.current && validCompletion ? state.current.amount : 0;
+        const selection = optimize(state.jobs, Math.max(0, state.target - state.progress - runningReward), deadline - Math.max(state.now, completion), config.action_delay);
+        const estimate = fallbackRerollEstimate(state, config, runningReward + selection.reward);
+        const lower = (state.milestones || []).filter(item => !item.achieved && item.target > state.progress
+            && item.target <= Math.min(state.target, estimate.projectedProgress)).sort((a, b) => b.target - a.target)[0];
+        const goal = estimate.targetReachable ? state.target : config.milestone_fallback && lower ? lower.target : undefined;
+        const needed = goal === undefined ? null : Math.ceil(Math.max(0, goal - state.progress - estimate.baseline) / estimate.resourcesPerReroll);
+        const result = {...base, fixedYield: true, jobs: selection.jobs, fallbackRerollEstimate: {...estimate, rerollsNeeded: needed},
+            goalTarget: goal, fallback: goal !== undefined && goal < state.target};
+        let reason;
+        if (!validCompletion) {
+            reason = 'The running reward cannot be safely collected before both reset buffers';
+        } else if (needed === 0) {
+            reason = 'Visible or running errands cover the planned milestone; keep reroll items';
+        } else if (selection.jobs.length && !state.current) {
+            return {...result, action: 'start', job: selection.jobs[0],
+                knownEta: needed === 0 ? state.now + selection.seconds : null,
+                reason: 'Collect visible rewards first, then recalculate the fixed reroll forecast'};
+        } else if (state.now + config.action_delay >= deadline) {
+            reason = 'Reset buffer reached; wait for the new cycle';
+        } else if (!config.auto_reroll) {
+            reason = 'Automatic item rerolls are disabled';
+        } else if (estimate.availableRerolls < 1) {
+            reason = 'No items available within the reserve and cycle limit';
+        } else if (goal === undefined) {
+            reason = 'The fixed reroll forecast cannot reach the target or an enabled lower milestone';
+        } else if (estimate.resourcesPerReroll < config.min_gain_per_item) {
+            reason = 'The fixed resources per reroll are below the configured item-value minimum';
+        } else if (state.current && !canRerollRunning(state, config)) {
+            reason = 'Wait for the current errand; early reroll requires an empty board and enabled game capability';
+        } else if (!state.current && state.errandsReset - state.now <= config.free_refresh_wait) {
+            reason = 'Wait for free errands and keep reroll items';
+        } else {
+            reason = 'Fixed forecast of ' + estimate.resourcesPerReroll + ' resources per reroll supports the planned milestone; reroll once and recalculate';
+            result.action = 'reroll';
+            result.earlyReroll = !!state.current;
+        }
+        // Never discard useful visible errands just because no new board is needed.
+        if (!state.current && selection.jobs.length) {
+            return {...result, action: 'start', job: selection.jobs[0],
+                knownEta: needed === 0 ? state.now + selection.seconds : null, reason};
+        }
+        if (state.current && !state.jobs.length && !state.collectible.length && state.current.completedAt > state.now) {
+            result.runningPreview = {collectedTotal: state.progress, runningReward: state.current.amount,
+                projectedTotal: state.progress + state.current.amount,
+                remainingGap: Math.max(0, state.target - state.progress - state.current.amount),
+                collectableBeforeReset: validCompletion, usableItems: estimate.availableRerolls,
+                canRerollNow: result.action === 'reroll', reason};
+        }
+        return {...result, reason};
+    };
 
     const simulate = function (state, config, samples, first, limit, seed) {
         const rng = random(seed);
@@ -271,6 +346,9 @@ define('two/depositPlanner/policy', [], function () {
         if (state.collectible.length) {
             return {...base, action: 'collect', job: state.collectible[0], reason: 'Collect completed resources, then recalculate'};
         }
+        if (config.fixed_yield_rerolls) {
+            return fixedYieldPlan(state, config, base);
+        }
         if (state.current) {
             const prediction = predict();
             const milestone = prediction.bestMilestone;
@@ -300,8 +378,9 @@ define('two/depositPlanner/policy', [], function () {
                                     : !prediction.ready ? prediction.reason
                                         : recommended ? 'An item can prepare the next board now; the current errand remains running'
                                             : 'An early reroll does not meet the forecast confidence, improvement or item-value checks'} : null;
+            const fallbackEstimate = fallbackRerollEstimate(state, config, validCompletion ? state.current.amount : 0);
             return {...base, action: recommended ? 'reroll' : 'wait', forecast: prediction, attainableMilestone,
-                runningPreview, earlyReroll: !!recommended, fallback: !!fallback,
+                runningPreview, fallbackRerollEstimate: fallbackEstimate, earlyReroll: !!recommended, fallback: !!fallback,
                 goalTarget: fallback ? attainableMilestone.target : undefined,
                 reason: recommended ? 'Nothing to do: prepare the next board with an item while the last errand runs'
                     : fallback ? 'An errand is running; plan the highest supported lower milestone after collection'
@@ -310,6 +389,7 @@ define('two/depositPlanner/policy', [], function () {
         const selection = optimize(state.jobs, state.target - state.progress, Math.min(state.errandsReset, state.milestonesReset) - config.deadline_buffer - state.now, config.action_delay);
         const result = {...base, jobs: selection.jobs, reachableProgress: state.progress + selection.reward,
             knownEta: selection.reward >= state.target - state.progress ? state.now + selection.seconds : null};
+        result.fallbackRerollEstimate = fallbackRerollEstimate(state, config, selection.reward);
         if (result.knownEta !== null) {
             return {...result, action: 'start', job: selection.jobs[0], reason: 'Visible errands reach the target before both resets'};
         }
@@ -347,5 +427,5 @@ define('two/depositPlanner/policy', [], function () {
             ? 'Wait for free errands and keep reroll items'
             : prediction.ready ? 'No useful reroll within the item budget; wait for the next reset' : prediction.reason};
     };
-    return {validSettings, invalidSettings, validJob, optimize, forecast, plan, budgetFor, timingEstimate, canRerollRunning};
+    return {validSettings, invalidSettings, validJob, optimize, forecast, plan, budgetFor, fallbackRerollEstimate, timingEstimate, canRerollRunning};
 });

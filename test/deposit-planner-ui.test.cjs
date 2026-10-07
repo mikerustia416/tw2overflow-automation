@@ -81,13 +81,15 @@ test('all invalid fields are reported and automatic mode enforces the same limit
 
 test('new depositor controls persist and minimum item value uses the same numeric validation', () => {
     const f = uiFixture();
-    for (const id of ['confidence_guard', 'learn_action_delay', 'milestone_fallback', 'min_gain_per_item']) {
+    for (const id of ['confidence_guard', 'learn_action_delay', 'milestone_fallback', 'fixed_yield_rerolls', 'min_gain_per_item', 'fallback_minimum_resources']) {
         assert.ok(f.scope.controls.includes(id));
         assert.ok(f.scope.labels[id]);
     }
     assert.equal(f.scope.settings.confidence_guard, true);
     assert.equal(f.scope.settings.learn_action_delay, true);
     assert.equal(f.scope.settings.milestone_fallback, false);
+    assert.equal(f.settings.get('fallback_minimum_resources'), 850);
+    assert.equal(f.settings.get('fixed_yield_rerolls'), true);
     f.scope.settings.milestone_fallback = true;
     f.scope.settings.min_gain_per_item = 500;
     f.scope.save();

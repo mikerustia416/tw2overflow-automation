@@ -8,6 +8,7 @@ function notices() {
     const map = f.get('two/depositPlanner/settings/map');
     const config = Object.fromEntries(Object.entries(map).map(([id, field]) => [id, field.default]));
     config.auto_reroll = true;
+    config.fixed_yield_rerolls = false;
     const state = {now: 1000, progress: 0, target: 500, errandsReset: 5000, milestonesReset: 10000,
         itemCount: 9, itemId: 42, rerollsUsed: 0, jobs: [], collectible: [], current: null};
     const plan = {state, action: 'wait', reason: 'Wait', jobs: [], knownEta: null, forecast: null};
@@ -109,4 +110,15 @@ test('reroll notice explains the actual last-errand decision and lower milestone
     f.plan.knownEta = 2000;
     f.plan.fallback = true;
     assert.match(text(f.notice(f.plan, f.config)), /planned lower milestone/);
+});
+
+test('fixed yield notices ignore historical zero-percent results and learning thresholds', () => {
+    const f = notices();
+    const plan = {...f.plan, fixedYield: true, goalTarget: 500,
+        reason: 'Collect visible rewards first, then recalculate the fixed reroll forecast',
+        forecast: {ready: false, sampleCount: 0, options: []}};
+    const notice = f.notice(plan, {...f.config, fixed_yield_rerolls: true});
+    assert.match(text(notice), /Collect visible rewards first/);
+    assert.doesNotMatch(text(notice), /history|learned|confidence|0%/);
+    assert.equal(notice.level, 'info');
 });

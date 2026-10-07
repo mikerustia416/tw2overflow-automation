@@ -2,7 +2,7 @@
 // @name        TW2Overflow Farmer, Recruiter, Builder, Quest and Deposit Planner
 // @description Automating the boring stuff on Tribal Wars 2 with tools like auto farming, auto builder, command scheduler, minimap and more.
 // @namespace   local/tw2overflow-farming
-// @version     2.1.500.13
+// @version     2.1.500.14
 // @grant       unsafeWindow
 // @run-at      document-start
 // @include     https://*.tribalwars2.com/game.php*
@@ -11,7 +11,7 @@
 
 /*!
  * tw2overflow v2.1.500
- * Wed, 07 Oct 2026 04:01:04 GMT
+ * Wed, 07 Oct 2026 04:12:33 GMT
  * Developed by Relaxeaza <relaxeaza@outlook.com>
  *
  * This work is free. You can redistribute it and/or modify it under the
@@ -12481,7 +12481,7 @@ define('two/depositPlanner', [
                 Lockr.set(KEYS.cycle, cycle);
                 state = {...state, rerollsUsed: cycle.spent};
             }
-            if (state.jobs.length === 6 && !state.current && !state.collectible.length && state.jobs.every(policy.validJob)) {
+            if (!config.fixed_yield_rerolls && state.jobs.length === 6 && !state.current && !state.collectible.length && state.jobs.every(policy.validJob)) {
                 const key = JSON.stringify([adapter.boardKey(state), state.context, state.cycleId, state.errandsReset, boardRevision]);
                 if (!samples.some(sample => sample.key === key)) {
                     samples.push({key, context: state.context, at: state.now,
@@ -12848,7 +12848,9 @@ define('two/depositPlanner/ui', [
         confidence_guard: 'Use cautious forecast bands for automatic rerolls',
         learn_action_delay: 'Learn start/collection overhead from confirmed errands',
         milestone_fallback: 'Plan a lower attainable milestone when the target is unlikely',
+        fixed_yield_rerolls: 'Use fixed resources per reroll (skip history forecasts)',
         min_gain_per_item: 'Minimum extra expected progress per reroll item',
+        fallback_minimum_resources: 'Forecast resources per reroll',
         target: 'Target progress (0 = final milestone)', max_rerolls: 'Maximum rerolls per milestone cycle',
         reserve_items: 'Reroll items to keep', free_refresh_wait: 'Prefer a free refresh within (seconds)',
         deadline_buffer: 'Buffer before reset deadlines (seconds)', action_delay: 'Estimated start/collection overhead per errand (seconds)',
@@ -12867,7 +12869,7 @@ define('two/depositPlanner/ui', [
         };
         events.register('two_deposit_planner_updated', updateButton);
         updateButton();
-        ui.addTemplate('two_deposit_planner_window', `<div id=\"two-deposit-planner\" class=\"win-content two-window\"><header class=\"win-head\"><h2>Deposit Planner</h2><ul class=\"list-btn\"><li><a href=\"#\" class=\"size-34x34 btn-red icon-26x26-close\" ng-click=\"closeWindow()\"></a></ul></header><div class=\"win-main\" scrollbar=\"\"><div class=\"box-paper footer\"><div class=\"scroll-wrap\"><h3>{{ status }}</h3><p>Running and paused state, settings, observed boards and pending actions persist across page reloads. Paused forecasts keep updating without game actions. Start runs planned errands and collects completed rewards. Item rerolls run only when enabled and use inventory items.<div ng-if=\"rerollNotice\" class=\"deposit-reroll-notice\" ng-class=\"'deposit-reroll-' + rerollNotice.level\" role=\"status\" aria-live=\"polite\"><strong>{{ rerollNotice.title }}</strong><ul><li ng-repeat=\"reason in rerollNotice.reasons track by $index\">{{ reason }}</ul></div><div ng-if=\"state\" class=\"deposit-summary\"><p><strong>Progress:</strong> {{ state.progress | number:0 }} / {{ state.target | number:0 }} &mdash; {{ state.target - state.progress > 0 ? state.target - state.progress : 0 | number:0 }} needed<br><strong>Target reward:</strong> {{ reward.reward }} ({{ reward.amount }})<p><strong>Free errands:</strong> {{ until(state.errandsReset) }}<br><strong>Milestone reset:</strong> {{ until(state.milestonesReset) }}<br><strong>Reroll inventory:</strong> {{ state.itemCount }} items; {{ state.rerollsUsed }} reserved/used this milestone cycle</div><h3>Recommended action: {{ plan.action }}</h3><p>{{ plan.reason }}<p ng-if=\"plan.knownEta\">{{ plan.fallback ? 'Fallback milestone collection' : 'Visible target collection' }}: {{ date(plan.knownEta) }} (in {{ until(plan.knownEta) }})<p ng-if=\"plan.fallback\">Temporary milestone: {{ plan.goalTarget | number:0 }}. The saved target remains {{ state.target | number:0 }}; reaching this milestone does not activate target holding.<p ng-if=\"plan.runningPreview\"><strong>Last errand / Nothing to do preview:</strong> {{ plan.runningPreview.collectedTotal | number:0 }} collected + {{ plan.runningPreview.runningReward | number:0 }} running = {{ plan.runningPreview.projectedTotal | number:0 }} projected total after collection. {{ plan.runningPreview.remainingGap | number:0 }} still needed for the saved target. {{ plan.runningPreview.usableItems }} usable items within reserve/cycle limits.<br><strong>Item reroll now: {{ plan.runningPreview.canRerollNow ? 'Ready' : 'Wait' }}.</strong> {{ plan.runningPreview.reason }}. The projected reward is not collected progress.<p ng-if=\"plan.attainableMilestone\">Highest supported next milestone: <strong>{{ plan.attainableMilestone.target | number:0 }}</strong> ({{ plan.attainableMilestone.known ? 'current errand only' : 'modeled future errands' }}). Approximate chance: {{ percent(plan.attainableMilestone.best.lowerProbability) }} &ndash; {{ percent(plan.attainableMilestone.best.upperProbability) }}; expected items to reach it: {{ plan.attainableMilestone.best.meanItems | number:2 }}; collection estimate: {{ date(plan.attainableMilestone.best.eta) }}. Future boards remain unknown; rechecked after collection.<p ng-if=\"plan.timing\">Effective overhead per errand: {{ seconds(plan.timing.effectiveDelay) }}. {{ plan.timing.sampleCount }} matching confirmed errands; learned 90th percentile: {{ seconds(plan.timing.learnedDelay) }} (requires 3 samples).<p ng-if=\"state.current\">Current errand completes: {{ date(state.current.completedAt) }} (in {{ until(state.current.completedAt) }})<p ng-if=\"pending\">Pending {{ pending.action }}: automatic retries are blocked until game confirmation. <a href=\"#\" ng-if=\"!running\" class=\"btn-border btn-orange\" ng-click=\"resolvePending()\">Resolve after checking game</a><table ng-if=\"jobs.length\" class=\"tbl-border-light tbl-content\"><tr><th>Planned errand<th>Resources<th>Duration<th>Collection estimate<tr ng-repeat=\"job in jobs\"><td>{{ job.resource }} #{{ job.id }}<td>{{ job.amount | number:0 }}<td>{{ seconds(job.duration) }}<td>{{ date(job.eta) }}</table><div ng-if=\"plan.forecast\"><h3>Reroll and waiting forecast</h3><p>{{ plan.forecast.sampleCount }} observed boards with matching village and bonuses. {{ plan.forecast.reason }}. Forecasts use the remaining item budget; they do not promise the maximum reward. ETAs below are conditional on reaching the target.<div ng-if=\"plan.forecast.ready\" class=\"deposit-forecast-table\"><table class=\"tbl-border-light tbl-content\"><tr><th>First action<th>Item limit<th>Modeled chance<th>Approximate chance band<th>Expected items<th>Extra progress / item<th>Median target ETA<th>90th percentile ETA<tr ng-repeat=\"option in plan.forecast.options\"><td>{{ option.action }}<td>{{ option.itemLimit }}<td>{{ percent(option.probability) }}<td>{{ percent(option.lowerProbability) }} &ndash; {{ percent(option.upperProbability) }}<td>{{ option.meanItems | number:2 }}<td>{{ option.gainPerItem === null ? \"—\" : (option.gainPerItem | number:0) }}<td>{{ date(option.eta) }}<td>{{ date(option.conservativeEta) }}</table></div></div><p>Dates use {{ localZone }}. Errands selected automatically must finish and be collected before both reset deadlines, including the configured buffer. After reaching the target, the module waits for the next milestone cycle.<h3>Settings</h3><p>While paused, review the forecasts and item budget. Start enables errand starts and collection. Allow automatic item rerolls separately to spend inventory items within your limits. Second Village has its own control.<table class=\"tbl-border-light tbl-content tbl-medium-height\"><tr ng-repeat=\"id in controls\" ng-switch=\"map[id].inputType\"><td>{{ labels[id] }}<td ng-switch-when=\"checkbox\"><div switch-slider=\"\" enabled=\"true\" border=\"true\" value=\"settings[id]\" vertical=\"false\" size=\"'56x28'\"></div><td ng-switch-when=\"number\"><input type=\"number\" class=\"fit textfield-border\" ng-model=\"settings[id]\" aria-label=\"{{ labels[id] }}\" ng-change=\"clearSettingError(id)\" ng-class=\"{'setting-invalid': settingErrors[id]}\" min=\"{{ map[id].min }}\" max=\"{{ map[id].max }}\" step=\"1\"><span class=\"setting-range\">{{ map[id].min }} &ndash; {{ map[id].max }}</span><span ng-if=\"settingErrors[id]\" class=\"setting-error\" role=\"alert\">{{ settingErrors[id] }}</span></table></div></div></div><footer class=\"win-foot\"><ul class=\"list-btn list-center\"><li><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"refresh()\">Refresh forecast</a><li><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"save()\">Save</a><li><a href=\"#\" class=\"btn-border\" ng-class=\"running ? 'btn-red' : 'btn-green'\" ng-click=\"toggle()\">{{ running ? 'Pause' : 'Start' }}</a></ul></footer></div>`);
+        ui.addTemplate('two_deposit_planner_window', `<div id=\"two-deposit-planner\" class=\"win-content two-window\"><header class=\"win-head\"><h2>Deposit Planner</h2><ul class=\"list-btn\"><li><a href=\"#\" class=\"size-34x34 btn-red icon-26x26-close\" ng-click=\"closeWindow()\"></a></ul></header><div class=\"win-main\" scrollbar=\"\"><div class=\"box-paper footer\"><div class=\"scroll-wrap\"><h3>{{ status }}</h3><p>Running and paused state, settings, observed boards and pending actions persist across page reloads. Paused forecasts keep updating without game actions. Start runs planned errands and collects completed rewards. Item rerolls run only when enabled and use inventory items.<div ng-if=\"rerollNotice\" class=\"deposit-reroll-notice\" ng-class=\"'deposit-reroll-' + rerollNotice.level\" role=\"status\" aria-live=\"polite\"><strong>{{ rerollNotice.title }}</strong><ul><li ng-repeat=\"reason in rerollNotice.reasons track by $index\">{{ reason }}</ul></div><div ng-if=\"state\" class=\"deposit-summary\"><p><strong>Progress:</strong> {{ state.progress | number:0 }} / {{ state.target | number:0 }} &mdash; {{ state.target - state.progress > 0 ? state.target - state.progress : 0 | number:0 }} needed<br><strong>Target reward:</strong> {{ reward.reward }} ({{ reward.amount }})<p><strong>Free errands:</strong> {{ until(state.errandsReset) }}<br><strong>Milestone reset:</strong> {{ until(state.milestonesReset) }}<br><strong>Reroll inventory:</strong> {{ state.itemCount }} items; {{ state.rerollsUsed }} reserved/used this milestone cycle</div><h3>Recommended action: {{ plan.action }}</h3><p>{{ plan.reason }}<p ng-if=\"plan.knownEta\">{{ plan.fallback ? 'Fallback milestone collection' : 'Visible target collection' }}: {{ date(plan.knownEta) }} (in {{ until(plan.knownEta) }})<p ng-if=\"plan.fallback\">Temporary milestone: {{ plan.goalTarget | number:0 }}. The saved target remains {{ state.target | number:0 }}; reaching this milestone does not activate target holding.<p ng-if=\"plan.runningPreview\"><strong>Last errand / Nothing to do preview:</strong> {{ plan.runningPreview.collectedTotal | number:0 }} collected + {{ plan.runningPreview.runningReward | number:0 }} running = {{ plan.runningPreview.projectedTotal | number:0 }} projected total after collection. {{ plan.runningPreview.remainingGap | number:0 }} still needed for the saved target. {{ plan.runningPreview.usableItems }} usable items within reserve/cycle limits.<br><strong>Item reroll now: {{ plan.runningPreview.canRerollNow ? 'Ready' : 'Wait' }}.</strong> {{ plan.runningPreview.reason }}. The projected reward is not collected progress.<div ng-if=\"plan.fallbackRerollEstimate\" class=\"deposit-reroll-notice deposit-reroll-info\"><strong>Reroll resource forecast</strong><p>{{ state.progress | number:0 }} collected + {{ plan.fallbackRerollEstimate.baseline | number:0 }} visible/running + {{ plan.fallbackRerollEstimate.availableRerolls }} usable rerolls &times; {{ plan.fallbackRerollEstimate.resourcesPerReroll | number:0 }} forecast resources = <strong>{{ plan.fallbackRerollEstimate.projectedProgress | number:0 }} projected total</strong>.<p ng-if=\"plan.fallbackRerollEstimate.nextMilestone\">Next milestone {{ plan.fallbackRerollEstimate.nextMilestone.target | number:0 }}: {{ plan.fallbackRerollEstimate.nextMilestoneReachable ? 'within the resource forecast' : 'outside the resource forecast' }}. Target {{ state.target | number:0 }}: {{ plan.fallbackRerollEstimate.targetReachable ? 'within the resource forecast' : 'outside the resource forecast' }}.<p ng-if=\"plan.fixedYield\">Fixed yield mode skips history and percentage checks. {{ plan.goalTarget !== undefined ? 'Planned milestone: ' + plan.goalTarget + '; estimated rerolls needed: ' + plan.fallbackRerollEstimate.rerollsNeeded + '.' : 'No target or enabled lower milestone fits this resource forecast.' }}<p>The per-reroll value is an estimate. New boards determine actual rewards and collection time. Recalculated after every confirmed action.</div><p ng-if=\"plan.attainableMilestone\">Highest supported next milestone: <strong>{{ plan.attainableMilestone.target | number:0 }}</strong> ({{ plan.attainableMilestone.known ? 'current errand only' : 'modeled future errands' }}). Approximate chance: {{ percent(plan.attainableMilestone.best.lowerProbability) }} &ndash; {{ percent(plan.attainableMilestone.best.upperProbability) }}; expected items to reach it: {{ plan.attainableMilestone.best.meanItems | number:2 }}; collection estimate: {{ date(plan.attainableMilestone.best.eta) }}. Future boards remain unknown; rechecked after collection.<p ng-if=\"plan.timing\">Effective overhead per errand: {{ seconds(plan.timing.effectiveDelay) }}. {{ plan.timing.sampleCount }} matching confirmed errands; learned 90th percentile: {{ seconds(plan.timing.learnedDelay) }} (requires 3 samples).<p ng-if=\"state.current\">Current errand completes: {{ date(state.current.completedAt) }} (in {{ until(state.current.completedAt) }})<p ng-if=\"pending\">Pending {{ pending.action }}: automatic retries are blocked until game confirmation. <a href=\"#\" ng-if=\"!running\" class=\"btn-border btn-orange\" ng-click=\"resolvePending()\">Resolve after checking game</a><table ng-if=\"jobs.length\" class=\"tbl-border-light tbl-content\"><tr><th>Planned errand<th>Resources<th>Duration<th>Collection estimate<tr ng-repeat=\"job in jobs\"><td>{{ job.resource }} #{{ job.id }}<td>{{ job.amount | number:0 }}<td>{{ seconds(job.duration) }}<td>{{ date(job.eta) }}</table><div ng-if=\"plan.forecast\"><h3>Reroll and waiting forecast</h3><p>{{ plan.forecast.sampleCount }} observed boards with matching village and bonuses. {{ plan.forecast.reason }}. Forecasts use the remaining item budget; they do not promise the maximum reward. ETAs below are conditional on reaching the target.<div ng-if=\"plan.forecast.ready\" class=\"deposit-forecast-table\"><table class=\"tbl-border-light tbl-content\"><tr><th>First action<th>Item limit<th>Modeled chance<th>Approximate chance band<th>Expected items<th>Extra progress / item<th>Median target ETA<th>90th percentile ETA<tr ng-repeat=\"option in plan.forecast.options\"><td>{{ option.action }}<td>{{ option.itemLimit }}<td>{{ percent(option.probability) }}<td>{{ percent(option.lowerProbability) }} &ndash; {{ percent(option.upperProbability) }}<td>{{ option.meanItems | number:2 }}<td>{{ option.gainPerItem === null ? \"—\" : (option.gainPerItem | number:0) }}<td>{{ date(option.eta) }}<td>{{ date(option.conservativeEta) }}</table></div></div><p>Dates use {{ localZone }}. Errands selected automatically must finish and be collected before both reset deadlines, including the configured buffer. After reaching the target, the module waits for the next milestone cycle.<h3>Settings</h3><p>While paused, review the forecasts and item budget. Start enables errand starts and collection. Allow automatic item rerolls separately to spend inventory items within your limits. Second Village has its own control.<table class=\"tbl-border-light tbl-content tbl-medium-height\"><tr ng-repeat=\"id in controls\" ng-switch=\"map[id].inputType\"><td>{{ labels[id] }}<td ng-switch-when=\"checkbox\"><div switch-slider=\"\" enabled=\"true\" border=\"true\" value=\"settings[id]\" vertical=\"false\" size=\"'56x28'\"></div><td ng-switch-when=\"number\"><input type=\"number\" class=\"fit textfield-border\" ng-model=\"settings[id]\" aria-label=\"{{ labels[id] }}\" ng-change=\"clearSettingError(id)\" ng-class=\"{'setting-invalid': settingErrors[id]}\" min=\"{{ map[id].min }}\" max=\"{{ map[id].max }}\" step=\"1\"><span class=\"setting-range\">{{ map[id].min }} &ndash; {{ map[id].max }}</span><span ng-if=\"settingErrors[id]\" class=\"setting-error\" role=\"alert\">{{ settingErrors[id] }}</span></table></div></div></div><footer class=\"win-foot\"><ul class=\"list-btn list-center\"><li><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"refresh()\">Refresh forecast</a><li><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"save()\">Save</a><li><a href=\"#\" class=\"btn-border\" ng-class=\"running ? 'btn-red' : 'btn-green'\" ng-click=\"toggle()\">{{ running ? 'Pause' : 'Start' }}</a></ul></footer></div>`);
         ui.addStyle('#two-deposit-planner .scroll-wrap{padding:12px}#two-deposit-planner p{margin:10px 0;line-height:1.5}#two-deposit-planner h3{margin-top:16px}#two-deposit-planner .deposit-reroll-notice{padding:10px 12px;margin:12px 0;border:1px solid;border-left-width:4px;border-radius:3px}#two-deposit-planner .deposit-reroll-notice ul{margin:6px 0 0;padding-left:20px;list-style:disc}#two-deposit-planner .deposit-reroll-notice li{margin:4px 0;line-height:1.5}#two-deposit-planner .deposit-reroll-info{color:#234a60;background:#eaf3f8;border-color:#6b9eb9}#two-deposit-planner .deposit-reroll-warning{color:#62400c;background:#fff2cd;border-color:#be8d29}#two-deposit-planner .deposit-summary{border-bottom:1px solid #bca475}#two-deposit-planner .setting-range{display:block;font-size:11px}#two-deposit-planner .setting-error{display:block;margin-top:4px;color:#8f2626}#two-deposit-planner .setting-invalid{border-color:#8f2626}#two-deposit-planner .deposit-forecast-table{overflow-x:auto}#two-deposit-planner .deposit-forecast-table table{min-width:850px}#two-deposit-planner td{padding:5px}');
         button.addEventListener('click', function () {
             const scope = $rootScope.$new();
@@ -13048,6 +13050,10 @@ define('two/depositPlanner/rerollNotice', ['two/depositPlanner/policy'], functio
             }
             return result();
         }
+        if (plan.fixedYield) {
+            add(plan.reason, plan.goalTarget === undefined && !!(plan.fallbackRerollEstimate && plan.fallbackRerollEstimate.availableRerolls));
+            return result();
+        }
         const forecast = plan.forecast;
         if (forecast && !forecast.ready) {
             add('Only ' + forecast.sampleCount + '/' + config.min_samples + ' matching complete boards are learned. There is not enough history to assess an item reroll.', true);
@@ -13169,10 +13175,85 @@ define('two/depositPlanner/policy', [], function () {
     const budgetFor = (state, config) => Math.max(0, Math.min(config.max_rerolls - state.rerollsUsed,
         state.itemCount - config.reserve_items));
 
+    const fallbackRerollEstimate = function (state, config, baseline = 0) {
+        const milestones = (state.milestones || []).filter(item => !item.achieved && Number.isFinite(item.target)
+            && item.target > state.progress).sort((a, b) => a.target - b.target);
+        const availableRerolls = state.itemId ? budgetFor(state, config) : 0;
+        const resourcesPerReroll = Math.max(0, config.fallback_minimum_resources || 0);
+        const rerollProgress = availableRerolls * resourcesPerReroll;
+        const projectedProgress = state.progress + Math.max(0, baseline) + rerollProgress;
+        const reachable = milestones.filter(item => item.target <= projectedProgress);
+        const nextMilestone = milestones[0] || null;
+        return {
+            baseline: Math.max(0, baseline), availableRerolls, resourcesPerReroll,
+            rerollProgress, projectedProgress, nextMilestone,
+            highestReachable: reachable.length ? reachable[reachable.length - 1] : null,
+            nextMilestoneReachable: !!nextMilestone && projectedProgress >= nextMilestone.target,
+            targetReachable: projectedProgress >= state.target,
+            automaticEnabled: config.auto_reroll, resourceOnly: true
+        };
+    };
+
     const canRerollRunning = (state, config) => !!(state.runningRerollAllowed && state.current && validJob(state.current)
         && state.current.completedAt > state.now && !state.jobs.length && !state.collectible.length
         && state.current.completedAt + config.action_delay <= Math.min(state.errandsReset, state.milestonesReset) - config.deadline_buffer
         && state.progress + state.current.amount < state.target && config.auto_reroll && budgetFor(state, config) > 0 && state.itemId);
+
+    const fixedYieldPlan = function (state, config, base) {
+        const deadline = Math.min(state.errandsReset, state.milestonesReset) - config.deadline_buffer;
+        const completion = state.current ? state.current.completedAt + config.action_delay : state.now;
+        const validCompletion = !state.current || validJob(state.current) && completion <= deadline;
+        const runningReward = state.current && validCompletion ? state.current.amount : 0;
+        const selection = optimize(state.jobs, Math.max(0, state.target - state.progress - runningReward), deadline - Math.max(state.now, completion), config.action_delay);
+        const estimate = fallbackRerollEstimate(state, config, runningReward + selection.reward);
+        const lower = (state.milestones || []).filter(item => !item.achieved && item.target > state.progress
+            && item.target <= Math.min(state.target, estimate.projectedProgress)).sort((a, b) => b.target - a.target)[0];
+        const goal = estimate.targetReachable ? state.target : config.milestone_fallback && lower ? lower.target : undefined;
+        const needed = goal === undefined ? null : Math.ceil(Math.max(0, goal - state.progress - estimate.baseline) / estimate.resourcesPerReroll);
+        const result = {...base, fixedYield: true, jobs: selection.jobs, fallbackRerollEstimate: {...estimate, rerollsNeeded: needed},
+            goalTarget: goal, fallback: goal !== undefined && goal < state.target};
+        let reason;
+        if (!validCompletion) {
+            reason = 'The running reward cannot be safely collected before both reset buffers';
+        } else if (needed === 0) {
+            reason = 'Visible or running errands cover the planned milestone; keep reroll items';
+        } else if (selection.jobs.length && !state.current) {
+            return {...result, action: 'start', job: selection.jobs[0],
+                knownEta: needed === 0 ? state.now + selection.seconds : null,
+                reason: 'Collect visible rewards first, then recalculate the fixed reroll forecast'};
+        } else if (state.now + config.action_delay >= deadline) {
+            reason = 'Reset buffer reached; wait for the new cycle';
+        } else if (!config.auto_reroll) {
+            reason = 'Automatic item rerolls are disabled';
+        } else if (estimate.availableRerolls < 1) {
+            reason = 'No items available within the reserve and cycle limit';
+        } else if (goal === undefined) {
+            reason = 'The fixed reroll forecast cannot reach the target or an enabled lower milestone';
+        } else if (estimate.resourcesPerReroll < config.min_gain_per_item) {
+            reason = 'The fixed resources per reroll are below the configured item-value minimum';
+        } else if (state.current && !canRerollRunning(state, config)) {
+            reason = 'Wait for the current errand; early reroll requires an empty board and enabled game capability';
+        } else if (!state.current && state.errandsReset - state.now <= config.free_refresh_wait) {
+            reason = 'Wait for free errands and keep reroll items';
+        } else {
+            reason = 'Fixed forecast of ' + estimate.resourcesPerReroll + ' resources per reroll supports the planned milestone; reroll once and recalculate';
+            result.action = 'reroll';
+            result.earlyReroll = !!state.current;
+        }
+        // Never discard useful visible errands just because no new board is needed.
+        if (!state.current && selection.jobs.length) {
+            return {...result, action: 'start', job: selection.jobs[0],
+                knownEta: needed === 0 ? state.now + selection.seconds : null, reason};
+        }
+        if (state.current && !state.jobs.length && !state.collectible.length && state.current.completedAt > state.now) {
+            result.runningPreview = {collectedTotal: state.progress, runningReward: state.current.amount,
+                projectedTotal: state.progress + state.current.amount,
+                remainingGap: Math.max(0, state.target - state.progress - state.current.amount),
+                collectableBeforeReset: validCompletion, usableItems: estimate.availableRerolls,
+                canRerollNow: result.action === 'reroll', reason};
+        }
+        return {...result, reason};
+    };
 
     const simulate = function (state, config, samples, first, limit, seed) {
         const rng = random(seed);
@@ -13353,6 +13434,9 @@ define('two/depositPlanner/policy', [], function () {
         if (state.collectible.length) {
             return {...base, action: 'collect', job: state.collectible[0], reason: 'Collect completed resources, then recalculate'};
         }
+        if (config.fixed_yield_rerolls) {
+            return fixedYieldPlan(state, config, base);
+        }
         if (state.current) {
             const prediction = predict();
             const milestone = prediction.bestMilestone;
@@ -13382,8 +13466,9 @@ define('two/depositPlanner/policy', [], function () {
                                     : !prediction.ready ? prediction.reason
                                         : recommended ? 'An item can prepare the next board now; the current errand remains running'
                                             : 'An early reroll does not meet the forecast confidence, improvement or item-value checks'} : null;
+            const fallbackEstimate = fallbackRerollEstimate(state, config, validCompletion ? state.current.amount : 0);
             return {...base, action: recommended ? 'reroll' : 'wait', forecast: prediction, attainableMilestone,
-                runningPreview, earlyReroll: !!recommended, fallback: !!fallback,
+                runningPreview, fallbackRerollEstimate: fallbackEstimate, earlyReroll: !!recommended, fallback: !!fallback,
                 goalTarget: fallback ? attainableMilestone.target : undefined,
                 reason: recommended ? 'Nothing to do: prepare the next board with an item while the last errand runs'
                     : fallback ? 'An errand is running; plan the highest supported lower milestone after collection'
@@ -13392,6 +13477,7 @@ define('two/depositPlanner/policy', [], function () {
         const selection = optimize(state.jobs, state.target - state.progress, Math.min(state.errandsReset, state.milestonesReset) - config.deadline_buffer - state.now, config.action_delay);
         const result = {...base, jobs: selection.jobs, reachableProgress: state.progress + selection.reward,
             knownEta: selection.reward >= state.target - state.progress ? state.now + selection.seconds : null};
+        result.fallbackRerollEstimate = fallbackRerollEstimate(state, config, selection.reward);
         if (result.knownEta !== null) {
             return {...result, action: 'start', job: selection.jobs[0], reason: 'Visible errands reach the target before both resets'};
         }
@@ -13429,7 +13515,7 @@ define('two/depositPlanner/policy', [], function () {
             ? 'Wait for free errands and keep reroll items'
             : prediction.ready ? 'No useful reroll within the item budget; wait for the next reset' : prediction.reason};
     };
-    return {validSettings, invalidSettings, validJob, optimize, forecast, plan, budgetFor, timingEstimate, canRerollRunning};
+    return {validSettings, invalidSettings, validJob, optimize, forecast, plan, budgetFor, fallbackRerollEstimate, timingEstimate, canRerollRunning};
 });
 
 define('two/depositPlanner/settings/map', [], function () {
@@ -13440,7 +13526,9 @@ define('two/depositPlanner/settings/map', [], function () {
         confidence_guard: checkbox(true),
         learn_action_delay: checkbox(true),
         milestone_fallback: checkbox(false),
+        fixed_yield_rerolls: checkbox(true),
         min_gain_per_item: number(0, 0, 1000000),
+        fallback_minimum_resources: number(850, 1, 1000000),
         target: number(0, 0, 1000000),
         max_rerolls: number(3, 0, 20),
         reserve_items: number(1, 0, 10000),
