@@ -52,7 +52,7 @@
                                 <td><span class="ff-cell-fix">{{ 'settings_village_groups' | i18n:loc.ale:'builder_queue' }}</span></td>
                                 <td colspan="2" class="text-right"><div select="" list="groups" selected="settings[SETTINGS.GROUP_VILLAGES]" drop-down="true"></div></td>
                             </tr>
-                            <tr><td colspan="2">Follow village role label</td><td class="text-center"><input type="checkbox" ng-model="settings[SETTINGS.AUTO_SEQUENCE]" ng-change="followVillageLabels()"></td></tr>
+                            <tr><td colspan="2">Follow village label names</td><td class="text-center"><input type="checkbox" ng-model="settings[SETTINGS.AUTO_SEQUENCE]" ng-change="followVillageLabels()"></td></tr>
                             <tr ng-show="settingsView.sequencesAvail">
                                 <td><span class="ff-cell-fix">{{ 'settings_building_sequence' | i18n:loc.ale:'builder_queue' }}</span></td>
                                 <td colspan="2" class="text-right"><div select="" list="sequences" selected="settings[SETTINGS.ACTIVE_SEQUENCE]" drop-down="true"></div></td>
@@ -88,8 +88,8 @@
                     </table>
                     <p>Dynamic upgrades stay within sequence targets. Necessary farm or storage repairs may exceed the delay limit. Other detours require known production and queue timing; resource upgrades never assume an unconfirmed production gain.</p>
 
-                    <h5 class="twx-section">Village role labels</h5>
-                    <p>Offensive, Defensive and Resource labels select their matching presets. When labels overlap, the first matching mapping below wins; otherwise Offensive, Defensive, then Resource. Choosing a sequence manually turns label selection off for this village.</p>
+                    <h5 class="twx-section">Village labels</h5>
+                    <p>Any village label that matches a saved sequence name selects that sequence, ignoring case and surrounding spaces. The first matching mapping below wins; otherwise Offensive, Defensive, Resource, then other matching names alphabetically. Choosing a sequence manually turns automatic label selection off for this village. When labels are renamed or added, a matching sequence is offered in a confirmation dialog; Keep current retains the current sequence. Confirming saves a manual choice for that village. The same unchanged labels will not ask again.</p>
                     <table class="tbl-border-light tbl-striped">
                         <tr ng-repeat="mapping in settings[SETTINGS.LABEL_MAPPINGS] track by $index">
                             <td><select class="textfield-border" ng-model="mapping.group_id" ng-options="group.id as group.name for group in labelGroups"></select></td>
@@ -198,6 +198,7 @@
 
                 <div ng-show="selectedTab === TAB_TYPES.SEQUENCES">
                     <h5 class="twx-section">{{ 'sequences_edit_sequence' | i18n:loc.ale:'builder_queue' }}</h5>
+                    <p>Sequences are saved in this browser and shared across your villages. Create a named sequence, add and reorder buildings, then save. Use a village label with the same name and enable Follow village label names to select it automatically.</p>
 
                     <p ng-show="!editorView.sequencesAvail" class="text-center">
                         <a class="btn btn-orange create-sequence" ng-click="createSequence()">{{ 'create_sequence' | i18n:loc.ale:'builder_queue' }}</a>
@@ -216,6 +217,8 @@
                             </tr>
                         </tbody>
                     </table>
+
+                    <p ng-if="editorView.sequencesAvail"><a class="btn btn-border btn-orange" ng-click="editorView.modal.nameSequence(true)">Save as new sequence</a></p>
 
                     <div ng-if="editorView.sequencesAvail">
                         <div class="page-wrap" pagination="pagination.buildingSequenceEditor"></div>

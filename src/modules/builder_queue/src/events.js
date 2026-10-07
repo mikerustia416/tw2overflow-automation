@@ -9,6 +9,7 @@ define('two/builderQueue/events', [], function () {
         BUILDER_QUEUE_BUILDING_SEQUENCES_ADDED: 'builder_queue_building_orders_added',
         BUILDER_QUEUE_BUILDING_SEQUENCES_REMOVED: 'builder_queue_building_orders_removed',
         BUILDER_QUEUE_SETTINGS_CHANGE: 'builder_queue_settings_change',
+        BUILDER_QUEUE_LABEL_SUGGESTIONS_CHANGED: 'builder_queue_label_suggestions_changed',
         BUILDER_QUEUE_NO_SEQUENCES: 'builder_queue_no_sequences',
         COMMAND_QUEUE_ADD_INVALID_OFFICER: 'command_queue_add_invalid_officer',
         COMMAND_QUEUE_ADD_RELOCATE_DISABLED: 'command_queue_add_relocate_disabled'

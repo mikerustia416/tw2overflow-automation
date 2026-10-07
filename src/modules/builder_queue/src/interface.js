@@ -50,6 +50,7 @@ define('two/builderQueue/ui', [
     let unsavedChanges = false;
     let oldCloseWindow;
     let ignoreInputChange = false;
+    let sequencePrompt;
 
     // TODO: make it shared with other modules
     const loadVillageInfo = function (villageId) {
@@ -551,21 +552,28 @@ define('two/builderQueue/ui', [
         windowManagerService.getModal('!twoverflow_builder_queue_add_building_modal', modalScope);
     };
 
-    editorView.modal.nameSequence = function () {
+    editorView.modal.nameSequence = function (saveDraft = false) {
         const nameSequence = function () {
             const modalScope = $rootScope.$new();
-            const selectedSequenceName = editorView.selectedSequence.name;
-            const selectedSequence = $scope.settings[SETTINGS.BUILDING_SEQUENCES][selectedSequenceName];
+            const selectedSequenceName = editorView.selectedSequence.value;
+            const selectedSequence = saveDraft ? parseBuildingSequence(editorView.buildingSequence)
+                : settings.get(SETTINGS.BUILDING_SEQUENCES)[selectedSequenceName];
             
             modalScope.name = selectedSequenceName;
 
             modalScope.submit = function () {
+                modalScope.name = (modalScope.name || '').trim();
                 if (modalScope.name.length < 3) {
                     utils.notif('error', $filter('i18n')('name_sequence_min_lenght', $rootScope.loc.ale, 'builder_queue'));
                     return false;
                 }
 
                 if (createBuildingSequence(modalScope.name, selectedSequence)) {
+                    if (saveDraft) {
+                        unsavedChanges = false;
+                        editorView.selectedSequence = {name: modalScope.name, value: modalScope.name};
+                        editorView.generateBuildingSequence();
+                    }
                     modalScope.closeWindow();
                 }
             };
@@ -573,7 +581,7 @@ define('two/builderQueue/ui', [
             windowManagerService.getModal('!twoverflow_builder_queue_name_sequence_modal', modalScope);
         };
 
-        if (unsavedChanges) {
+        if (unsavedChanges && !saveDraft) {
             const modalScope = $rootScope.$new();
             modalScope.title = $filter('i18n')('clone_warn_changed_sequence_title', $rootScope.loc.ale, 'builder_queue');
             modalScope.text = $filter('i18n')('clone_warn_changed_sequence_text', $rootScope.loc.ale, 'builder_queue');
@@ -620,18 +628,16 @@ define('two/builderQueue/ui', [
         modalScope.name = '';
         
         modalScope.submit = function () {
+            modalScope.name = (modalScope.name || '').trim();
             if (modalScope.name.length < 3) {
                 utils.notif('error', $filter('i18n')('name_sequence_min_lenght', $rootScope.loc.ale, 'builder_queue'));
                 return false;
             }
 
             if (createBuildingSequence(modalScope.name, initialSequence)) {
-                $scope.settings[SETTINGS.ACTIVE_SEQUENCE] = {name: modalScope.name, value: modalScope.name};
-                $scope.settings[SETTINGS.BUILDING_SEQUENCES][modalScope.name] = initialSequence;
-
-                saveSettings();
-
-                settingsView.selectedSequence = {name: modalScope.name, value: modalScope.name};
+                // Creating a shared sequence must not save unrelated village drafts
+                // or turn off automatic label selection.
+                unsavedChanges = false;
                 editorView.selectedSequence = {name: modalScope.name, value: modalScope.name};
 
                 settingsView.generateSequences();
@@ -733,9 +739,7 @@ define('two/builderQueue/ui', [
             const sequences = settings.get(SETTINGS.BUILDING_SEQUENCES);
             $scope.settings[SETTINGS.BUILDING_SEQUENCES][sequenceId] = sequences[sequenceId];
 
-            if ($scope.settings[SETTINGS.ACTIVE_SEQUENCE].value === sequenceId) {
-                settingsView.generateSequences();
-            }
+            settingsView.generateSequences();
 
             utils.notif('success', $filter('i18n')('sequence_updated', $rootScope.loc.ale, 'builder_queue', sequenceId));
         },
@@ -743,6 +747,7 @@ define('two/builderQueue/ui', [
             const sequences = settings.get(SETTINGS.BUILDING_SEQUENCES);
             $scope.settings[SETTINGS.BUILDING_SEQUENCES][sequenceId] = sequences[sequenceId];
             eventHandlers.updateSequences();
+            settingsView.generateSequences();
             utils.notif('success', $filter('i18n')('sequence_created', $rootScope.loc.ale, 'builder_queue', sequenceId));
         },
         buildingSequenceRemoved: function (event, sequenceId) {
@@ -752,6 +757,7 @@ define('two/builderQueue/ui', [
             editorView.selectedSequence = {name: substituteSequence, value: substituteSequence};
             eventHandlers.updateSequences();
             editorView.generateBuildingSequence();
+            settingsView.generateSequences();
 
             if (settings.get(SETTINGS.ACTIVE_SEQUENCE) === sequenceId) {
                 settings.set(SETTINGS.ACTIVE_SEQUENCE, substituteSequence, {
@@ -771,6 +777,55 @@ define('two/builderQueue/ui', [
         stopped: function () {
             $scope.running = false;
         }
+    };
+
+    const showSequenceSuggestion = function () {
+        const suggestions = builderQueue.getSequenceSuggestions();
+        if (sequencePrompt) {
+            if (suggestions.some(item => item.token === sequencePrompt.suggestion.token && item.villageId === sequencePrompt.suggestion.villageId)) {
+                return;
+            }
+            sequencePrompt.close();
+            sequencePrompt = null;
+        }
+        const suggestion = suggestions[0];
+        if (!suggestion) {
+            return;
+        }
+        const modalScope = $rootScope.$new();
+        const escape = value => String(value).replace(/[&<>"']/g, character => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;'
+        })[character]);
+        modalScope.title = 'Use matching building sequence?';
+        modalScope.text = escape(suggestion.villageName) + ' now has the label “' + escape(suggestion.labelName)
+            + '”, which matches the building sequence “' + escape(suggestion.sequence) + '”. Use it instead of “'
+            + escape(suggestion.currentSequence) + '” for this village?';
+        modalScope.submitText = 'Use sequence';
+        modalScope.cancelText = 'Keep current';
+        const prompt = {suggestion, close: noop};
+        sequencePrompt = prompt;
+        const answer = function (useSequence) {
+            if (sequencePrompt !== prompt) {
+                return;
+            }
+            prompt.close();
+            sequencePrompt = null;
+            const applied = builderQueue.answerSequenceSuggestion(suggestion.villageId, suggestion.token, useSequence);
+            if ($scope && $scope.settings && String($scope.profileVillage) === suggestion.villageId) {
+                if (applied && useSequence) {
+                    $scope.settings[SETTINGS.ACTIVE_SEQUENCE] = {name: suggestion.sequence, value: suggestion.sequence};
+                    $scope.settings[SETTINGS.AUTO_SEQUENCE] = false;
+                    $scope.settings[SETTINGS.MANUAL_OVERRIDE] = true;
+                }
+                settingsView.generateSequences();
+            }
+        };
+        modalScope.submit = () => answer(true);
+        modalScope.cancel = () => answer(false);
+        windowManagerService.getModal('modal_attention', modalScope);
+        prompt.close = modalScope.closeWindow.bind(modalScope);
+        // Closing via the X button is also a decision to keep the current sequence.
+        modalScope.closeWindow = modalScope.cancel;
     };
 
     const init = function () {
@@ -799,6 +854,8 @@ define('two/builderQueue/ui', [
         interfaceOverflow.addTemplate('twoverflow_builder_queue_add_building_modal', `___builder_queue_html_modal-add-building`);
         interfaceOverflow.addTemplate('twoverflow_builder_queue_name_sequence_modal', `___builder_queue_html_modal-name-sequence`);
         interfaceOverflow.addStyle('___builder_queue_css_style');
+        eventQueue.register(eventTypeProvider.BUILDER_QUEUE_LABEL_SUGGESTIONS_CHANGED, showSequenceSuggestion);
+        showSequenceSuggestion();
     };
 
     const buildWindow = function () {

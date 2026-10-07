@@ -2,7 +2,7 @@
 // @name        TW2Overflow Farmer, Recruiter, Builder, Quest and Deposit Planner
 // @description Automating the boring stuff on Tribal Wars 2 with tools like auto farming, auto builder, command scheduler, minimap and more.
 // @namespace   local/tw2overflow-farming
-// @version     2.1.500.14
+// @version     2.1.500.15
 // @grant       unsafeWindow
 // @run-at      document-start
 // @include     https://*.tribalwars2.com/game.php*
@@ -11,7 +11,7 @@
 
 /*!
  * tw2overflow v2.1.500
- * Wed, 07 Oct 2026 04:12:33 GMT
+ * Wed, 07 Oct 2026 05:05:04 GMT
  * Developed by Relaxeaza <relaxeaza@outlook.com>
  *
  * This work is free. You can redistribute it and/or modify it under the
@@ -8668,6 +8668,7 @@ define('two/builderQueue', [
     let localSettings;
     const SHARED_SETTINGS = [SETTINGS.GROUP_VILLAGES, SETTINGS.BUILDING_SEQUENCES, SETTINGS.LABEL_MAPPINGS];
     const resourceDetours = new Map();
+    let labelChoices = {};
     const villageConfig = function (villageId) {
         const config = villageSettings(settings, villageId, SHARED_SETTINGS).getAll();
         const profile = localSettings[SETTINGS.VILLAGE_PROFILES] && localSettings[SETTINGS.VILLAGE_PROFILES][villageId];
@@ -8678,7 +8679,21 @@ define('two/builderQueue', [
         }
         return config;
     };
-    const resolveSequence = (config, villageId) => labelPolicy.resolve(config, villageId, groupList, config[SETTINGS.BUILDING_SEQUENCES]);
+    const selectionStamp = config => JSON.stringify([
+        config[SETTINGS.ACTIVE_SEQUENCE],
+        config[SETTINGS.AUTO_SEQUENCE],
+        config[SETTINGS.MANUAL_OVERRIDE],
+        config[SETTINGS.LABEL_MAPPINGS]
+    ]);
+    const resolveSequence = function (config, villageId) {
+        const choice = labelChoices[villageId];
+        const library = config[SETTINGS.BUILDING_SEQUENCES];
+        if (config[SETTINGS.AUTO_SEQUENCE] !== false && config[SETTINGS.MANUAL_OVERRIDE] !== true
+            && choice && choice.freeze && choice.stamp === selectionStamp(config) && choice.current) {
+            return {...choice.current, source: 'confirmed', groupId: null};
+        }
+        return labelPolicy.resolve(config, villageId, groupList, library);
+    };
     const villageHasSequence = villageId => {
         const config = villageConfig(villageId);
         return config[SETTINGS.ENABLED] && Array.isArray(config[SETTINGS.BUILDING_SEQUENCES][resolveSequence(config, villageId).sequence]);
@@ -8691,7 +8706,74 @@ define('two/builderQueue', [
         LOGS: 'builder_queue_log',
         SETTINGS: 'builder_queue_settings',
         DETOURS: 'builder_queue_resource_detours',
-        PRESETS_VERSION: 'builder_queue_role_presets_version'
+        PRESETS_VERSION: 'builder_queue_role_presets_version',
+        LABEL_CHOICES: 'builder_queue_label_choices'
+    };
+
+    const saveLabelChoices = () => Lockr.set(STORAGE_KEYS.LABEL_CHOICES, labelChoices);
+    const labelKey = group => JSON.stringify([String(group.id), labelPolicy.normalizeName(group.name)]);
+    const notifyLabelSuggestions = () => eventQueue.trigger(eventTypeProvider.BUILDER_QUEUE_LABEL_SUGGESTIONS_CHANGED);
+
+    const refreshLabelChoices = function () {
+        for (const villageId of Object.keys($player.getVillages())) {
+            const linked = labelPolicy.linkedGroups(villageId, groupList);
+            if (!linked) {
+                continue;
+            }
+            const config = villageConfig(villageId);
+            const stamp = selectionStamp(config);
+            const labels = linked.map(labelKey).sort();
+            let state = labelChoices[villageId];
+            if (!state || !Array.isArray(state.labels) || !state.current) {
+                state = labelChoices[villageId] = {labels, stamp, current: resolveSequence(config, villageId), freeze: false};
+            }
+            if (state.stamp !== stamp) {
+                // Explicit sequence/mapping edits supersede a pending label suggestion.
+                state.stamp = stamp;
+                state.freeze = false;
+                state.pending = null;
+                state.current = resolveSequence(config, villageId);
+            }
+            if (JSON.stringify(state.labels) !== JSON.stringify(labels)) {
+                const changed = linked.filter(group => !state.labels.includes(labelKey(group)));
+                const changedList = {
+                    getGroups: () => changed,
+                    getGroupVillageIds: id => groupList.getGroupVillageIds(id)
+                };
+                const candidate = labelPolicy.resolve({...config, follow_village_labels: true, manual_sequence_override: false},
+                    villageId,
+                    changedList,
+                    config[SETTINGS.BUILDING_SEQUENCES]);
+                state.labels = labels;
+                // Unrelated label edits must not discard an unanswered, still-valid offer.
+                if (state.pending && !linked.some(group => String(group.id) === String(state.pending.groupId)
+                    && labelPolicy.normalizeName(group.name) === labelPolicy.normalizeName(state.pending.labelName))) {
+                    state.pending = null;
+                }
+                if (candidate.source !== 'fallback' && candidate.sequence !== state.current.sequence) {
+                    // Freeze before any building analysis can use the changed labels.
+                    state.freeze = true;
+                    const group = changed.find(item => String(item.id) === String(candidate.groupId));
+                    state.pending = {...candidate, labelName: group.name,
+                        token: JSON.stringify([labels, stamp, candidate.sequence, candidate.groupId])};
+                }
+            }
+            if (state.pending) {
+                const library = config[SETTINGS.BUILDING_SEQUENCES];
+                if (!Object.prototype.hasOwnProperty.call(library, state.pending.sequence) || !Array.isArray(library[state.pending.sequence])) {
+                    state.pending = null;
+                }
+            }
+            if (!state.freeze) {
+                state.current = resolveSequence(config, villageId);
+            }
+        }
+        for (const id of Object.keys(labelChoices)) {
+            if (!$player.getVillage(id)) {
+                delete labelChoices[id];
+            }
+        }
+        saveLabelChoices();
     };
 
     /**
@@ -9073,6 +9155,35 @@ define('two/builderQueue', [
         return decision;
     };
 
+    builderQueue.getSequenceSuggestions = function () {
+        return Object.keys(labelChoices).sort((a, b) => a.localeCompare(b, 'en', {numeric: true})).flatMap(id => {
+            const state = labelChoices[id];
+            const village = $player.getVillage(id);
+            return state.pending && village ? [{...state.pending, villageId: id,
+                villageName: typeof village.getName === 'function' ? village.getName() : 'Village ' + id,
+                currentSequence: state.current.sequence}] : [];
+        });
+    };
+
+    builderQueue.answerSequenceSuggestion = function (villageId, token, useSequence) {
+        refreshLabelChoices();
+        const state = labelChoices[villageId];
+        if (!state || !state.pending || state.pending.token !== token) {
+            notifyLabelSuggestions();
+            return false;
+        }
+        const sequence = state.pending.sequence;
+        state.pending = null;
+        saveLabelChoices();
+        if (useSequence) {
+            // A confirmed choice is saved for this village; future label edits still ask.
+            builderQueue.getSettings(villageId).set(SETTINGS.ACTIVE_SEQUENCE, sequence);
+        }
+        updateSequencesAvailable();
+        notifyLabelSuggestions();
+        return true;
+    };
+
     builderQueue.getLogs = function () {
         return logs;
     };
@@ -9086,7 +9197,11 @@ define('two/builderQueue', [
     builderQueue.addBuildingSequence = function (id, sequence) {
         const sequences = settings.get(SETTINGS.BUILDING_SEQUENCES);
 
-        if (id in sequences) {
+        if (typeof id !== 'string' || id.trim().length < 3) {
+            return SEQUENCE_STATUS.SEQUENCE_INVALID;
+        }
+        id = id.trim();
+        if (id in Object.prototype || Object.keys(sequences).some(name => name.trim().toLowerCase() === id.toLowerCase())) {
             return SEQUENCE_STATUS.SEQUENCE_EXISTS;
         }
 
@@ -9147,6 +9262,7 @@ define('two/builderQueue', [
         }
         $player = modelDataService.getSelectedCharacter();
         groupList = modelDataService.getGroupList();
+        labelChoices = Lockr.get(STORAGE_KEYS.LABEL_CHOICES, {});
 
         settings = new Settings({
             settingsMap: SETTINGS_MAP,
@@ -9188,7 +9304,9 @@ define('two/builderQueue', [
                 builderQueue.stop();
             }
             localSettings = settings.getAll();
+            refreshLabelChoices();
             updateSequencesAvailable();
+            notifyLabelSuggestions();
 
             if (restart) {
                 builderQueue.start();
@@ -9205,6 +9323,7 @@ define('two/builderQueue', [
             VILLAGE_BUILDINGS[BUILDING_TYPES[buildingName]] = 0;
         }
 
+        refreshLabelChoices();
         updateSequencesAvailable();
         [eventTypeProvider.GROUPS_UPDATED,
             eventTypeProvider.GROUPS_CREATED,
@@ -9212,7 +9331,9 @@ define('two/builderQueue', [
             eventTypeProvider.GROUPS_VILLAGE_LINKED,
             eventTypeProvider.GROUPS_VILLAGE_UNLINKED].filter(Boolean).forEach(type => {
             $rootScope.$on(type, function () {
+                refreshLabelChoices();
                 updateSequencesAvailable();
+                notifyLabelSuggestions();
                 if (running) {
                     analyseVillages();
                 }
@@ -9885,6 +10006,7 @@ define('two/builderQueue/events', [], function () {
         BUILDER_QUEUE_BUILDING_SEQUENCES_ADDED: 'builder_queue_building_orders_added',
         BUILDER_QUEUE_BUILDING_SEQUENCES_REMOVED: 'builder_queue_building_orders_removed',
         BUILDER_QUEUE_SETTINGS_CHANGE: 'builder_queue_settings_change',
+        BUILDER_QUEUE_LABEL_SUGGESTIONS_CHANGED: 'builder_queue_label_suggestions_changed',
         BUILDER_QUEUE_NO_SEQUENCES: 'builder_queue_no_sequences',
         COMMAND_QUEUE_ADD_INVALID_OFFICER: 'command_queue_add_invalid_officer',
         COMMAND_QUEUE_ADD_RELOCATE_DISABLED: 'command_queue_add_relocate_disabled'
@@ -9944,6 +10066,7 @@ define('two/builderQueue/ui', [
     let unsavedChanges = false;
     let oldCloseWindow;
     let ignoreInputChange = false;
+    let sequencePrompt;
 
     // TODO: make it shared with other modules
     const loadVillageInfo = function (villageId) {
@@ -10445,21 +10568,28 @@ define('two/builderQueue/ui', [
         windowManagerService.getModal('!twoverflow_builder_queue_add_building_modal', modalScope);
     };
 
-    editorView.modal.nameSequence = function () {
+    editorView.modal.nameSequence = function (saveDraft = false) {
         const nameSequence = function () {
             const modalScope = $rootScope.$new();
-            const selectedSequenceName = editorView.selectedSequence.name;
-            const selectedSequence = $scope.settings[SETTINGS.BUILDING_SEQUENCES][selectedSequenceName];
+            const selectedSequenceName = editorView.selectedSequence.value;
+            const selectedSequence = saveDraft ? parseBuildingSequence(editorView.buildingSequence)
+                : settings.get(SETTINGS.BUILDING_SEQUENCES)[selectedSequenceName];
 
             modalScope.name = selectedSequenceName;
 
             modalScope.submit = function () {
+                modalScope.name = (modalScope.name || '').trim();
                 if (modalScope.name.length < 3) {
                     utils.notif('error', $filter('i18n')('name_sequence_min_lenght', $rootScope.loc.ale, 'builder_queue'));
                     return false;
                 }
 
                 if (createBuildingSequence(modalScope.name, selectedSequence)) {
+                    if (saveDraft) {
+                        unsavedChanges = false;
+                        editorView.selectedSequence = {name: modalScope.name, value: modalScope.name};
+                        editorView.generateBuildingSequence();
+                    }
                     modalScope.closeWindow();
                 }
             };
@@ -10467,7 +10597,7 @@ define('two/builderQueue/ui', [
             windowManagerService.getModal('!twoverflow_builder_queue_name_sequence_modal', modalScope);
         };
 
-        if (unsavedChanges) {
+        if (unsavedChanges && !saveDraft) {
             const modalScope = $rootScope.$new();
             modalScope.title = $filter('i18n')('clone_warn_changed_sequence_title', $rootScope.loc.ale, 'builder_queue');
             modalScope.text = $filter('i18n')('clone_warn_changed_sequence_text', $rootScope.loc.ale, 'builder_queue');
@@ -10514,18 +10644,16 @@ define('two/builderQueue/ui', [
         modalScope.name = '';
 
         modalScope.submit = function () {
+            modalScope.name = (modalScope.name || '').trim();
             if (modalScope.name.length < 3) {
                 utils.notif('error', $filter('i18n')('name_sequence_min_lenght', $rootScope.loc.ale, 'builder_queue'));
                 return false;
             }
 
             if (createBuildingSequence(modalScope.name, initialSequence)) {
-                $scope.settings[SETTINGS.ACTIVE_SEQUENCE] = {name: modalScope.name, value: modalScope.name};
-                $scope.settings[SETTINGS.BUILDING_SEQUENCES][modalScope.name] = initialSequence;
-
-                saveSettings();
-
-                settingsView.selectedSequence = {name: modalScope.name, value: modalScope.name};
+                // Creating a shared sequence must not save unrelated village drafts
+                // or turn off automatic label selection.
+                unsavedChanges = false;
                 editorView.selectedSequence = {name: modalScope.name, value: modalScope.name};
 
                 settingsView.generateSequences();
@@ -10627,9 +10755,7 @@ define('two/builderQueue/ui', [
             const sequences = settings.get(SETTINGS.BUILDING_SEQUENCES);
             $scope.settings[SETTINGS.BUILDING_SEQUENCES][sequenceId] = sequences[sequenceId];
 
-            if ($scope.settings[SETTINGS.ACTIVE_SEQUENCE].value === sequenceId) {
-                settingsView.generateSequences();
-            }
+            settingsView.generateSequences();
 
             utils.notif('success', $filter('i18n')('sequence_updated', $rootScope.loc.ale, 'builder_queue', sequenceId));
         },
@@ -10637,6 +10763,7 @@ define('two/builderQueue/ui', [
             const sequences = settings.get(SETTINGS.BUILDING_SEQUENCES);
             $scope.settings[SETTINGS.BUILDING_SEQUENCES][sequenceId] = sequences[sequenceId];
             eventHandlers.updateSequences();
+            settingsView.generateSequences();
             utils.notif('success', $filter('i18n')('sequence_created', $rootScope.loc.ale, 'builder_queue', sequenceId));
         },
         buildingSequenceRemoved: function (event, sequenceId) {
@@ -10646,6 +10773,7 @@ define('two/builderQueue/ui', [
             editorView.selectedSequence = {name: substituteSequence, value: substituteSequence};
             eventHandlers.updateSequences();
             editorView.generateBuildingSequence();
+            settingsView.generateSequences();
 
             if (settings.get(SETTINGS.ACTIVE_SEQUENCE) === sequenceId) {
                 settings.set(SETTINGS.ACTIVE_SEQUENCE, substituteSequence, {
@@ -10665,6 +10793,55 @@ define('two/builderQueue/ui', [
         stopped: function () {
             $scope.running = false;
         }
+    };
+
+    const showSequenceSuggestion = function () {
+        const suggestions = builderQueue.getSequenceSuggestions();
+        if (sequencePrompt) {
+            if (suggestions.some(item => item.token === sequencePrompt.suggestion.token && item.villageId === sequencePrompt.suggestion.villageId)) {
+                return;
+            }
+            sequencePrompt.close();
+            sequencePrompt = null;
+        }
+        const suggestion = suggestions[0];
+        if (!suggestion) {
+            return;
+        }
+        const modalScope = $rootScope.$new();
+        const escape = value => String(value).replace(/[&<>"']/g, character => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;'
+        })[character]);
+        modalScope.title = 'Use matching building sequence?';
+        modalScope.text = escape(suggestion.villageName) + ' now has the label “' + escape(suggestion.labelName)
+            + '”, which matches the building sequence “' + escape(suggestion.sequence) + '”. Use it instead of “'
+            + escape(suggestion.currentSequence) + '” for this village?';
+        modalScope.submitText = 'Use sequence';
+        modalScope.cancelText = 'Keep current';
+        const prompt = {suggestion, close: noop};
+        sequencePrompt = prompt;
+        const answer = function (useSequence) {
+            if (sequencePrompt !== prompt) {
+                return;
+            }
+            prompt.close();
+            sequencePrompt = null;
+            const applied = builderQueue.answerSequenceSuggestion(suggestion.villageId, suggestion.token, useSequence);
+            if ($scope && $scope.settings && String($scope.profileVillage) === suggestion.villageId) {
+                if (applied && useSequence) {
+                    $scope.settings[SETTINGS.ACTIVE_SEQUENCE] = {name: suggestion.sequence, value: suggestion.sequence};
+                    $scope.settings[SETTINGS.AUTO_SEQUENCE] = false;
+                    $scope.settings[SETTINGS.MANUAL_OVERRIDE] = true;
+                }
+                settingsView.generateSequences();
+            }
+        };
+        modalScope.submit = () => answer(true);
+        modalScope.cancel = () => answer(false);
+        windowManagerService.getModal('modal_attention', modalScope);
+        prompt.close = modalScope.closeWindow.bind(modalScope);
+        // Closing via the X button is also a decision to keep the current sequence.
+        modalScope.closeWindow = modalScope.cancel;
     };
 
     const init = function () {
@@ -10689,10 +10866,12 @@ define('two/builderQueue/ui', [
             utils.notif('success', $filter('i18n')('stopped', $rootScope.loc.ale, 'builder_queue'));
         });
 
-        interfaceOverflow.addTemplate('twoverflow_builder_queue_window', `<div id=\"two-builder-queue\" class=\"win-content two-window\"><header class=\"win-head\"><h2>BuilderQueue</h2><ul class=\"list-btn\"><li><a href=\"#\" class=\"size-34x34 btn-red icon-26x26-close\" ng-click=\"closeWindow()\"></a></ul></header><div class=\"win-main small-select\" scrollbar=\"\"><div class=\"tabs tabs-bg\"><div class=\"tabs-three-col\"><div class=\"tab\" ng-click=\"selectTab(TAB_TYPES.SETTINGS)\" ng-class=\"{'tab-active': selectedTab == TAB_TYPES.SETTINGS}\"><div class=\"tab-inner\"><div ng-class=\"{'box-border-light': selectedTab === TAB_TYPES.SETTINGS}\"><a href=\"#\" ng-class=\"{'btn-icon btn-orange': selectedTab !== TAB_TYPES.SETTINGS}\">{{ TAB_TYPES.SETTINGS | i18n:loc.ale:'common' }}</a></div></div></div><div class=\"tab\" ng-click=\"selectTab(TAB_TYPES.SEQUENCES)\" ng-class=\"{'tab-active': selectedTab == TAB_TYPES.SEQUENCES}\"><div class=\"tab-inner\"><div ng-class=\"{'box-border-light': selectedTab === TAB_TYPES.SEQUENCES}\"><a href=\"#\" ng-class=\"{'btn-icon btn-orange': selectedTab !== TAB_TYPES.SEQUENCES}\">{{ TAB_TYPES.SEQUENCES | i18n:loc.ale:'builder_queue' }}</a></div></div></div><div class=\"tab\" ng-click=\"selectTab(TAB_TYPES.LOGS)\" ng-class=\"{'tab-active': selectedTab == TAB_TYPES.LOGS}\"><div class=\"tab-inner\"><div ng-class=\"{'box-border-light': selectedTab === TAB_TYPES.LOGS}\"><a href=\"#\" ng-class=\"{'btn-icon btn-orange': selectedTab !== TAB_TYPES.LOGS}\">{{ TAB_TYPES.LOGS | i18n:loc.ale:'common' }}</a></div></div></div></div></div><div class=\"box-paper footer\"><div class=\"scroll-wrap\"><div ng-show=\"selectedTab === TAB_TYPES.SETTINGS\"><h5 class=\"twx-section\">{{ 'settings' | i18n:loc.ale:'builder_queue' }}</h5><label>Configure <select class=\"textfield-border\" ng-model=\"profileVillage\" ng-options=\"village.value as village.name for village in profileVillages\" ng-change=\"selectVillage()\"></select></label> <a href=\"#\" class=\"btn-border btn-orange\" ng-show=\"profileVillage\" ng-click=\"useDefaults()\">Use shared defaults for this village</a><p>Save before switching villages. Villages without a saved profile use shared defaults. Group filter and sequence library are shared.<table class=\"settings tbl-border-light tbl-striped\"><col width=\"40%\"><col><col width=\"60px\"><tr><td colspan=\"2\">Build in this village<td class=\"text-center\"><div switch-slider=\"\" enabled=\"true\" border=\"true\" value=\"settings[SETTINGS.ENABLED]\" vertical=\"false\" size=\"'56x28'\"></div><tr><td><span class=\"ff-cell-fix\">{{ 'settings_village_groups' | i18n:loc.ale:'builder_queue' }}</span><td colspan=\"2\" class=\"text-right\"><div select=\"\" list=\"groups\" selected=\"settings[SETTINGS.GROUP_VILLAGES]\" drop-down=\"true\"></div><tr><td colspan=\"2\">Follow village role label<td class=\"text-center\"><input type=\"checkbox\" ng-model=\"settings[SETTINGS.AUTO_SEQUENCE]\" ng-change=\"followVillageLabels()\"><tr ng-show=\"settingsView.sequencesAvail\"><td><span class=\"ff-cell-fix\">{{ 'settings_building_sequence' | i18n:loc.ale:'builder_queue' }}</span><td colspan=\"2\" class=\"text-right\"><div select=\"\" list=\"sequences\" selected=\"settings[SETTINGS.ACTIVE_SEQUENCE]\" drop-down=\"true\"></div><tr><td><span class=\"ff-cell-fix\">{{ 'settings_preserve_wood' | i18n:loc.ale:'builder_queue' }}</span><td><div range-slider=\"\" min=\"settingsMap[SETTINGS.PRESERVE_WOOD].min\" max=\"settingsMap[SETTINGS.PRESERVE_WOOD].max\" value=\"settings[SETTINGS.PRESERVE_WOOD]\" enabled=\"true\"></div><td><input type=\"number\" class=\"preserve-resource textfield-border text-center\" ng-model=\"settings[SETTINGS.PRESERVE_WOOD]\"><tr><td><span class=\"ff-cell-fix\">{{ 'settings_preserve_clay' | i18n:loc.ale:'builder_queue' }}</span><td><div range-slider=\"\" min=\"settingsMap[SETTINGS.PRESERVE_CLAY].min\" max=\"settingsMap[SETTINGS.PRESERVE_CLAY].max\" value=\"settings[SETTINGS.PRESERVE_CLAY]\" enabled=\"true\"></div><td><input type=\"number\" class=\"preserve-resource textfield-border text-center\" ng-model=\"settings[SETTINGS.PRESERVE_CLAY]\"><tr><td><span class=\"ff-cell-fix\">{{ 'settings_preserve_iron' | i18n:loc.ale:'builder_queue' }}</span><td><div range-slider=\"\" min=\"settingsMap[SETTINGS.PRESERVE_IRON].min\" max=\"settingsMap[SETTINGS.PRESERVE_IRON].max\" value=\"settings[SETTINGS.PRESERVE_IRON]\" enabled=\"true\"></div><td><input type=\"number\" class=\"preserve-resource textfield-border text-center\" ng-model=\"settings[SETTINGS.PRESERVE_IRON]\"><tr><td colspan=\"2\"><span class=\"ff-cell-fix\">{{ 'settings_priorize_farm' | i18n:loc.ale:'builder_queue' }}</span><td class=\"text-center\"><div switch-slider=\"\" enabled=\"true\" border=\"true\" value=\"settings[SETTINGS.PRIORIZE_FARM]\" vertical=\"false\" size=\"'56x28'\"></div><tr><td colspan=\"2\">Use dynamic building priorities<td class=\"text-center\"><input type=\"checkbox\" ng-model=\"settings[SETTINGS.DYNAMIC]\"><tr ng-show=\"settings[SETTINGS.DYNAMIC]\"><td colspan=\"2\">Prioritize warehouse capacity<td class=\"text-center\"><input type=\"checkbox\" ng-model=\"settings[SETTINGS.PRIORIZE_WAREHOUSE]\"><tr ng-show=\"settings[SETTINGS.DYNAMIC]\"><td colspan=\"2\">Try another upgrade after waiting (minutes)<td><input type=\"number\" min=\"1\" max=\"1440\" class=\"textfield-border\" ng-model=\"settings[SETTINGS.WAIT_MINUTES]\"><tr ng-show=\"settings[SETTINGS.DYNAMIC]\"><td colspan=\"2\">Maximum extra delay to sequence step (minutes)<td><input type=\"number\" min=\"0\" max=\"1440\" class=\"textfield-border\" ng-model=\"settings[SETTINGS.MAX_DELAY_MINUTES]\"><tr ng-show=\"settings[SETTINGS.DYNAMIC]\"><td colspan=\"2\">Upgrade warehouse when any resource reaches (%)<td><input type=\"number\" min=\"50\" max=\"100\" class=\"textfield-border\" ng-model=\"settings[SETTINGS.WAREHOUSE_PERCENT]\"><tr ng-show=\"settings[SETTINGS.DYNAMIC]\"><td colspan=\"2\">Keep free population above<td><input type=\"number\" min=\"0\" max=\"10000\" class=\"textfield-border\" ng-model=\"settings[SETTINGS.MINIMUM_FOOD]\"><tr ng-show=\"settings[SETTINGS.DYNAMIC]\"><td colspan=\"2\">Maximum resource-building level for detours<td><input type=\"number\" min=\"0\" max=\"30\" class=\"textfield-border\" ng-model=\"settings[SETTINGS.RESOURCE_LEVEL_LIMIT]\"><tr ng-show=\"settings[SETTINGS.DYNAMIC]\"><td colspan=\"2\">Resource detours per blocked sequence step<td><input type=\"number\" min=\"0\" max=\"10\" class=\"textfield-border\" ng-model=\"settings[SETTINGS.RESOURCE_DETOUR_LIMIT]\"></table><p>Dynamic upgrades stay within sequence targets. Necessary farm or storage repairs may exceed the delay limit. Other detours require known production and queue timing; resource upgrades never assume an unconfirmed production gain.<h5 class=\"twx-section\">Village role labels</h5><p>Offensive, Defensive and Resource labels select their matching presets. When labels overlap, the first matching mapping below wins; otherwise Offensive, Defensive, then Resource. Choosing a sequence manually turns label selection off for this village.<table class=\"tbl-border-light tbl-striped\"><tr ng-repeat=\"mapping in settings[SETTINGS.LABEL_MAPPINGS] track by $index\"><td><select class=\"textfield-border\" ng-model=\"mapping.group_id\" ng-options=\"group.id as group.name for group in labelGroups\"></select><td><select class=\"textfield-border\" ng-model=\"mapping.sequence\" ng-options=\"sequence.value as sequence.name for sequence in sequences\"></select><td><a href=\"#\" ng-click=\"moveLabelMapping($index, -1)\">Up</a> <a href=\"#\" ng-click=\"moveLabelMapping($index, 1)\">Down</a> <a href=\"#\" ng-click=\"settings[SETTINGS.LABEL_MAPPINGS].splice($index, 1)\">Remove</a></table><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"addLabelMapping()\">Add shared label mapping</a> <a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"chooseManualSequence()\">Use selected sequence manually</a><h5 class=\"twx-section\">Next upgrade preview</h5><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"settingsView.generateSequences()\">Refresh preview</a><p>Effective sequence: <strong>{{ settingsView.plan.sequence }}</strong> ({{ settingsView.plan.sequenceSource }}<span ng-if=\"settingsView.plan.groupName\">: {{ settingsView.plan.groupName }}</span>).<p ng-if=\"settingsView.plan.building\"><span class=\"building-icon icon-20x20-building-{{ settingsView.plan.building }}\"></span> {{ settingsView.plan.building | i18n:loc.ale:'building_names' }}<span ng-if=\"settingsView.plan.detour\"> — brought forward from this sequence</span>.<p>{{ settingsView.plan.reason }}<p ng-if=\"settingsView.plan.main\">Sequence step: {{ settingsView.plan.main | i18n:loc.ale:'building_names' }} {{ settingsView.plan.mainLevel }}. Estimated resource wait: {{ settingsView.plan.waitLabel }}.<span ng-if=\"settingsView.plan.detour\"> Extra delay: {{ settingsView.plan.delayLabel }}.</span><p>Preview uses these draft settings and the current village data. Save to apply the configuration.<h5 class=\"twx-section\">{{ 'settings_building_sequence' | i18n:loc.ale:'builder_queue' }}</h5><p ng-show=\"!settingsView.sequencesAvail\" class=\"text-center\"><a href=\"#\" class=\"btn-orange btn-border create-sequence\" ng-click=\"createSequence()\">{{ 'create_sequence' | i18n:loc.ale:'builder_queue' }}</a><div ng-if=\"settingsView.sequencesAvail && settingsView.visibleBuildingSequence.length\"><div class=\"page-wrap\" pagination=\"pagination.buildingSequence\"></div><table class=\"tbl-border-light header-center building-sequence\"><col width=\"5%\"><col><col width=\"7%\"><col width=\"13%\"><col width=\"8%\"><col width=\"9%\"><col width=\"9%\"><col width=\"9%\"><col width=\"6%\"><tr><th tooltip=\"\" tooltip-content=\"{{ 'position' | i18n:loc.ale:'builder_queue' }}\">#<th>{{ 'building' | i18n:loc.ale:'common' }}<th>{{ 'level' | i18n:loc.ale:'common' }}<th>{{ 'duration' | i18n:loc.ale:'common' }}<th>{{ 'points' | i18n:loc.ale:'common' }}<th><span class=\"icon-26x26-resource-wood\"></span><th><span class=\"icon-26x26-resource-clay\"></span><th><span class=\"icon-26x26-resource-iron\"></span><th><span class=\"icon-26x26-resource-food\"></span><tr ng-repeat=\"item in settingsView.visibleBuildingSequence track by $index\" class=\"{{ item.state }}\"><td>{{ pagination.buildingSequence.offset + $index + 1 }}<td><span class=\"building-icon icon-20x20-building-{{ item.building }}\"></span> {{ item.building | i18n:loc.ale:'building_names' }}<td>{{ item.level }}<td>{{ item.duration }}<td class=\"green\">+{{ item.levelPoints | number }}<td>{{ item.price.wood | number }}<td>{{ item.price.clay | number }}<td>{{ item.price.iron | number }}<td>{{ item.price.food | number }}</table><div class=\"page-wrap\" pagination=\"pagination.buildingSequence\"></div></div><h5 ng-if=\"settingsView.sequencesAvail && settingsView.visibleBuildingSequence.length\" class=\"twx-section\">{{ 'settings_building_sequence_final' | i18n:loc.ale:'builder_queue' }}</h5><table ng-if=\"settingsView.sequencesAvail && settingsView.visibleBuildingSequence.length\" class=\"tbl-border-light tbl-striped header-center building-sequence-final\"><col><col width=\"5%\"><col width=\"12%\"><col width=\"8%\"><col width=\"11%\"><col width=\"11%\"><col width=\"11%\"><col width=\"7%\"><tr><th>{{ 'building' | i18n:loc.ale:'common' }}<th>{{ 'level' | i18n:loc.ale:'common' }}<th>{{ 'duration' | i18n:loc.ale:'common' }}<th>{{ 'points' | i18n:loc.ale:'common' }}<th><span class=\"icon-26x26-resource-wood\"></span><th><span class=\"icon-26x26-resource-clay\"></span><th><span class=\"icon-26x26-resource-iron\"></span><th><span class=\"icon-26x26-resource-food\"></span><tr ng-repeat=\"item in settingsView.buildingSequenceFinal | orderBy:'order'\"><td><span class=\"building-icon icon-20x20-building-{{ item.building }}\"></span> {{ item.building | i18n:loc.ale:'building_names' }}<td>{{ item.level }}<td>{{ item.build_time | readableSecondsFilter }}<td class=\"green\">+{{ item.points | number }}<td>{{ item.resources.wood | number }}<td>{{ item.resources.clay | number }}<td>{{ item.resources.iron | number }}<td>{{ item.resources.food | number }}</table><p ng-show=\"settingsView.sequencesAvail && !settingsView.visibleBuildingSequence.length\" class=\"text-center\">{{ 'empty_sequence' | i18n:loc.ale:'builder_queue' }}</div><div ng-show=\"selectedTab === TAB_TYPES.SEQUENCES\"><h5 class=\"twx-section\">{{ 'sequences_edit_sequence' | i18n:loc.ale:'builder_queue' }}</h5><p ng-show=\"!editorView.sequencesAvail\" class=\"text-center\"><a class=\"btn btn-orange create-sequence\" ng-click=\"createSequence()\">{{ 'create_sequence' | i18n:loc.ale:'builder_queue' }}</a><table ng-if=\"editorView.sequencesAvail\" class=\"tbl-border-light tbl-striped editor-select-sequence\"><tr><td colspan=\"2\"><span class=\"ff-cell-fix\">{{ 'sequences_select_edit' | i18n:loc.ale:'builder_queue' }}</span><td><div class=\"select-sequence-editor\" select=\"\" list=\"sequences\" selected=\"editorView.selectedSequence\" drop-down=\"true\"></div><tr><td class=\"text-center\"><a class=\"btn btn-orange create-sequence\" ng-click=\"createSequence()\">{{ 'create_sequence' | i18n:loc.ale:'builder_queue' }}</a><td class=\"text-center\"><a class=\"btn btn-orange clone-sequence\" ng-click=\"editorView.modal.nameSequence()\">{{ 'clone_sequence' | i18n:loc.ale:'builder_queue' }}</a><td class=\"text-center\"><a class=\"btn btn-red remove-sequence\" ng-click=\"editorView.modal.removeSequence()\">{{ 'remove_sequence' | i18n:loc.ale:'builder_queue' }}</a></table><div ng-if=\"editorView.sequencesAvail\"><div class=\"page-wrap\" pagination=\"pagination.buildingSequenceEditor\"></div><table ng-show=\"editorView.visibleBuildingSequence.length\" class=\"tbl-border-light tbl-striped header-center building-sequence-editor\"><col width=\"5%\"><col width=\"5%\"><col><col width=\"7%\"><col width=\"10%\"><tr><th><th tooltip=\"\" tooltip-content=\"{{ 'position' | i18n:loc.ale:'builder_queue' }}\">#<th>{{ 'building' | i18n:loc.ale:'common' }}<th>{{ 'level' | i18n:loc.ale:'common' }}<th>{{ 'actions' | i18n:loc.ale:'common' }}<tr ng-repeat=\"item in editorView.visibleBuildingSequence track by $index\" ng-class=\"{'selected': item.checked}\"><td><label class=\"size-26x26 btn-orange icon-26x26-checkbox\" ng-class=\"{'icon-26x26-checkbox-checked': item.checked}\"><input type=\"checkbox\" ng-model=\"item.checked\"></label><td>{{ pagination.buildingSequenceEditor.offset + $index + 1 }}<td><span class=\"building-icon icon-20x20-building-{{ item.building }}\"></span> {{ item.building | i18n:loc.ale:'building_names' }}<td>{{ item.level }}<td><a href=\"#\" class=\"size-20x20 btn-red icon-20x20-close\" ng-click=\"editorView.removeBuilding(pagination.buildingSequenceEditor.offset + $index)\" tooltip=\"\" tooltip-content=\"{{ 'remove_building' | i18n:loc.ale:'builder_queue' }}\"></a></table><div class=\"page-wrap\" pagination=\"pagination.buildingSequenceEditor\"></div><p ng-show=\"!editorView.visibleBuildingSequence.length\" class=\"text-center\"><a class=\"btn btn-border btn-orange\" ng-click=\"editorView.modal.addBuilding()\">{{ 'sequences_add_building' | i18n:loc.ale:'builder_queue' }}</a></div></div><div ng-show=\"selectedTab === TAB_TYPES.LOGS\" class=\"rich-text\"><div class=\"page-wrap\" pagination=\"pagination.logs\"></div><p class=\"text-center\" ng-show=\"!logsView.logs.length\">{{ 'logs_no_builds' | i18n:loc.ale:'builder_queue' }}<table class=\"tbl-border-light tbl-striped header-center logs\" ng-show=\"logsView.logs.length\"><col width=\"40%\"><col width=\"30%\"><col width=\"5%\"><col width=\"25%\"><col><thead><tr><th>{{ 'village' | i18n:loc.ale:'common' }}<th>{{ 'building' | i18n:loc.ale:'common' }}<th>{{ 'level' | i18n:loc.ale:'common' }}<th>{{ 'started_at' | i18n:loc.ale:'common' }}<tbody><tr ng-repeat=\"log in logsView.logs track by $index\"><td><a class=\"link\" ng-click=\"openVillageInfo(log.villageId)\"><span class=\"icon-20x20-village\"></span> {{ villagesLabel[log.villageId] }}</a><td><span class=\"building-icon icon-20x20-building-{{ log.building }}\"></span> {{ log.building | i18n:loc.ale:'building_names' }}<br><small>{{ log.reason }}</small><td>{{ log.level }}<td>{{ log.time | readableDateFilter:loc.ale:GAME_TIMEZONE:GAME_TIME_OFFSET }}</table><div class=\"page-wrap\" pagination=\"pagination.logs\"></div></div></div></div></div><footer class=\"win-foot\"><ul class=\"list-btn list-center\"><li ng-show=\"selectedTab === TAB_TYPES.SETTINGS && settingsView.sequencesAvail\"><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"saveSettings()\">{{ 'save' | i18n:loc.ale:'common' }}</a><li ng-show=\"selectedTab === TAB_TYPES.SETTINGS && settingsView.sequencesAvail\"><a href=\"#\" ng-class=\"{false:'btn-orange', true:'btn-red'}[running]\" class=\"btn-border\" ng-click=\"switchBuilder()\"><span ng-show=\"running\">{{ 'pause' | i18n:loc.ale:'common' }}</span> <span ng-show=\"!running\">{{ 'start' | i18n:loc.ale:'common' }}</span></a><li ng-show=\"selectedTab === TAB_TYPES.LOGS\"><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"logsView.clearLogs()\">{{ 'logs_clear' | i18n:loc.ale:'builder_queue' }}</a><li ng-show=\"selectedTab === TAB_TYPES.SEQUENCES && editorView.sequencesAvail\"><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"editorView.moveUp()\">{{ 'sequences_move_up' | i18n:loc.ale:'builder_queue' }}</a><li ng-show=\"selectedTab === TAB_TYPES.SEQUENCES && editorView.sequencesAvail\"><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"editorView.moveDown()\">{{ 'sequences_move_down' | i18n:loc.ale:'builder_queue' }}</a><li ng-show=\"selectedTab === TAB_TYPES.SEQUENCES && editorView.sequencesAvail\"><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"editorView.modal.addBuilding()\">{{ 'sequences_add_building' | i18n:loc.ale:'builder_queue' }}</a><li ng-show=\"selectedTab === TAB_TYPES.SEQUENCES && editorView.sequencesAvail\"><a href=\"#\" class=\"btn-border btn-red\" ng-click=\"editorView.updateBuildingSequence()\">{{ 'save' | i18n:loc.ale:'common' }}</a></ul></footer></div>`);
+        interfaceOverflow.addTemplate('twoverflow_builder_queue_window', `<div id=\"two-builder-queue\" class=\"win-content two-window\"><header class=\"win-head\"><h2>BuilderQueue</h2><ul class=\"list-btn\"><li><a href=\"#\" class=\"size-34x34 btn-red icon-26x26-close\" ng-click=\"closeWindow()\"></a></ul></header><div class=\"win-main small-select\" scrollbar=\"\"><div class=\"tabs tabs-bg\"><div class=\"tabs-three-col\"><div class=\"tab\" ng-click=\"selectTab(TAB_TYPES.SETTINGS)\" ng-class=\"{'tab-active': selectedTab == TAB_TYPES.SETTINGS}\"><div class=\"tab-inner\"><div ng-class=\"{'box-border-light': selectedTab === TAB_TYPES.SETTINGS}\"><a href=\"#\" ng-class=\"{'btn-icon btn-orange': selectedTab !== TAB_TYPES.SETTINGS}\">{{ TAB_TYPES.SETTINGS | i18n:loc.ale:'common' }}</a></div></div></div><div class=\"tab\" ng-click=\"selectTab(TAB_TYPES.SEQUENCES)\" ng-class=\"{'tab-active': selectedTab == TAB_TYPES.SEQUENCES}\"><div class=\"tab-inner\"><div ng-class=\"{'box-border-light': selectedTab === TAB_TYPES.SEQUENCES}\"><a href=\"#\" ng-class=\"{'btn-icon btn-orange': selectedTab !== TAB_TYPES.SEQUENCES}\">{{ TAB_TYPES.SEQUENCES | i18n:loc.ale:'builder_queue' }}</a></div></div></div><div class=\"tab\" ng-click=\"selectTab(TAB_TYPES.LOGS)\" ng-class=\"{'tab-active': selectedTab == TAB_TYPES.LOGS}\"><div class=\"tab-inner\"><div ng-class=\"{'box-border-light': selectedTab === TAB_TYPES.LOGS}\"><a href=\"#\" ng-class=\"{'btn-icon btn-orange': selectedTab !== TAB_TYPES.LOGS}\">{{ TAB_TYPES.LOGS | i18n:loc.ale:'common' }}</a></div></div></div></div></div><div class=\"box-paper footer\"><div class=\"scroll-wrap\"><div ng-show=\"selectedTab === TAB_TYPES.SETTINGS\"><h5 class=\"twx-section\">{{ 'settings' | i18n:loc.ale:'builder_queue' }}</h5><label>Configure <select class=\"textfield-border\" ng-model=\"profileVillage\" ng-options=\"village.value as village.name for village in profileVillages\" ng-change=\"selectVillage()\"></select></label> <a href=\"#\" class=\"btn-border btn-orange\" ng-show=\"profileVillage\" ng-click=\"useDefaults()\">Use shared defaults for this village</a><p>Save before switching villages. Villages without a saved profile use shared defaults. Group filter and sequence library are shared.<table class=\"settings tbl-border-light tbl-striped\"><col width=\"40%\"><col><col width=\"60px\"><tr><td colspan=\"2\">Build in this village<td class=\"text-center\"><div switch-slider=\"\" enabled=\"true\" border=\"true\" value=\"settings[SETTINGS.ENABLED]\" vertical=\"false\" size=\"'56x28'\"></div><tr><td><span class=\"ff-cell-fix\">{{ 'settings_village_groups' | i18n:loc.ale:'builder_queue' }}</span><td colspan=\"2\" class=\"text-right\"><div select=\"\" list=\"groups\" selected=\"settings[SETTINGS.GROUP_VILLAGES]\" drop-down=\"true\"></div><tr><td colspan=\"2\">Follow village label names<td class=\"text-center\"><input type=\"checkbox\" ng-model=\"settings[SETTINGS.AUTO_SEQUENCE]\" ng-change=\"followVillageLabels()\"><tr ng-show=\"settingsView.sequencesAvail\"><td><span class=\"ff-cell-fix\">{{ 'settings_building_sequence' | i18n:loc.ale:'builder_queue' }}</span><td colspan=\"2\" class=\"text-right\"><div select=\"\" list=\"sequences\" selected=\"settings[SETTINGS.ACTIVE_SEQUENCE]\" drop-down=\"true\"></div><tr><td><span class=\"ff-cell-fix\">{{ 'settings_preserve_wood' | i18n:loc.ale:'builder_queue' }}</span><td><div range-slider=\"\" min=\"settingsMap[SETTINGS.PRESERVE_WOOD].min\" max=\"settingsMap[SETTINGS.PRESERVE_WOOD].max\" value=\"settings[SETTINGS.PRESERVE_WOOD]\" enabled=\"true\"></div><td><input type=\"number\" class=\"preserve-resource textfield-border text-center\" ng-model=\"settings[SETTINGS.PRESERVE_WOOD]\"><tr><td><span class=\"ff-cell-fix\">{{ 'settings_preserve_clay' | i18n:loc.ale:'builder_queue' }}</span><td><div range-slider=\"\" min=\"settingsMap[SETTINGS.PRESERVE_CLAY].min\" max=\"settingsMap[SETTINGS.PRESERVE_CLAY].max\" value=\"settings[SETTINGS.PRESERVE_CLAY]\" enabled=\"true\"></div><td><input type=\"number\" class=\"preserve-resource textfield-border text-center\" ng-model=\"settings[SETTINGS.PRESERVE_CLAY]\"><tr><td><span class=\"ff-cell-fix\">{{ 'settings_preserve_iron' | i18n:loc.ale:'builder_queue' }}</span><td><div range-slider=\"\" min=\"settingsMap[SETTINGS.PRESERVE_IRON].min\" max=\"settingsMap[SETTINGS.PRESERVE_IRON].max\" value=\"settings[SETTINGS.PRESERVE_IRON]\" enabled=\"true\"></div><td><input type=\"number\" class=\"preserve-resource textfield-border text-center\" ng-model=\"settings[SETTINGS.PRESERVE_IRON]\"><tr><td colspan=\"2\"><span class=\"ff-cell-fix\">{{ 'settings_priorize_farm' | i18n:loc.ale:'builder_queue' }}</span><td class=\"text-center\"><div switch-slider=\"\" enabled=\"true\" border=\"true\" value=\"settings[SETTINGS.PRIORIZE_FARM]\" vertical=\"false\" size=\"'56x28'\"></div><tr><td colspan=\"2\">Use dynamic building priorities<td class=\"text-center\"><input type=\"checkbox\" ng-model=\"settings[SETTINGS.DYNAMIC]\"><tr ng-show=\"settings[SETTINGS.DYNAMIC]\"><td colspan=\"2\">Prioritize warehouse capacity<td class=\"text-center\"><input type=\"checkbox\" ng-model=\"settings[SETTINGS.PRIORIZE_WAREHOUSE]\"><tr ng-show=\"settings[SETTINGS.DYNAMIC]\"><td colspan=\"2\">Try another upgrade after waiting (minutes)<td><input type=\"number\" min=\"1\" max=\"1440\" class=\"textfield-border\" ng-model=\"settings[SETTINGS.WAIT_MINUTES]\"><tr ng-show=\"settings[SETTINGS.DYNAMIC]\"><td colspan=\"2\">Maximum extra delay to sequence step (minutes)<td><input type=\"number\" min=\"0\" max=\"1440\" class=\"textfield-border\" ng-model=\"settings[SETTINGS.MAX_DELAY_MINUTES]\"><tr ng-show=\"settings[SETTINGS.DYNAMIC]\"><td colspan=\"2\">Upgrade warehouse when any resource reaches (%)<td><input type=\"number\" min=\"50\" max=\"100\" class=\"textfield-border\" ng-model=\"settings[SETTINGS.WAREHOUSE_PERCENT]\"><tr ng-show=\"settings[SETTINGS.DYNAMIC]\"><td colspan=\"2\">Keep free population above<td><input type=\"number\" min=\"0\" max=\"10000\" class=\"textfield-border\" ng-model=\"settings[SETTINGS.MINIMUM_FOOD]\"><tr ng-show=\"settings[SETTINGS.DYNAMIC]\"><td colspan=\"2\">Maximum resource-building level for detours<td><input type=\"number\" min=\"0\" max=\"30\" class=\"textfield-border\" ng-model=\"settings[SETTINGS.RESOURCE_LEVEL_LIMIT]\"><tr ng-show=\"settings[SETTINGS.DYNAMIC]\"><td colspan=\"2\">Resource detours per blocked sequence step<td><input type=\"number\" min=\"0\" max=\"10\" class=\"textfield-border\" ng-model=\"settings[SETTINGS.RESOURCE_DETOUR_LIMIT]\"></table><p>Dynamic upgrades stay within sequence targets. Necessary farm or storage repairs may exceed the delay limit. Other detours require known production and queue timing; resource upgrades never assume an unconfirmed production gain.<h5 class=\"twx-section\">Village labels</h5><p>Any village label that matches a saved sequence name selects that sequence, ignoring case and surrounding spaces. The first matching mapping below wins; otherwise Offensive, Defensive, Resource, then other matching names alphabetically. Choosing a sequence manually turns automatic label selection off for this village. When labels are renamed or added, a matching sequence is offered in a confirmation dialog; Keep current retains the current sequence. Confirming saves a manual choice for that village. The same unchanged labels will not ask again.<table class=\"tbl-border-light tbl-striped\"><tr ng-repeat=\"mapping in settings[SETTINGS.LABEL_MAPPINGS] track by $index\"><td><select class=\"textfield-border\" ng-model=\"mapping.group_id\" ng-options=\"group.id as group.name for group in labelGroups\"></select><td><select class=\"textfield-border\" ng-model=\"mapping.sequence\" ng-options=\"sequence.value as sequence.name for sequence in sequences\"></select><td><a href=\"#\" ng-click=\"moveLabelMapping($index, -1)\">Up</a> <a href=\"#\" ng-click=\"moveLabelMapping($index, 1)\">Down</a> <a href=\"#\" ng-click=\"settings[SETTINGS.LABEL_MAPPINGS].splice($index, 1)\">Remove</a></table><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"addLabelMapping()\">Add shared label mapping</a> <a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"chooseManualSequence()\">Use selected sequence manually</a><h5 class=\"twx-section\">Next upgrade preview</h5><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"settingsView.generateSequences()\">Refresh preview</a><p>Effective sequence: <strong>{{ settingsView.plan.sequence }}</strong> ({{ settingsView.plan.sequenceSource }}<span ng-if=\"settingsView.plan.groupName\">: {{ settingsView.plan.groupName }}</span>).<p ng-if=\"settingsView.plan.building\"><span class=\"building-icon icon-20x20-building-{{ settingsView.plan.building }}\"></span> {{ settingsView.plan.building | i18n:loc.ale:'building_names' }}<span ng-if=\"settingsView.plan.detour\"> — brought forward from this sequence</span>.<p>{{ settingsView.plan.reason }}<p ng-if=\"settingsView.plan.main\">Sequence step: {{ settingsView.plan.main | i18n:loc.ale:'building_names' }} {{ settingsView.plan.mainLevel }}. Estimated resource wait: {{ settingsView.plan.waitLabel }}.<span ng-if=\"settingsView.plan.detour\"> Extra delay: {{ settingsView.plan.delayLabel }}.</span><p>Preview uses these draft settings and the current village data. Save to apply the configuration.<h5 class=\"twx-section\">{{ 'settings_building_sequence' | i18n:loc.ale:'builder_queue' }}</h5><p ng-show=\"!settingsView.sequencesAvail\" class=\"text-center\"><a href=\"#\" class=\"btn-orange btn-border create-sequence\" ng-click=\"createSequence()\">{{ 'create_sequence' | i18n:loc.ale:'builder_queue' }}</a><div ng-if=\"settingsView.sequencesAvail && settingsView.visibleBuildingSequence.length\"><div class=\"page-wrap\" pagination=\"pagination.buildingSequence\"></div><table class=\"tbl-border-light header-center building-sequence\"><col width=\"5%\"><col><col width=\"7%\"><col width=\"13%\"><col width=\"8%\"><col width=\"9%\"><col width=\"9%\"><col width=\"9%\"><col width=\"6%\"><tr><th tooltip=\"\" tooltip-content=\"{{ 'position' | i18n:loc.ale:'builder_queue' }}\">#<th>{{ 'building' | i18n:loc.ale:'common' }}<th>{{ 'level' | i18n:loc.ale:'common' }}<th>{{ 'duration' | i18n:loc.ale:'common' }}<th>{{ 'points' | i18n:loc.ale:'common' }}<th><span class=\"icon-26x26-resource-wood\"></span><th><span class=\"icon-26x26-resource-clay\"></span><th><span class=\"icon-26x26-resource-iron\"></span><th><span class=\"icon-26x26-resource-food\"></span><tr ng-repeat=\"item in settingsView.visibleBuildingSequence track by $index\" class=\"{{ item.state }}\"><td>{{ pagination.buildingSequence.offset + $index + 1 }}<td><span class=\"building-icon icon-20x20-building-{{ item.building }}\"></span> {{ item.building | i18n:loc.ale:'building_names' }}<td>{{ item.level }}<td>{{ item.duration }}<td class=\"green\">+{{ item.levelPoints | number }}<td>{{ item.price.wood | number }}<td>{{ item.price.clay | number }}<td>{{ item.price.iron | number }}<td>{{ item.price.food | number }}</table><div class=\"page-wrap\" pagination=\"pagination.buildingSequence\"></div></div><h5 ng-if=\"settingsView.sequencesAvail && settingsView.visibleBuildingSequence.length\" class=\"twx-section\">{{ 'settings_building_sequence_final' | i18n:loc.ale:'builder_queue' }}</h5><table ng-if=\"settingsView.sequencesAvail && settingsView.visibleBuildingSequence.length\" class=\"tbl-border-light tbl-striped header-center building-sequence-final\"><col><col width=\"5%\"><col width=\"12%\"><col width=\"8%\"><col width=\"11%\"><col width=\"11%\"><col width=\"11%\"><col width=\"7%\"><tr><th>{{ 'building' | i18n:loc.ale:'common' }}<th>{{ 'level' | i18n:loc.ale:'common' }}<th>{{ 'duration' | i18n:loc.ale:'common' }}<th>{{ 'points' | i18n:loc.ale:'common' }}<th><span class=\"icon-26x26-resource-wood\"></span><th><span class=\"icon-26x26-resource-clay\"></span><th><span class=\"icon-26x26-resource-iron\"></span><th><span class=\"icon-26x26-resource-food\"></span><tr ng-repeat=\"item in settingsView.buildingSequenceFinal | orderBy:'order'\"><td><span class=\"building-icon icon-20x20-building-{{ item.building }}\"></span> {{ item.building | i18n:loc.ale:'building_names' }}<td>{{ item.level }}<td>{{ item.build_time | readableSecondsFilter }}<td class=\"green\">+{{ item.points | number }}<td>{{ item.resources.wood | number }}<td>{{ item.resources.clay | number }}<td>{{ item.resources.iron | number }}<td>{{ item.resources.food | number }}</table><p ng-show=\"settingsView.sequencesAvail && !settingsView.visibleBuildingSequence.length\" class=\"text-center\">{{ 'empty_sequence' | i18n:loc.ale:'builder_queue' }}</div><div ng-show=\"selectedTab === TAB_TYPES.SEQUENCES\"><h5 class=\"twx-section\">{{ 'sequences_edit_sequence' | i18n:loc.ale:'builder_queue' }}</h5><p>Sequences are saved in this browser and shared across your villages. Create a named sequence, add and reorder buildings, then save. Use a village label with the same name and enable Follow village label names to select it automatically.<p ng-show=\"!editorView.sequencesAvail\" class=\"text-center\"><a class=\"btn btn-orange create-sequence\" ng-click=\"createSequence()\">{{ 'create_sequence' | i18n:loc.ale:'builder_queue' }}</a><table ng-if=\"editorView.sequencesAvail\" class=\"tbl-border-light tbl-striped editor-select-sequence\"><tr><td colspan=\"2\"><span class=\"ff-cell-fix\">{{ 'sequences_select_edit' | i18n:loc.ale:'builder_queue' }}</span><td><div class=\"select-sequence-editor\" select=\"\" list=\"sequences\" selected=\"editorView.selectedSequence\" drop-down=\"true\"></div><tr><td class=\"text-center\"><a class=\"btn btn-orange create-sequence\" ng-click=\"createSequence()\">{{ 'create_sequence' | i18n:loc.ale:'builder_queue' }}</a><td class=\"text-center\"><a class=\"btn btn-orange clone-sequence\" ng-click=\"editorView.modal.nameSequence()\">{{ 'clone_sequence' | i18n:loc.ale:'builder_queue' }}</a><td class=\"text-center\"><a class=\"btn btn-red remove-sequence\" ng-click=\"editorView.modal.removeSequence()\">{{ 'remove_sequence' | i18n:loc.ale:'builder_queue' }}</a></table><p ng-if=\"editorView.sequencesAvail\"><a class=\"btn btn-border btn-orange\" ng-click=\"editorView.modal.nameSequence(true)\">Save as new sequence</a><div ng-if=\"editorView.sequencesAvail\"><div class=\"page-wrap\" pagination=\"pagination.buildingSequenceEditor\"></div><table ng-show=\"editorView.visibleBuildingSequence.length\" class=\"tbl-border-light tbl-striped header-center building-sequence-editor\"><col width=\"5%\"><col width=\"5%\"><col><col width=\"7%\"><col width=\"10%\"><tr><th><th tooltip=\"\" tooltip-content=\"{{ 'position' | i18n:loc.ale:'builder_queue' }}\">#<th>{{ 'building' | i18n:loc.ale:'common' }}<th>{{ 'level' | i18n:loc.ale:'common' }}<th>{{ 'actions' | i18n:loc.ale:'common' }}<tr ng-repeat=\"item in editorView.visibleBuildingSequence track by $index\" ng-class=\"{'selected': item.checked}\"><td><label class=\"size-26x26 btn-orange icon-26x26-checkbox\" ng-class=\"{'icon-26x26-checkbox-checked': item.checked}\"><input type=\"checkbox\" ng-model=\"item.checked\"></label><td>{{ pagination.buildingSequenceEditor.offset + $index + 1 }}<td><span class=\"building-icon icon-20x20-building-{{ item.building }}\"></span> {{ item.building | i18n:loc.ale:'building_names' }}<td>{{ item.level }}<td><a href=\"#\" class=\"size-20x20 btn-red icon-20x20-close\" ng-click=\"editorView.removeBuilding(pagination.buildingSequenceEditor.offset + $index)\" tooltip=\"\" tooltip-content=\"{{ 'remove_building' | i18n:loc.ale:'builder_queue' }}\"></a></table><div class=\"page-wrap\" pagination=\"pagination.buildingSequenceEditor\"></div><p ng-show=\"!editorView.visibleBuildingSequence.length\" class=\"text-center\"><a class=\"btn btn-border btn-orange\" ng-click=\"editorView.modal.addBuilding()\">{{ 'sequences_add_building' | i18n:loc.ale:'builder_queue' }}</a></div></div><div ng-show=\"selectedTab === TAB_TYPES.LOGS\" class=\"rich-text\"><div class=\"page-wrap\" pagination=\"pagination.logs\"></div><p class=\"text-center\" ng-show=\"!logsView.logs.length\">{{ 'logs_no_builds' | i18n:loc.ale:'builder_queue' }}<table class=\"tbl-border-light tbl-striped header-center logs\" ng-show=\"logsView.logs.length\"><col width=\"40%\"><col width=\"30%\"><col width=\"5%\"><col width=\"25%\"><col><thead><tr><th>{{ 'village' | i18n:loc.ale:'common' }}<th>{{ 'building' | i18n:loc.ale:'common' }}<th>{{ 'level' | i18n:loc.ale:'common' }}<th>{{ 'started_at' | i18n:loc.ale:'common' }}<tbody><tr ng-repeat=\"log in logsView.logs track by $index\"><td><a class=\"link\" ng-click=\"openVillageInfo(log.villageId)\"><span class=\"icon-20x20-village\"></span> {{ villagesLabel[log.villageId] }}</a><td><span class=\"building-icon icon-20x20-building-{{ log.building }}\"></span> {{ log.building | i18n:loc.ale:'building_names' }}<br><small>{{ log.reason }}</small><td>{{ log.level }}<td>{{ log.time | readableDateFilter:loc.ale:GAME_TIMEZONE:GAME_TIME_OFFSET }}</table><div class=\"page-wrap\" pagination=\"pagination.logs\"></div></div></div></div></div><footer class=\"win-foot\"><ul class=\"list-btn list-center\"><li ng-show=\"selectedTab === TAB_TYPES.SETTINGS && settingsView.sequencesAvail\"><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"saveSettings()\">{{ 'save' | i18n:loc.ale:'common' }}</a><li ng-show=\"selectedTab === TAB_TYPES.SETTINGS && settingsView.sequencesAvail\"><a href=\"#\" ng-class=\"{false:'btn-orange', true:'btn-red'}[running]\" class=\"btn-border\" ng-click=\"switchBuilder()\"><span ng-show=\"running\">{{ 'pause' | i18n:loc.ale:'common' }}</span> <span ng-show=\"!running\">{{ 'start' | i18n:loc.ale:'common' }}</span></a><li ng-show=\"selectedTab === TAB_TYPES.LOGS\"><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"logsView.clearLogs()\">{{ 'logs_clear' | i18n:loc.ale:'builder_queue' }}</a><li ng-show=\"selectedTab === TAB_TYPES.SEQUENCES && editorView.sequencesAvail\"><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"editorView.moveUp()\">{{ 'sequences_move_up' | i18n:loc.ale:'builder_queue' }}</a><li ng-show=\"selectedTab === TAB_TYPES.SEQUENCES && editorView.sequencesAvail\"><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"editorView.moveDown()\">{{ 'sequences_move_down' | i18n:loc.ale:'builder_queue' }}</a><li ng-show=\"selectedTab === TAB_TYPES.SEQUENCES && editorView.sequencesAvail\"><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"editorView.modal.addBuilding()\">{{ 'sequences_add_building' | i18n:loc.ale:'builder_queue' }}</a><li ng-show=\"selectedTab === TAB_TYPES.SEQUENCES && editorView.sequencesAvail\"><a href=\"#\" class=\"btn-border btn-red\" ng-click=\"editorView.updateBuildingSequence()\">{{ 'save' | i18n:loc.ale:'common' }}</a></ul></footer></div>`);
         interfaceOverflow.addTemplate('twoverflow_builder_queue_add_building_modal', `<div id=\"add-building-modal\" class=\"win-content\"><header class=\"win-head\"><h3>{{ 'title' | i18n:loc.ale:'builder_queue_add_building_modal' }}</h3><ul class=\"list-btn sprite\"><li><a href=\"#\" class=\"btn-red icon-26x26-close\" ng-click=\"closeWindow()\"></a></ul></header><div class=\"win-main\" scrollbar=\"\"><div class=\"box-paper\"><div class=\"scroll-wrap unit-operate-slider\"><table class=\"tbl-border-light tbl-striped header-center\"><col width=\"15%\"><col><col width=\"15%\"><tr><td>{{ 'building' | i18n:loc.ale:'common' }}<td colspan=\"2\"><div select=\"\" list=\"buildings\" selected=\"selectedBuilding\" drop-down=\"true\"></div><tr><td>{{ 'position' | i18n:loc.ale:'builder_queue' }}<td><div range-slider=\"\" min=\"1\" max=\"indexLimit\" value=\"position\" enabled=\"true\"></div><td><input type=\"number\" class=\"input-border text-center\" ng-model=\"position\"><tr><td>{{ 'amount' | i18n:loc.ale:'builder_queue' }}<td><div range-slider=\"\" min=\"1\" max=\"buildingsData[selectedBuilding.value].max_level\" value=\"amount\" enabled=\"true\"></div><td><input type=\"number\" class=\"input-border text-center\" ng-model=\"amount\"></table></div></div></div><footer class=\"win-foot sprite-fill\"><ul class=\"list-btn list-center\"><li><a href=\"#\" class=\"btn-red btn-border btn-premium\" ng-click=\"closeWindow()\">{{ 'cancel' | i18n:loc.ale:'common' }}</a><li><a href=\"#\" class=\"btn-orange btn-border\" ng-click=\"add()\">{{ 'add' | i18n:loc.ale:'common' }}</a></ul></footer></div>`);
-        interfaceOverflow.addTemplate('twoverflow_builder_queue_name_sequence_modal', `<div id=\"name-sequence-modal\" class=\"win-content\"><header class=\"win-head\"><h3>{{ 'title' | i18n:loc.ale:'builder_queue_name_sequence_modal' }}</h3><ul class=\"list-btn sprite\"><li><a href=\"#\" class=\"btn-red icon-26x26-close\" ng-click=\"closeWindow()\"></a></ul></header><div class=\"win-main\" scrollbar=\"\"><div class=\"box-paper\"><div class=\"scroll-wrap\"><div class=\"box-border-light input-wrapper name_preset\"><form ng-submit=\"submit()\"><input focus=\"true\" ng-model=\"name\" minlength=\"3\"></form></div></div></div></div><footer class=\"win-foot sprite-fill\"><ul class=\"list-btn list-center\"><li><a href=\"#\" class=\"btn-red btn-border btn-premium\" ng-click=\"closeWindow()\">{{ 'cancel' | i18n:loc.ale:'common' }}</a><li><a href=\"#\" class=\"btn-orange btn-border\" ng-click=\"submit()\">{{ 'add' | i18n:loc.ale:'common' }}</a></ul></footer></div>`);
+        interfaceOverflow.addTemplate('twoverflow_builder_queue_name_sequence_modal', `<div id=\"name-sequence-modal\" class=\"win-content\"><header class=\"win-head\"><h3>{{ 'title' | i18n:loc.ale:'builder_queue_name_sequence_modal' }}</h3><ul class=\"list-btn sprite\"><li><a href=\"#\" class=\"btn-red icon-26x26-close\" ng-click=\"closeWindow()\"></a></ul></header><div class=\"win-main\" scrollbar=\"\"><div class=\"box-paper\"><div class=\"scroll-wrap\"><div class=\"box-border-light input-wrapper name_preset\"><p>Choose a unique name with at least 3 characters. A village label with the same name will select this sequence when Follow village label names is enabled.<form ng-submit=\"submit()\"><input focus=\"true\" ng-model=\"name\" minlength=\"3\"></form></div></div></div></div><footer class=\"win-foot sprite-fill\"><ul class=\"list-btn list-center\"><li><a href=\"#\" class=\"btn-red btn-border btn-premium\" ng-click=\"closeWindow()\">{{ 'cancel' | i18n:loc.ale:'common' }}</a><li><a href=\"#\" class=\"btn-orange btn-border\" ng-click=\"submit()\">{{ 'add' | i18n:loc.ale:'common' }}</a></ul></footer></div>`);
         interfaceOverflow.addStyle('#two-builder-queue tr.reached td{background-color:#b9af7e}#two-builder-queue tr.progress td{background-color:#af9d57}#two-builder-queue .building-sequence,#two-builder-queue .building-sequence-final,#two-builder-queue .building-sequence-editor,#two-builder-queue .logs{margin-bottom:10px}#two-builder-queue .building-sequence td,#two-builder-queue .building-sequence-final td,#two-builder-queue .building-sequence-editor td,#two-builder-queue .logs td,#two-builder-queue .building-sequence th,#two-builder-queue .building-sequence-final th,#two-builder-queue .building-sequence-editor th,#two-builder-queue .logs th{text-align:center;line-height:20px}#two-builder-queue .building-sequence-editor .selected td{background-color:#b9af7e}#two-builder-queue .editor-select-sequence{margin-bottom:13px}#two-builder-queue a.btn{height:28px;line-height:28px;padding:0 10px}#two-builder-queue .select-sequence-editor{text-align:center;margin-top:1px}#two-builder-queue .create-sequence{padding:8px 20px 8px 20px}#two-builder-queue table.settings td{padding:1px 5px}#two-builder-queue table.settings td.text-right{text-align:right}#two-builder-queue table.settings div[switch-slider]{display:inline-block;margin-top:2px}#two-builder-queue .small-select a.select-handler{height:28px;line-height:28px}#two-builder-queue .small-select a.select-button{height:28px}#two-builder-queue input.preserve-resource{width:70px;height:32px}#two-builder-queue .icon-26x26-resource-wood,#two-builder-queue .icon-26x26-resource-clay,#two-builder-queue .icon-26x26-resource-iron,#two-builder-queue .icon-26x26-resource-food{transform:scale(.8);top:-1px}#add-building-modal td{text-align:center}#add-building-modal .select-wrapper{width:250px}#add-building-modal input[type="text"]{width:60px}');
+        eventQueue.register(eventTypeProvider.BUILDER_QUEUE_LABEL_SUGGESTIONS_CHANGED, showSequenceSuggestion);
+        showSequenceSuggestion();
     };
 
     const buildWindow = function () {
@@ -10867,12 +11046,46 @@ define('two/builderQueue/ui', [
 });
 
 define('two/builderQueue/labelPolicy', [], function () {
-    // Matching multiple role labels uses this stable order. Explicit group mappings
-    // are checked first, in the order saved in Builder settings.
+    // Explicit mappings win, then the established roles, then other saved names
+    // alphabetically. Selection is independent of group/library insertion order.
     const roles = ['Offensive', 'Defensive', 'Resource'];
     const owns = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
     const hasSequence = (sequences, name) => sequences && owns(sequences, name) && Array.isArray(sequences[name]);
     const normalizeName = name => typeof name === 'string' ? name.trim().toLowerCase() : '';
+
+    const linkedGroups = function (villageId, groupList) {
+        if (!groupList || typeof groupList.getGroups !== 'function' || typeof groupList.getGroupVillageIds !== 'function') {
+            return null;
+        }
+
+        let groups;
+        try {
+            groups = groupList.getGroups();
+        } catch (error) {
+            return null;
+        }
+        if (!groups || typeof groups !== 'object') {
+            return null;
+        }
+        let unavailable = false;
+        const linked = Object.keys(groups).map(key => groups[key]).filter(group => {
+            if (!group || group.id === undefined || group.id === null) {
+                return false;
+            }
+            try {
+                const villages = groupList.getGroupVillageIds(group.id);
+                if (!Array.isArray(villages)) {
+                    unavailable = true;
+                    return false;
+                }
+                return villages.some(id => String(id) === String(villageId));
+            } catch (error) {
+                unavailable = true;
+                return false;
+            }
+        });
+        return unavailable ? null : linked;
+    };
 
     const resolve = function (config, villageId, groupList, sequences) {
         config = config || {};
@@ -10880,31 +11093,10 @@ define('two/builderQueue/labelPolicy', [], function () {
         if (config.manual_sequence_override === true || config.follow_village_labels === false) {
             return {sequence: config.building_sequence, source: 'manual', groupId: null};
         }
-        if (!groupList || typeof groupList.getGroups !== 'function' || typeof groupList.getGroupVillageIds !== 'function') {
+        const linked = linkedGroups(villageId, groupList);
+        if (!linked) {
             return fallback;
         }
-
-        let groups;
-        try {
-            groups = groupList.getGroups();
-        } catch (error) {
-            return fallback;
-        }
-        if (!groups || typeof groups !== 'object') {
-            return fallback;
-        }
-        const linked = Object.keys(groups).map(key => groups[key]).filter(group => {
-            if (!group || group.id === undefined || group.id === null) {
-                return false;
-            }
-            try {
-                const villages = groupList.getGroupVillageIds(group.id);
-                return Array.isArray(villages) && villages.some(id => String(id) === String(villageId));
-            } catch (error) {
-                return false;
-            }
-        });
-
         const mappings = Array.isArray(config.label_sequence_mappings) ? config.label_sequence_mappings : [];
         for (const mapping of mappings) {
             if (!mapping || !hasSequence(sequences, mapping.sequence)) {
@@ -10915,21 +11107,24 @@ define('two/builderQueue/labelPolicy', [], function () {
                 return {sequence: mapping.sequence, source: 'mapping', groupId: group.id};
             }
         }
-        for (const role of roles) {
-            if (!hasSequence(sequences, role)) {
-                continue;
-            }
-            const matching = linked.filter(group => normalizeName(group.name) === normalizeName(role));
-            // Duplicate role labels also resolve consistently across group-list order.
+        const priority = name => {
+            const index = roles.findIndex(role => normalizeName(role) === normalizeName(name));
+            return index < 0 ? roles.length : index;
+        };
+        const names = Object.keys(sequences || {}).filter(name => normalizeName(name) && hasSequence(sequences, name));
+        names.sort((a, b) => priority(a) - priority(b)
+            || normalizeName(a).localeCompare(normalizeName(b), 'en') || a.localeCompare(b, 'en'));
+        for (const name of names) {
+            const matching = linked.filter(group => normalizeName(group.name) === normalizeName(name));
             matching.sort((a, b) => String(a.id).localeCompare(String(b.id), 'en', {numeric: true}));
             if (matching.length) {
-                return {sequence: role, source: 'label', groupId: matching[0].id};
+                return {sequence: name, source: 'label', groupId: matching[0].id};
             }
         }
         return fallback;
     };
 
-    return {resolve};
+    return {resolve, linkedGroups, normalizeName};
 });
 
 define('two/builderQueue/settings', [], function () {

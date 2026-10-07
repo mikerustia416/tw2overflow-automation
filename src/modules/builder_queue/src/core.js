@@ -216,6 +216,7 @@ define('two/builderQueue', [
     let localSettings;
     const SHARED_SETTINGS = [SETTINGS.GROUP_VILLAGES, SETTINGS.BUILDING_SEQUENCES, SETTINGS.LABEL_MAPPINGS];
     const resourceDetours = new Map();
+    let labelChoices = {};
     const villageConfig = function (villageId) {
         const config = villageSettings(settings, villageId, SHARED_SETTINGS).getAll();
         const profile = localSettings[SETTINGS.VILLAGE_PROFILES] && localSettings[SETTINGS.VILLAGE_PROFILES][villageId];
@@ -226,7 +227,21 @@ define('two/builderQueue', [
         }
         return config;
     };
-    const resolveSequence = (config, villageId) => labelPolicy.resolve(config, villageId, groupList, config[SETTINGS.BUILDING_SEQUENCES]);
+    const selectionStamp = config => JSON.stringify([
+        config[SETTINGS.ACTIVE_SEQUENCE],
+        config[SETTINGS.AUTO_SEQUENCE],
+        config[SETTINGS.MANUAL_OVERRIDE],
+        config[SETTINGS.LABEL_MAPPINGS]
+    ]);
+    const resolveSequence = function (config, villageId) {
+        const choice = labelChoices[villageId];
+        const library = config[SETTINGS.BUILDING_SEQUENCES];
+        if (config[SETTINGS.AUTO_SEQUENCE] !== false && config[SETTINGS.MANUAL_OVERRIDE] !== true
+            && choice && choice.freeze && choice.stamp === selectionStamp(config) && choice.current) {
+            return {...choice.current, source: 'confirmed', groupId: null};
+        }
+        return labelPolicy.resolve(config, villageId, groupList, library);
+    };
     const villageHasSequence = villageId => {
         const config = villageConfig(villageId);
         return config[SETTINGS.ENABLED] && Array.isArray(config[SETTINGS.BUILDING_SEQUENCES][resolveSequence(config, villageId).sequence]);
@@ -239,7 +254,74 @@ define('two/builderQueue', [
         LOGS: 'builder_queue_log',
         SETTINGS: 'builder_queue_settings',
         DETOURS: 'builder_queue_resource_detours',
-        PRESETS_VERSION: 'builder_queue_role_presets_version'
+        PRESETS_VERSION: 'builder_queue_role_presets_version',
+        LABEL_CHOICES: 'builder_queue_label_choices'
+    };
+
+    const saveLabelChoices = () => Lockr.set(STORAGE_KEYS.LABEL_CHOICES, labelChoices);
+    const labelKey = group => JSON.stringify([String(group.id), labelPolicy.normalizeName(group.name)]);
+    const notifyLabelSuggestions = () => eventQueue.trigger(eventTypeProvider.BUILDER_QUEUE_LABEL_SUGGESTIONS_CHANGED);
+
+    const refreshLabelChoices = function () {
+        for (const villageId of Object.keys($player.getVillages())) {
+            const linked = labelPolicy.linkedGroups(villageId, groupList);
+            if (!linked) {
+                continue;
+            }
+            const config = villageConfig(villageId);
+            const stamp = selectionStamp(config);
+            const labels = linked.map(labelKey).sort();
+            let state = labelChoices[villageId];
+            if (!state || !Array.isArray(state.labels) || !state.current) {
+                state = labelChoices[villageId] = {labels, stamp, current: resolveSequence(config, villageId), freeze: false};
+            }
+            if (state.stamp !== stamp) {
+                // Explicit sequence/mapping edits supersede a pending label suggestion.
+                state.stamp = stamp;
+                state.freeze = false;
+                state.pending = null;
+                state.current = resolveSequence(config, villageId);
+            }
+            if (JSON.stringify(state.labels) !== JSON.stringify(labels)) {
+                const changed = linked.filter(group => !state.labels.includes(labelKey(group)));
+                const changedList = {
+                    getGroups: () => changed,
+                    getGroupVillageIds: id => groupList.getGroupVillageIds(id)
+                };
+                const candidate = labelPolicy.resolve({...config, follow_village_labels: true, manual_sequence_override: false},
+                    villageId,
+                    changedList,
+                    config[SETTINGS.BUILDING_SEQUENCES]);
+                state.labels = labels;
+                // Unrelated label edits must not discard an unanswered, still-valid offer.
+                if (state.pending && !linked.some(group => String(group.id) === String(state.pending.groupId)
+                    && labelPolicy.normalizeName(group.name) === labelPolicy.normalizeName(state.pending.labelName))) {
+                    state.pending = null;
+                }
+                if (candidate.source !== 'fallback' && candidate.sequence !== state.current.sequence) {
+                    // Freeze before any building analysis can use the changed labels.
+                    state.freeze = true;
+                    const group = changed.find(item => String(item.id) === String(candidate.groupId));
+                    state.pending = {...candidate, labelName: group.name,
+                        token: JSON.stringify([labels, stamp, candidate.sequence, candidate.groupId])};
+                }
+            }
+            if (state.pending) {
+                const library = config[SETTINGS.BUILDING_SEQUENCES];
+                if (!Object.prototype.hasOwnProperty.call(library, state.pending.sequence) || !Array.isArray(library[state.pending.sequence])) {
+                    state.pending = null;
+                }
+            }
+            if (!state.freeze) {
+                state.current = resolveSequence(config, villageId);
+            }
+        }
+        for (const id of Object.keys(labelChoices)) {
+            if (!$player.getVillage(id)) {
+                delete labelChoices[id];
+            }
+        }
+        saveLabelChoices();
     };
 
     /**
@@ -621,6 +703,35 @@ define('two/builderQueue', [
         return decision;
     };
 
+    builderQueue.getSequenceSuggestions = function () {
+        return Object.keys(labelChoices).sort((a, b) => a.localeCompare(b, 'en', {numeric: true})).flatMap(id => {
+            const state = labelChoices[id];
+            const village = $player.getVillage(id);
+            return state.pending && village ? [{...state.pending, villageId: id,
+                villageName: typeof village.getName === 'function' ? village.getName() : 'Village ' + id,
+                currentSequence: state.current.sequence}] : [];
+        });
+    };
+
+    builderQueue.answerSequenceSuggestion = function (villageId, token, useSequence) {
+        refreshLabelChoices();
+        const state = labelChoices[villageId];
+        if (!state || !state.pending || state.pending.token !== token) {
+            notifyLabelSuggestions();
+            return false;
+        }
+        const sequence = state.pending.sequence;
+        state.pending = null;
+        saveLabelChoices();
+        if (useSequence) {
+            // A confirmed choice is saved for this village; future label edits still ask.
+            builderQueue.getSettings(villageId).set(SETTINGS.ACTIVE_SEQUENCE, sequence);
+        }
+        updateSequencesAvailable();
+        notifyLabelSuggestions();
+        return true;
+    };
+
     builderQueue.getLogs = function () {
         return logs;
     };
@@ -634,7 +745,11 @@ define('two/builderQueue', [
     builderQueue.addBuildingSequence = function (id, sequence) {
         const sequences = settings.get(SETTINGS.BUILDING_SEQUENCES);
 
-        if (id in sequences) {
+        if (typeof id !== 'string' || id.trim().length < 3) {
+            return SEQUENCE_STATUS.SEQUENCE_INVALID;
+        }
+        id = id.trim();
+        if (id in Object.prototype || Object.keys(sequences).some(name => name.trim().toLowerCase() === id.toLowerCase())) {
             return SEQUENCE_STATUS.SEQUENCE_EXISTS;
         }
 
@@ -695,6 +810,7 @@ define('two/builderQueue', [
         }
         $player = modelDataService.getSelectedCharacter();
         groupList = modelDataService.getGroupList();
+        labelChoices = Lockr.get(STORAGE_KEYS.LABEL_CHOICES, {});
         
         settings = new Settings({
             settingsMap: SETTINGS_MAP,
@@ -736,7 +852,9 @@ define('two/builderQueue', [
                 builderQueue.stop();
             }
             localSettings = settings.getAll();
+            refreshLabelChoices();
             updateSequencesAvailable();
+            notifyLabelSuggestions();
 
             if (restart) {
                 builderQueue.start();
@@ -753,6 +871,7 @@ define('two/builderQueue', [
             VILLAGE_BUILDINGS[BUILDING_TYPES[buildingName]] = 0;
         }
 
+        refreshLabelChoices();
         updateSequencesAvailable();
         [eventTypeProvider.GROUPS_UPDATED,
             eventTypeProvider.GROUPS_CREATED,
@@ -760,7 +879,9 @@ define('two/builderQueue', [
             eventTypeProvider.GROUPS_VILLAGE_LINKED,
             eventTypeProvider.GROUPS_VILLAGE_UNLINKED].filter(Boolean).forEach(type => {
             $rootScope.$on(type, function () {
+                refreshLabelChoices();
                 updateSequencesAvailable();
+                notifyLabelSuggestions();
                 if (running) {
                     analyseVillages();
                 }

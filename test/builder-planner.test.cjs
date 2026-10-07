@@ -131,8 +131,8 @@ test('numeric strings from real nextLevelCosts are normalized in post-spend esti
 
 function runtime (options = {}) {
     const f = fixture({deferFarmInit: true, villageIds: [1, 2], storageEntries: options.storageEntries});
-    const groups = {10: {id: 10, name: 'Resource'}, 11: {id: 11, name: 'Offensive'}};
-    const links = {10: [], 11: []};
+    const groups = options.groups || {10: {id: 10, name: 'Resource'}, 11: {id: 11, name: 'Offensive'}};
+    const links = options.links || {10: [], 11: []};
     const definitions = {Essential: ['barracks', 'warehouse', 'farm', 'timber_camp', 'timber_camp', 'timber_camp'],
         Resource: ['timber_camp', 'warehouse'], Offensive: ['barracks', 'farm'], Defensive: ['wall', 'farm']};
     const models = {};
@@ -174,6 +174,7 @@ function runtime (options = {}) {
     }
     f.loadSource('src/resource-budget.js');
     for (const file of ['settings', 'types', 'events', 'label-policy', 'core']) f.loadSource('src/modules/builder_queue/src/' + file + '.js');
+    f.get('two/builderQueue/events');
     const builder = f.get('two/builderQueue');
     builder.init();
     return {...f, builder, models, links, groups};
@@ -226,8 +227,7 @@ test('queue slots and shared resource reservations block preview and execution',
 });
 
 test('role links change effective sequence dynamically while manual old profiles retain their selection', () => {
-    const f = runtime();
-    f.links[10] = [1, 2];
+    const f = runtime({links: {10: [1, 2], 11: []}});
     f.builder.getSettings(2).set('building_sequence', 'Offensive');
     assert.equal(f.builder.preview(1).sequence, 'Resource');
     assert.equal(f.builder.preview(2).sequence, 'Offensive');
@@ -304,4 +304,94 @@ test('adding an invalid new sequence does not persist unknown or excessive build
     assert.equal(f.builder.addBuildingSequence('TooMuchFarm', Array(31).fill('farm')), invalid);
     assert.equal(f.builder.getSettings().get('building_orders').Unknown, undefined);
     assert.equal(f.builder.getSettings().get('building_orders').TooMuchFarm, undefined);
+});
+
+test('named sequence library persists edits and automatic label matching after reload', () => {
+    const f = runtime();
+    const status = f.get('two/builderQueue/sequenceStatus');
+    assert.equal(f.builder.addBuildingSequence('  Starter Farm  ', ['farm', 'warehouse']), status.SEQUENCE_SAVED);
+    assert.equal(f.builder.addBuildingSequence('starter farm', ['wall']), status.SEQUENCE_EXISTS);
+    for (const name of ['', '   ', 'a', null, '__proto__', 'constructor']) {
+        assert.notEqual(f.builder.addBuildingSequence(name, ['farm']), status.SEQUENCE_SAVED);
+    }
+    f.groups[15] = {id: 15, name: 'STARTER FARM'};
+    f.links[15] = [1];
+    f.rootScope.$broadcast(f.events.GROUPS_VILLAGE_LINKED, {});
+    const suggestion = f.builder.getSequenceSuggestions()[0];
+    assert.equal(f.builder.preview(1).sequence, 'Essential');
+    f.builder.answerSequenceSuggestion(1, suggestion.token, true);
+    assert.equal(f.builder.preview(1).sequence, 'Starter Farm');
+    assert.equal(f.builder.preview(1).building, 'farm');
+    assert.equal(f.builder.updateBuildingSequence('Starter Farm', ['warehouse']), status.SEQUENCE_SAVED);
+    const restored = runtime({storageEntries: [...f.storage.entries()]});
+    restored.groups[15] = {id: 15, name: ' starter farm '};
+    restored.links[15] = [1];
+    assert.equal(restored.builder.preview(1).sequence, 'Starter Farm');
+    assert.equal(restored.builder.preview(1).building, 'warehouse');
+    assert.equal(restored.builder.preview(2).sequence, 'Essential');
+    assert.deepEqual(Array.from(restored.builder.getSettings().get('building_orders')['Starter Farm']), ['warehouse']);
+    restored.builder.removeSequence('Starter Farm');
+    assert.equal(restored.builder.preview(1).building, null);
+    assert.match(restored.builder.preview(1).reason, /No valid sequence/);
+    assert.equal(f.requests.length + restored.requests.length, 0);
+});
+
+test('label suggestions and declined decisions survive reload, and invalidated suggestions cannot apply', () => {
+    const f = runtime();
+    f.links[10] = [1];
+    f.rootScope.$broadcast(f.events.GROUPS_VILLAGE_LINKED, {});
+    assert.equal(f.builder.preview(1).sequence, 'Essential');
+    const suggestion = f.builder.getSequenceSuggestions()[0];
+    assert.equal(suggestion.sequence, 'Resource');
+    const restored = runtime({storageEntries: [...f.storage.entries()], links: {10: [1], 11: []}});
+    assert.equal(restored.builder.getSequenceSuggestions()[0].token, suggestion.token);
+    assert.equal(restored.builder.preview(1).sequence, 'Essential');
+    restored.builder.answerSequenceSuggestion(1, suggestion.token, false);
+    const declined = runtime({storageEntries: [...restored.storage.entries()], links: {10: [1], 11: []}});
+    assert.equal(declined.builder.preview(1).sequence, 'Essential');
+    assert.equal(declined.builder.getSequenceSuggestions().length, 0);
+    declined.rootScope.$broadcast(declined.events.GROUPS_VILLAGE_LINKED, {});
+    assert.equal(declined.builder.getSequenceSuggestions().length, 0);
+    declined.groups[10].name = 'Defensive';
+    declined.rootScope.$broadcast(declined.events.GROUPS_UPDATED, {});
+    const next = declined.builder.getSequenceSuggestions()[0];
+    declined.builder.removeSequence('Defensive');
+    assert.equal(declined.builder.answerSequenceSuggestion(1, next.token, true), false);
+    assert.equal(declined.builder.getSequenceSuggestions().length, 0);
+    assert.equal(f.requests.length + restored.requests.length + declined.requests.length, 0);
+});
+
+test('pending confirmation protects building execution and explicit manual edits supersede it', () => {
+    const f = runtime({links: {10: [1], 11: []}});
+    f.builder.addBuildingSequence('Starter Farm', ['farm']);
+    f.groups[12] = {id: 12, name: 'Starter Farm'};
+    f.links[12] = [1];
+    f.rootScope.$broadcast(f.events.GROUPS_VILLAGE_LINKED, {});
+    const suggestion = f.builder.getSequenceSuggestions()[0];
+    f.builder.getSettings(2).set('enabled', false);
+    f.builder.start();
+    assert.deepEqual(f.requests.map(request => request.data.building), ['timber_camp']);
+    assert.equal(f.builder.preview(1).sequence, 'Resource');
+    f.builder.stop();
+    f.builder.getSettings(1).set('building_sequence', 'Defensive');
+    assert.equal(f.builder.getSequenceSuggestions().length, 0);
+    assert.equal(f.builder.answerSequenceSuggestion(1, suggestion.token, true), false);
+    assert.equal(f.builder.preview(1).sequence, 'Defensive');
+});
+
+test('unrelated label changes retain pending confirmation and deleting the current sequence cannot bypass consent', () => {
+    const f = runtime({links: {10: [1], 11: []}});
+    f.links[11] = [1];
+    f.rootScope.$broadcast(f.events.GROUPS_VILLAGE_LINKED, {});
+    const suggestion = f.builder.getSequenceSuggestions()[0];
+    f.groups[12] = {id: 12, name: 'Unmatched Label'};
+    f.links[12] = [1];
+    f.rootScope.$broadcast(f.events.GROUPS_VILLAGE_LINKED, {});
+    assert.equal(f.builder.getSequenceSuggestions()[0].token, suggestion.token);
+    f.builder.removeSequence('Resource');
+    assert.equal(f.builder.preview(1).sequence, 'Resource');
+    assert.equal(f.builder.preview(1).building, null);
+    f.builder.answerSequenceSuggestion(1, suggestion.token, true);
+    assert.equal(f.builder.preview(1).sequence, 'Offensive');
+    assert.equal(f.requests.length, 0);
 });

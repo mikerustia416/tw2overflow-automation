@@ -73,13 +73,23 @@ The **Second Village** menu appears when the game enables that feature. Its Star
 
 Open **Builder**, use **Configure** to select a village, choose its active building sequence, resource reserves and farm priority, then Save. **Build in this village** can disable an individual village. The sequence library and village-group filter remain shared. Save before switching villages. Villages without a saved profile inherit **Shared defaults**; **Use shared defaults for this village** removes a profile. Existing settings become the shared defaults without changing them. Profiles persist by world, character and village. Press Start to run all enabled villages in the selected group. Builder follows the sequence while respecting available queue slots and the shared recruitment spending guard. It restores its running state after refresh. Saving changed settings cancels its old timers, refreshes the active sequence limits, and starts a new run if it was running. Villages assigned an unavailable sequence are skipped; Builder stops when no configured sequence is available. Farm-priority upgrades also respect that village's reserves.
 
+### Named sequences
+
+Open **Builder → Sequences**, choose **Create a sequence**, enter a unique name with at least three characters, then add and reorder building steps and save the sequence. A new sequence starts with one Headquarters upgrade and opens in the editor without changing the village's active sequence or saving unrelated village settings. Sequence names are trimmed; duplicates differing only in capitalization or surrounding spaces are rejected.
+
+Use **Save as new sequence** to save the current edited steps under a new name while preserving the original sequence. **Clone selected sequence** copies the saved version; it warns when the editor contains unsaved changes. The sequence library is stored in this browser for the current world and character, shared by the character's villages, and preserved across reloads. It is separate from the game's army presets and does not sync across browsers.
+
+For example, save a sequence named **Starter Farm** and assign the game village label **Starter Farm** to the villages that should use it. Initial label matching uses the rules below; later label changes require confirmation before switching to a different matching sequence.
+
 ### City roles and village labels
 
 Builder includes **Offensive**, **Defensive** and **Resource** sequences. All start with farms, warehouses, basic production and the Headquarters levels required to unlock their later buildings. Offensive emphasizes barracks and academy access; Defensive emphasizes barracks, walls and hospital; Resource emphasizes all three production buildings, storage and market capacity.
 
-With **Follow village role label** enabled, an owned village in a game group named Offensive, Defensive or Resource selects the corresponding sequence. Matching is exact apart from capitalization and surrounding spaces. Label assignment/removal is checked during normal cycles and group events. The **Effective sequence** and preview show the selected type and source; the saved dropdown remains the fallback when no role matches. Choosing a sequence manually disables label selection for that village; re-enable the checkbox to follow labels again.
+With **Follow village label names** enabled (the default), any saved building sequence can match an owned village's game label by name. Matching uses the complete name, ignoring capitalization and surrounding spaces. Existing labels establish the initial selection when no saved decision exists. The **Effective sequence** and preview show the current sequence and source; the saved dropdown remains the fallback when no label matches. Choosing a sequence manually disables automatic label selection for that village; re-enable the checkbox and save to follow labels again.
 
-Use **Add shared label mapping** for custom labels, such as mapping a group named Frontline to Defensive. Mappings use group IDs so a renamed group retains its mapping. The first matching mapping wins; Up/Down change priority. With no custom mapping, overlapping role labels use Offensive, then Defensive, then Resource. A manual village choice takes precedence. The selected village-group filter and village enablement still govern where Builder runs.
+When a village label is renamed or another label is linked to a village, a different matching sequence is offered through the existing confirmation modal, even if the Builder window is closed or the village currently has a manual choice. The dialog identifies the village, label, matching sequence and current sequence. **Use sequence** saves a manual choice for that village; later label changes can still offer another match. **Keep current**, or closing the dialog, retains the current sequence. Builder continues using the current sequence until the user accepts. Decisions and pending prompts survive reloads; repeated events for unchanged labels do not ask again. Unrelated label edits retain a valid pending prompt, and removed labels, deleted proposed sequences or newer explicit choices invalidate stale prompts. Existing queued upgrades are unaffected. No matching change means no confirmation prompt.
+
+Use **Add shared label mapping** when a label should use a differently named sequence, such as mapping Frontline to Defensive. Mappings use group IDs so a renamed group retains its mapping. The first matching mapping wins; Up/Down change priority. Without a mapping, overlapping names use Offensive, then Defensive, then Resource, followed by other matching saved names alphabetically. A new matching label can be offered even when an existing label has higher initial priority. A manual village choice takes precedence until a different suggestion is accepted. Multiple affected villages are prompted one at a time. The selected village-group filter and village enablement still govern where Builder runs.
 
 Edit presets in the sequence editor, or modify the cumulative `foundation` and `roleTargets` arrays near the end of `src/modules/builder_queue/src/default-orders.js`. Phases alternate one upgrade per listed building until each target level is reached. Keep Headquarters unlock phases before new military/support buildings. Existing libraries receive missing role presets once; saved custom arrays, deliberate empty libraries and subsequent removals are preserved. Editing source defaults does not overwrite an already saved sequence; use the sequence editor to update that saved copy.
 
@@ -274,15 +284,18 @@ Use Node.js 22 or later:
 git clone https://github.com/mikerustia416/tw2overflow-automation.git
 cd tw2overflow-automation
 npm ci --ignore-scripts
-npm test
 npm run make
-node --check dist/tw2overflow.user.js
 cp dist/tw2overflow.user.js userscript/tw2overflow-farming.user.js
+npm test
+node --check dist/tw2overflow.user.js
+node --check userscript/tw2overflow-farming.user.js
+cmp dist/tw2overflow.user.js userscript/tw2overflow-farming.user.js
+git diff --check
 ```
 
 The build writes `dist/tw2overflow.user.js`. The default build runs lint and includes all source modules except the legacy usage-report module, including BuilderQueue. If your npm cache is not writable, configure a writable cache directory when installing dependencies.
 
-Tests load the actual AMD modules and settings class in a mocked environment. Coverage includes travel boundaries, preset scoring and generation, reserves, ownership changes, target deduplication, arrival spacing, cooldowns, cycle caps, recruitment deficits and budgets, protected upgrades, population, queue limits, persisted pending orders, reload restoration, settings-save restarts, timer replacement, stale callback guards, and the quest open → select task → claim → close sequence. These tests do not establish live-game compatibility or detection resistance.
+Tests load the actual AMD modules and settings class in a mocked environment. Coverage includes travel boundaries, preset scoring and generation, reserves, ownership changes, target deduplication, arrival spacing, cooldowns, cycle caps, recruitment deficits and budgets, protected upgrades, population, queue limits, persisted pending orders, reload restoration, settings-save restarts, timer replacement, stale callback guards, named sequence editing and reload persistence, label confirmation acceptance/cancellation, overlapping labels, queued and stale prompts, village isolation, and the quest open → select task → claim → close sequence. These tests do not establish live-game compatibility or detection resistance.
 
 ### Project commit and push workflow
 

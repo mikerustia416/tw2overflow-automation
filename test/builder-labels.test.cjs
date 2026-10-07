@@ -53,7 +53,7 @@ test('role selection refreshes after linking/unlinking and does not mutate label
     const originalGroups = JSON.stringify(groups.groups);
     assert.equal(policy.resolve(config, 2, groups, sequences).sequence, 'Offensive');
     groups.membership[20] = [1];
-    assert.equal(policy.resolve(config, 2, groups, sequences).sequence, 'Essential');
+    assert.equal(policy.resolve(config, 2, groups, sequences).sequence, 'Custom');
     groups.membership[30].push(2);
     assert.equal(policy.resolve(config, 2, groups, sequences).sequence, 'Resource');
     assert.equal(JSON.stringify(config), originalConfig);
@@ -105,4 +105,23 @@ test('editable role phases generate deterministic complete sequences within veri
     assert.equal(count('Resource', 'timber_camp'), 30);
     assert.equal(count('Resource', 'barracks'), 5);
     for (const legacy of ['Essential', 'Full Village', 'Essential Without Wall', 'Full Wall', 'Full Farm']) assert.ok(Array.isArray(first[legacy]));
+});
+
+test('any saved sequence matches complete village label names with stable overlap precedence', () => {
+    const groups = labels();
+    groups.groups[20].name = '  starter farm ';
+    groups.groups[40].name = 'Zeta';
+    const library = {Zeta: ['wall'], 'Starter Farm': ['farm'], Essential: []};
+    assert.deepEqual(plain(policy.resolve(config, 2, groups, library)), {sequence: 'Starter Farm', source: 'label', groupId: 20});
+    const reversed = {...groups, getGroups: () => Object.values(groups.groups).reverse()};
+    assert.equal(policy.resolve(config, 2, reversed, Object.fromEntries(Object.entries(library).reverse())).sequence, 'Starter Farm');
+    assert.equal(policy.resolve({...config, label_sequence_mappings: [{group_id: 40, sequence: 'Zeta'}]}, 2, groups, library).sequence, 'Zeta');
+    assert.equal(policy.resolve({...config, manual_sequence_override: true}, 2, groups, library).source, 'manual');
+    groups.groups[20].name = 'Starter Farm extra';
+    assert.equal(policy.resolve(config, 1, groups, library).sequence, 'Essential');
+    groups.groups[20].name = 'Starter Farm';
+    groups.groups[5] = {id: 5, name: 'STARTER FARM'};
+    groups.membership[5] = [2];
+    assert.equal(policy.resolve(config, 2, groups, library).groupId, 5);
+    assert.equal(policy.resolve(config, 2, groups, {...library, 'Starter Farm': null}).sequence, 'Zeta');
 });

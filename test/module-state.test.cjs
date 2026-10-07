@@ -140,10 +140,11 @@ test('Builder settings restart discards old readiness callbacks and rejects miss
     builder.start();
     builder.getSettings().set('preserve_wood', 200);
     assert.equal(waiting.length, 2);
+    const readsBeforeStaleCallback = reads;
     waiting[0]();
-    assert.equal(reads, 0);
+    assert.equal(reads, readsBeforeStaleCallback, 'a stale readiness callback must not read villages');
     waiting[1]();
-    assert.ok(reads > 0);
+    assert.ok(reads > readsBeforeStaleCallback, 'the current callback must still analyze villages');
     builder.getSettings().set('building_sequence', 'Missing');
     assert.equal(builder.isRunning(), false);
     builder.getSettings().set('building_sequence', 'Essential');
