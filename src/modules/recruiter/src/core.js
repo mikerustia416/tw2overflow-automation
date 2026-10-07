@@ -21,6 +21,8 @@ define('two/recruiter', [
     const resources = ['wood', 'clay', 'iron', 'food'];
     const timers = new Map();
     const reservations = new Map();
+    const batches = new Map();
+    const continuations = new Map();
     const publish = () => eventQueue.trigger('two_recruiter_updated');
     const unitData = () => modelDataService.getGameData().getUnitsObject();
     const buildingData = () => modelDataService.getGameData().getBuildings();
@@ -122,6 +124,81 @@ define('two/recruiter', [
         return false;
     };
 
+    const showPlan = function (villageId, plan) {
+        plan.villageId = villageId;
+        plans = plans.filter(item => item.villageId !== villageId);
+        plans.push(plan);
+    };
+
+    const continueVillage = function (village) {
+        const villageId = village.getId();
+        if (continuations.has(villageId)) {
+            return;
+        }
+        const token = version;
+        continuations.set(villageId, setTimeout(() => {
+            continuations.delete(villageId);
+            if (running && token === version) {
+                processVillage(village, false);
+                publish();
+            }
+        }, 500));
+    };
+
+    const processVillage = function (village, newCycle) {
+        const villageId = village.getId();
+        try {
+            const config = villageConfig(villageId);
+            if (!policy.validSettings(config, settingsMap, unitData(), buildingData()) || !config.enabled) {
+                batches.delete(villageId);
+                showPlan(villageId, {reason: config.enabled ? 'Invalid village recruitment settings'
+                    : 'Recruitment disabled for this village', orders: []});
+                return;
+            }
+            const state = snapshot(village, config);
+            let batch = batches.get(villageId);
+            if (!config.preview_only && !reconcile(village, state)) {
+                const plan = policy.plan(state, config, unitData(), batch && batch.remaining);
+                plan.reason = 'Waiting for an earlier spend to appear in game data';
+                showPlan(villageId, plan);
+                if (pending[villageId] && Date.now() - pending[villageId].sentAt >= 30000) {
+                    recruiter.stop('Pending recruitment needs a queue/resource check');
+                } else {
+                    // Poll confirmation, without starting another interval budget.
+                    continueVillage(village);
+                }
+                return;
+            }
+            if (!newCycle && !batch) {
+                // A guard inherited from a previous run is now clear. Budget it at
+                // the next configured interval rather than restarting a finished cycle.
+                return;
+            }
+            const plan = policy.plan(state, config, unitData(), batch && batch.remaining);
+            showPlan(villageId, plan);
+            if (config.preview_only) {
+                return;
+            }
+            if (!batch && plan.orders.length) {
+                batch = {remaining: {...plan.budget}};
+                batches.set(villageId, batch);
+            }
+            if (!plan.orders.length || !batch) {
+                batches.delete(villageId);
+                return;
+            }
+            // Each spend consumes the original interval budget. Replan queue
+            // capacity, targets and protections against fresh data before every send.
+            send(village, state, plan.orders[0], batch);
+            if (running && batches.get(villageId) === batch) {
+                continueVillage(village);
+            }
+        } catch (error) {
+            batches.delete(villageId);
+            showPlan(villageId, {reason: error.message, orders: []});
+        }
+    };
+
     const cycle = function () {
         if (!running) {
             return;
@@ -135,40 +212,12 @@ define('two/recruiter', [
             if (!running) {
                 break;
             }
-            try {
-                const config = villageConfig(village.getId());
-                if (!policy.validSettings(config, settingsMap, unitData(), buildingData())) {
-                    plans.push({villageId: village.getId(), reason: 'Invalid village recruitment settings', orders: []});
-                    continue;
-                }
-                if (!config.enabled) {
-                    plans.push({villageId: village.getId(), reason: 'Recruitment disabled for this village', orders: []});
-                    continue;
-                }
-                const state = snapshot(village, config);
-                const plan = policy.plan(state, config, unitData());
-                plan.villageId = village.getId();
-                plans.push(plan);
-                if (!config.preview_only && !reconcile(village, state)) {
-                    plan.reason = 'Waiting for an earlier spend to appear in game data';
-                    if (pending[village.getId()] && Date.now() - pending[village.getId()].sentAt >= 30000) {
-                        recruiter.stop('Pending recruitment needs a queue/resource check');
-                        break;
-                    }
-                    continue;
-                }
-                if (running && !config.preview_only && plan.orders.length) {
-                    // One batch per village/cycle; next cycle replans against fresh game data.
-                    send(village, state, plan.orders[0]);
-                }
-            } catch (error) {
-                plans.push({villageId: village.getId(), reason: error.message, orders: []});
-            }
+            processVillage(village, true);
         }
         publish();
     };
 
-    const send = function (village, state, order) {
+    const send = function (village, state, order, batch) {
         if (!routeProvider.BARRACKS_RECRUIT) {
             recruiter.stop('Recruitment route unavailable');
             return;
@@ -176,6 +225,9 @@ define('two/recruiter', [
         const reservation = resourceBudget.begin(village, order.cost);
         if (!reservation) {
             return;
+        }
+        for (const type of resources) {
+            batch.remaining[type] -= order.cost[type];
         }
         reservations.set(village.getId(), reservation);
         const entry = {beforeJobs: (state.jobs || []).map(job => String(job.job_id || job.id)), before: state.stock, cost: order.cost, sentAt: Date.now(), unit: order.unit_type, amount: order.amount};
@@ -284,6 +336,11 @@ define('two/recruiter', [
             running = false;
             version++;
             clearInterval(timer);
+            for (const continuation of continuations.values()) {
+                clearTimeout(continuation);
+            }
+            continuations.clear();
+            batches.clear();
             recruiter.status = reason;
             eventQueue.trigger('two_recruiter_stop');
             publish();
@@ -301,6 +358,7 @@ define('two/recruiter', [
             reservations.delete(Number(villageId));
             clearTimeout(timers.get(Number(villageId)));
             timers.delete(Number(villageId));
+            plans = plans.filter(plan => String(plan.villageId) !== String(villageId));
             recruiter.status = 'Guard cleared after manual check; start again';
             publish();
             return true;

@@ -53,6 +53,9 @@ define('two/recruiter/ui', [
                 scope.status = recruiter.status;
                 scope.plans = recruiter.getPlans();
                 scope.pending = recruiter.getPending();
+                if (scope.running || !scope.pending[scope.pendingToResolve]) {
+                    scope.pendingToResolve = null;
+                }
                 updateButton();
             };
             scope.save = function () {
@@ -80,18 +83,24 @@ define('two/recruiter/ui', [
                 update();
             };
             scope.resolvePending = function (villageId) {
-                const modal = $rootScope.$new();
-                modal.title = 'Resolve pending recruitment';
-                modal.text = 'Check the village barracks queue, owned troop totals, and resources in the game first. Clearing this guard allows another batch and may repeat an earlier order if game data is still stale.';
-                modal.submitText = 'I checked the game; clear guard';
-                modal.cancelText = 'Cancel';
-                modal.submit = function () {
-                    modal.closeWindow();
-                    recruiter.resolvePending(villageId);
+                if (!recruiter.isRunning() && recruiter.getPending()[villageId]) {
+                    scope.pendingToResolve = String(villageId);
+                }
+            };
+            scope.cancelPendingResolution = () => {
+                scope.pendingToResolve = null;
+            };
+            scope.confirmPendingResolution = function () {
+                const villageId = scope.pendingToResolve;
+                if (villageId === null || villageId === undefined || recruiter.isRunning()
+                    || !recruiter.getPending()[villageId]) {
                     update();
-                };
-                modal.cancel = () => modal.closeWindow();
-                windowManagerService.getModal('modal_attention', modal);
+                    return false;
+                }
+                const resolved = recruiter.resolvePending(villageId);
+                scope.pendingToResolve = null;
+                update();
+                return resolved;
             };
             update();
             const events = new EventScope('two_recruiter_window', noop);

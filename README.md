@@ -190,7 +190,7 @@ deficit = max(0, target - owned troops - queued soldiers)
 4. Select buildings whose next upgrade you want to fund. Add additional building budgets to save for further upgrades or other spending.
 5. Choose the spending share, batch-size cap, queue job cap, and check interval.
 6. Keep **Preview only** enabled and start. Review owned and queued troops, deficits, protected resources, building costs, cycle budgets, and proposed batches for each village.
-7. Pause, disable preview, save, and start to recruit. Saving changed settings restarts recruitment if it is running, retaining pending-order guards. Each village submits at most one batch per cycle and replans before the next batch.
+7. Pause, disable preview, save, and start to recruit. Saving changed settings restarts recruitment if it is running, retaining pending-order guards. Each village fills available queue slots during the same interval, splitting troop deficits into batches up to the batch-size cap and considering unit kinds in the configured order. It confirms each preceding order and resource update, then replans before sending the next batch; it does not wait for the next configured interval between confirmed batches. Each village spends only its own resources.
 
 The first proposed batch is the one a live cycle would submit. Later proposals show the remaining priority order under the same budget.
 
@@ -216,7 +216,7 @@ spendable = max(0, current stock - protected)
 cycle budget = floor(spendable × spend percentage / 100)
 ```
 
-Free population uses all remaining unreserved population without the resource spending percentage. Batch size is limited by the deficit, batch cap, wood/clay/iron budgets, free population, barracks level, and queue job cap.
+The spending percentage sets one total wood/clay/iron budget per village for the interval, shared by every batch. It is not reapplied to each order. If another spend or a protected upgrade reduces the remaining stock, later batches shrink or stop. The next configured interval opens a new budget after any active cycle finishes. Free population uses all remaining unreserved population without the resource spending percentage. Batch size is limited by the deficit, batch cap, wood/clay/iron budgets, free population, barracks level, and queue job cap.
 
 For example, with 20,000 wood, 5,000 savings, a 2,000 additional building budget, and 1,000 wood for selected upgrades, spendable wood is 12,000. A 25% spending limit permits 3,000 wood this cycle. A troop costing 50 wood permits at most 60 soldiers from wood alone. A batch cap of 50 lowers the order to 50; clay, iron, population, or the deficit can lower it further.
 
@@ -226,9 +226,9 @@ BuilderQueue shares an in-flight spending guard with Recruiter. A pending buildi
 
 ### Pending orders and limits
 
-Recruiter records pending orders separately per world and character, preserving the guard on pause, restart, and reload. It waits for a matching server job plus resource debit before permitting another batch. After 30 seconds without confirmation, it pauses without retrying.
+Recruiter records pending orders separately per world and character, preserving the guard on pause, restart, and reload. It waits for a matching server queue job plus a resource debit or newer server resource snapshot before permitting another batch. Confirmation is checked every half-second while queue filling is active. After 30 seconds without confirmation, it pauses without retrying.
 
-Inspect the game's queue, troop totals, and resources before using **Resolve guard after checking game**. Slow data updates, production overtaking the expected resource debit, or a job finishing before observation can require this manual check.
+Inspect the game's queue, troop totals, and resources before using **Resolve guard after checking game**. This opens a confirmation inside Recruiter; choose **I checked the game; clear guard** to clear only that village, or **Cancel** to keep the guard. Recovery leaves Recruiter paused; press Start when ready. Slow data updates, production overtaking the expected resource debit, or a job finishing before observation can require this manual check.
 
 Recruiter supports barracks recruitment. Academy, statue, and preceptory recruitment, premium spending, building upgrades, and cost modifiers absent from world unit data are outside this module. Missing resources, population, troop totals, costs, or queue data prevent recruitment. Protected budgets govern Recruiter's decisions; they do not prevent other spending.
 

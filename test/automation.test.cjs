@@ -171,7 +171,7 @@ test('negative, fractional, or unknown troop targets and invalid intervals canno
     }
 });
 
-test('live recruitment sends one batch and cannot repeat on stale resources or queue', async () => {
+test('recruitment continues only after the preceding queue and resource update', async () => {
     const f = recruitmentFixture({config: {preview_only: false, check_interval: '10 seconds'}});
     f.recruiter.start();
     assert.deepEqual(f.requests, [{village_id: 1, unit_type: 'spear', amount: 50}]);
@@ -470,4 +470,163 @@ test('saved profiles freeze local values, share timing/preview, and can return t
     profile.resetProfile();
     assert.deepEqual(plain(profile.get('targets')), {axe: 5});
     assert.equal(profile.get('preserve_wood'), 8000);
+});
+
+
+function confirmRecruitment (f, index) {
+    const request = f.requests[index];
+    const job = {job_id: 100 + index, ...request, recruited: 0};
+    f.jobs.push(job);
+    for (const type of ['wood', 'clay', 'iron', 'food']) {
+        f.stocks[type] -= troopData[request.unit_type][type] * request.amount;
+    }
+    f.replies[index](job);
+}
+
+test('preview fills available queue slots with repeated capped batches and unit priority', () => {
+    const f = recruitmentFixture();
+    f.recruiter.start();
+    const plan = f.recruiter.getPlans()[0];
+    assert.deepEqual(plain(plan.orders.map(order => [order.unit_type, order.amount])),
+        [['spear', 50], ['spear', 30], ['axe', 40]]);
+    assert.equal(plan.deficits[0].deficit, 80);
+    assert.equal(plan.remaining.wood, 2600);
+    assert.equal(f.requests.length, 0);
+    const capped = recruitmentFixture({config: {targets: {spear: 1000}, max_queue_jobs: 3},
+        jobs: [{job_id: 1, unit_type: 'spear', amount: 10, recruited: 0}]});
+    capped.recruiter.start();
+    assert.deepEqual(plain(capped.recruiter.getPlans()[0].orders.map(order => order.amount)), [50, 50]);
+});
+
+test('all affordable recruitment batches fill the queue before the next configured interval', async () => {
+    const f = recruitmentFixture({config: {preview_only: false, check_interval: '1 minute'}});
+    f.recruiter.start();
+    for (let index = 0; index < 3; index++) {
+        assert.equal(f.requests.length, index + 1);
+        confirmRecruitment(f, index);
+        await f.tick(500);
+    }
+    assert.deepEqual(f.requests.map(order => [order.unit_type, order.amount]),
+        [['spear', 50], ['spear', 30], ['axe', 40]]);
+    await f.tick(1000);
+    assert.equal(f.requests.length, 3);
+    assert.equal(Object.keys(f.recruiter.getPending()).length, 0);
+    assert.equal(f.recruiter.isRunning(), true);
+});
+
+test('spending percentage is one total interval budget, even if production replaces every debit', async () => {
+    const resourceClock = {now: 1001};
+    const f = recruitmentFixture({resourceClock, config: {preview_only: false, check_interval: '1 minute',
+        targets: {spear: 1000}, max_batch: 10, max_queue_jobs: 20, spend_percent: 25}});
+    f.recruiter.start();
+    for (let index = 0; index < 5; index++) {
+        confirmRecruitment(f, index);
+        for (const type of ['wood', 'clay', 'iron', 'food']) {
+            f.stocks[type] += troopData.spear[type] * f.requests[index].amount;
+        }
+        await f.tick(500);
+    }
+    assert.deepEqual(f.requests.map(order => order.amount), [10, 10, 10, 10, 5]);
+    assert.equal(f.requests.reduce((sum, order) => sum + order.amount * troopData.spear.wood, 0), 2250);
+    await f.tick(1000);
+    assert.equal(f.requests.length, 5, 'Completion cannot open another budget in the same interval');
+    await f.tick(56500);
+    assert.equal(f.requests.length, 6, 'The configured interval permits a new budget');
+});
+
+test('queue cap applies across multiple sends and preserves pre-existing paid jobs', async () => {
+    const f = recruitmentFixture({config: {preview_only: false, targets: {spear: 1000}, max_batch: 10, max_queue_jobs: 3},
+        jobs: [{job_id: 1, unit_type: 'spear', amount: 10, recruited: 0}]});
+    f.recruiter.start();
+    confirmRecruitment(f, 0);
+    await f.tick(500);
+    confirmRecruitment(f, 1);
+    await f.tick(500);
+    assert.equal(f.requests.length, 2);
+    assert.equal(f.jobs.length, 3);
+    await f.tick(2000);
+    assert.equal(f.requests.length, 2);
+});
+
+test('new external spending and population changes reduce subsequent batches before sending', async () => {
+    const f = recruitmentFixture({config: {preview_only: false, max_batch: 10, protect_buildings: ['farm']}});
+    f.recruiter.start();
+    confirmRecruitment(f, 0);
+    f.stocks.wood = 1650; // 1000 savings + 500 protected upgrade: only 150 remains
+    f.stocks.food = 2;
+    await f.tick(500);
+    assert.equal(f.requests.length, 2);
+    assert.equal(f.requests[1].amount, 2);
+    confirmRecruitment(f, 1);
+    await f.tick(500);
+    assert.equal(f.requests.length, 2);
+    assert.equal(f.stocks.wood, 1550);
+    assert.equal(f.stocks.food, 0);
+});
+
+test('pausing cancels queue filling and a late acknowledgement never resumes it', async () => {
+    const f = recruitmentFixture({config: {preview_only: false, max_batch: 10}});
+    f.recruiter.start();
+    f.recruiter.stop();
+    confirmRecruitment(f, 0);
+    await f.tick(2000);
+    assert.equal(f.requests.length, 1);
+    assert.equal([...f.timers.values()].filter(timer => timer.date < 1030000).length, 0);
+});
+
+test('a rejection during queue filling stops remaining batches', async () => {
+    const f = recruitmentFixture({config: {preview_only: false, max_batch: 10}});
+    f.recruiter.start();
+    confirmRecruitment(f, 0);
+    await f.tick(500);
+    f.replies[1]({error: 'rejected'});
+    await f.tick(2000);
+    assert.equal(f.requests.length, 2);
+    assert.equal(f.recruiter.isRunning(), false);
+});
+
+test('villages keep independent resource budgets while filling their own queues', async () => {
+    const f = recruitmentFixture({villageIds: [1, 2], config: {preview_only: false, max_batch: 10, targets: {spear: 50}}});
+    const secondStock = {wood: 0, clay: 0, iron: 0, food: 500};
+    f.villages[2].getResources = () => ({getComputed: () => Object.fromEntries(
+        Object.entries(secondStock).map(([name, currentStock]) => [name, {currentStock}]))});
+    f.recruiter.start();
+    confirmRecruitment(f, 0);
+    await f.tick(500);
+    assert.deepEqual(f.requests.map(order => order.village_id), [1, 1]);
+    assert.equal(f.recruiter.getPlans().find(plan => plan.villageId === 2).orders.length, 0);
+    assert.deepEqual(secondStock, {wood: 0, clay: 0, iron: 0, food: 500});
+});
+
+
+test('completed jobs free slots during queue filling without exceeding troop targets', async () => {
+    const f = recruitmentFixture({config: {preview_only: false, targets: {spear: 50}, max_batch: 10, max_queue_jobs: 1}});
+    f.recruiter.start();
+    for (let index = 0; index < 3; index++) {
+        confirmRecruitment(f, index);
+        f.rootScope.$broadcast(f.events.BARRACKS_RECRUIT_JOB_CREATED, f.jobs[0]);
+        f.units.spear.total += 10;
+        f.jobs.length = 0;
+        await f.tick(500);
+    }
+    assert.deepEqual(f.requests.map(order => order.amount), [10, 10, 10]);
+    assert.equal(f.units.spear.total, 50);
+    assert.equal(f.requests.length, 3);
+});
+
+test('Builder spending between recruitment batches blocks continuation until its debit is confirmed', async () => {
+    const f = recruitmentFixture({config: {preview_only: false, max_batch: 10}});
+    f.recruiter.start();
+    confirmRecruitment(f, 0);
+    f.rootScope.$broadcast(f.events.BARRACKS_RECRUIT_JOB_CREATED, f.jobs[0]);
+    const cost = {wood: 1000, clay: 800, iron: 500, food: 10};
+    const ledger = f.get('two/resourceBudget');
+    const reservation = ledger.begin(f.villages[1], cost);
+    assert.ok(reservation);
+    await f.tick(500);
+    assert.equal(f.requests.length, 1);
+    ledger.acknowledge(f.villages[1], reservation);
+    for (const type of Object.keys(cost)) f.stocks[type] -= cost[type];
+    await f.tick(500);
+    assert.equal(f.requests.length, 2);
 });

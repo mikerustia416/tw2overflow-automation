@@ -1,5 +1,15 @@
 # TWOverflow Changelog
 
+## Unreleased — 2026-10-07 (userscript 2.1.500.10)
+
+- **Recruiter:** Fill available queue slots during one interval, splitting troop deficits into capped batches in configured unit priority. Confirm each preceding order and fresh resources before the next send. Share one interval spending budget across all batches, recheck current protections and deficits, and cancel continuation on pause, settings changes or rejection. Keep village resource budgets independent. Preview shows every planned batch.
+- **Validation:** All 179 offline tests, source lint, userscript syntax, startup dependencies, artifact comparison and diff checks pass. New regressions cover multiple confirmed batches before the configured interval, aggregate spending with replenished stock, queue limits and freed slots, external spending and population changes, shared Builder spending, preview priorities, village isolation, pause and rejection. Installation and live recruitment remain unverified.
+
+## Unreleased — 2026-10-07 (userscript 2.1.500.9)
+
+- **Recruiter:** Replace the non-rendering pending-order recovery modal with an inline confirmation. Clear only the checked village while paused, cancel safely, and remove stale plans after recovery. Keep ambiguous order guards until the game has been checked.
+- **Validation:** All 169 offline tests, source lint, userscript syntax, startup dependency, generated/tracked artifact and diff checks pass. Controller regressions cover confirmation, cancellation, village isolation, duplicate confirmation, and guards changing during recovery. Live inspection found an old pending one-spearman order blocking actual mode, with an empty native barracks queue. Browser policy blocked the extension editor, so installation and actual recruitment remain unverified.
+
 ## Unreleased — 2026-10-07 (userscript 2.1.500.8)
 
 - **Village profiles:** Save Recruiter targets, resource budgets, protections, spending limits and enablement per village. Save Builder sequence choice, reserves, farm priority and enablement per village. Keep existing settings as shared defaults; remove a profile to inherit them again.

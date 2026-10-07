@@ -22,7 +22,7 @@ define('two/recruiter/policy', [], function () {
             && Array.isArray(settings.protect_buildings) && settings.protect_buildings.every(name => buildings[name]);
     };
 
-    const plan = function (snapshot, settings, unitData) {
+    const plan = function (snapshot, settings, unitData, cycleBudget) {
         const empty = reason => ({reason, orders: [], budget: {}, protected: {}});
         if (!Number.isInteger(snapshot.barracksLevel) || snapshot.barracksLevel < 1) {
             return empty('Barracks unavailable');
@@ -39,8 +39,12 @@ define('two/recruiter/policy', [], function () {
                 return empty('Resources or building costs unavailable');
             }
             protectedResources[type] = settings[`preserve_${type}`] + settings[`building_${type}`] + building;
-            budget[type] = Math.floor(Math.max(0, stock - protectedResources[type])
-                * (type === 'food' ? 1 : settings.spend_percent / 100));
+            const spendable = Math.max(0, stock - protectedResources[type]);
+            if (cycleBudget && !validCount(cycleBudget[type])) {
+                return empty('Cycle budget unavailable');
+            }
+            budget[type] = cycleBudget ? Math.floor(Math.min(spendable, cycleBudget[type]))
+                : Math.floor(spendable * (type === 'food' ? 1 : settings.spend_percent / 100));
         }
         const remaining = {...budget};
         const queued = {};
@@ -75,21 +79,25 @@ define('two/recruiter/policy', [], function () {
             if (!resources.every(type => Number.isFinite(cost[type]) && cost[type] >= 0) || cost.food <= 0) {
                 return empty('Troop costs unavailable');
             }
-            let amount = Math.min(deficit, settings.max_batch);
-            for (const type of resources) {
-                if (cost[type] > 0) {
-                    amount = Math.min(amount, Math.floor(remaining[type] / cost[type]));
+            let missing = deficit;
+            while (missing > 0 && orders.length + snapshot.jobs.length < settings.max_queue_jobs) {
+                let amount = Math.min(missing, settings.max_batch);
+                for (const type of resources) {
+                    if (cost[type] > 0) {
+                        amount = Math.min(amount, Math.floor(remaining[type] / cost[type]));
+                    }
                 }
+                if (amount <= 0) {
+                    break;
+                }
+                const totalCost = {};
+                for (const type of resources) {
+                    totalCost[type] = amount * cost[type];
+                    remaining[type] -= totalCost[type];
+                }
+                orders.push({unit_type: name, amount, cost: totalCost});
+                missing -= amount;
             }
-            if (amount <= 0) {
-                continue;
-            }
-            const totalCost = {};
-            for (const type of resources) {
-                totalCost[type] = amount * cost[type];
-                remaining[type] -= totalCost[type];
-            }
-            orders.push({unit_type: name, amount, cost: totalCost});
         }
         return {reason: orders.length ? 'Ready' : 'Targets met, units locked, or budget reserved', orders,
             deficits, budget, remaining, protected: protectedResources, buildingCosts: snapshot.buildingCosts};

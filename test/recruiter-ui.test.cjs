@@ -7,6 +7,9 @@ function uiFixture () {
     let click;
     let scope;
     let starts = 0;
+    let running = false;
+    const pending = {};
+    const resolutions = [];
     const notifications = [];
     f.context.$rootScope.$new = () => ({$watch: () => {}, $on: () => {}, $evalAsync: fn => fn()});
     f.context.modelDataService.getSelectedVillage = () => f.villages[1];
@@ -20,12 +23,13 @@ function uiFixture () {
     for (const file of ['settings', 'policy']) f.loadSource('src/modules/recruiter/src/' + file + '.js');
     const settings = new (f.get('two/Settings'))({settingsMap: f.get('two/recruiter/settings/map'), storageKey: 'recruiter_ui'});
     const getSettings = id => f.get('two/villageSettings')(settings, id, ['preview_only', 'check_interval', 'enabled_groups']);
-    f.setModule('two/recruiter', {getSettings, isRunning: () => false, getPlans: () => [], getPending: () => ({}),
+    f.setModule('two/recruiter', {getSettings, isRunning: () => running, getPlans: () => [], getPending: () => pending,
+        resolvePending: id => {resolutions.push(id); delete pending[id]; return true;},
         status: 'Stopped', start: () => {starts++; return true;}});
     f.loadSource('src/modules/recruiter/src/interface.js');
     f.get('two/recruiter/ui')();
     click();
-    return {...f, scope, settings, getSettings, notifications, click, currentScope: () => scope, starts: () => starts};
+    return {...f, scope, settings, getSettings, notifications, click, currentScope: () => scope, starts: () => starts, pending, resolutions, setRunning: value => {running = value;}};
 }
 
 test('Recruiter UI opens current village, switches profiles, and saves separate targets and protected upgrades', () => {
@@ -82,4 +86,43 @@ test('invalid recruiter UI inputs cannot save a profile or partially change glob
     assert.equal(f.settings.get('preview_only'), true);
     assert.equal(Object.keys(f.settings.get('village_profiles')).length, 0);
     assert.equal(f.notifications.at(-1).kind, 'error');
+});
+
+
+test('pending recovery opens an inline confirmation and clears only the checked village', () => {
+    const f = uiFixture();
+    f.pending[1] = {unit: 'spear', amount: 1};
+    f.pending[2] = {unit: 'axe', amount: 2};
+    f.scope.resolvePending(1);
+    assert.equal(f.scope.pendingToResolve, '1');
+    assert.deepEqual(f.resolutions, []);
+    f.scope.cancelPendingResolution();
+    assert.equal(f.scope.pendingToResolve, null);
+    assert.ok(f.pending[1]);
+    f.scope.resolvePending(1);
+    assert.equal(f.scope.confirmPendingResolution(), true);
+    assert.deepEqual(f.resolutions, ['1']);
+    assert.equal(f.pending[1], undefined);
+    assert.ok(f.pending[2]);
+    assert.equal(f.scope.pendingToResolve, null);
+    assert.equal(f.scope.confirmPendingResolution(), false);
+    assert.equal(f.starts(), 0, 'Recovery itself never starts recruitment');
+});
+
+test('pending recovery cannot clear a guard after recruitment starts or the guard disappears', () => {
+    const f = uiFixture();
+    f.pending[1] = {unit: 'spear', amount: 1};
+    f.setRunning(true);
+    f.scope.resolvePending(1);
+    assert.equal(f.scope.pendingToResolve, null);
+    f.setRunning(false);
+    f.scope.resolvePending(1);
+    f.setRunning(true);
+    assert.equal(f.scope.confirmPendingResolution(), false);
+    assert.ok(f.pending[1]);
+    f.setRunning(false);
+    f.scope.resolvePending(1);
+    delete f.pending[1];
+    assert.equal(f.scope.confirmPendingResolution(), false);
+    assert.deepEqual(f.resolutions, []);
 });

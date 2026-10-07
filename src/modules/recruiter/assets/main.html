@@ -4,7 +4,7 @@
         <label>Configure <select class="textfield-border" ng-model="profileVillage" ng-options="village.value as village.name for village in profileVillages" ng-change="selectVillage()"></select></label>
         <a href="#" class="btn-border btn-orange" ng-show="profileVillage" ng-click="useDefaults()">Use shared defaults for this village</a>
         <p>Save before switching villages. Villages without a saved profile use shared defaults. Preview mode, check interval and group filter are shared.</p>
-        <p>Maintain troop targets per village. Targets include owned troops away from home and soldiers still in training. Zero disables a unit type. Each cycle sends at most one batch per village; types are considered in the order shown.</p>
+        <p>Maintain troop targets per village. Targets include owned troops away from home and soldiers still in training. Zero disables a unit type. Each cycle fills available queue slots in the order shown, splitting troop deficits into batches up to the configured cap. All batches share one spending budget for the interval. Each village uses its own resources.</p>
         <p>Spendable budget = current stock − savings − additional building budget − selected upcoming upgrade costs. Queued buildings and troops are already paid and are not charged twice. Food means free population.</p>
         <table class="tbl-border-light tbl-content tbl-medium-height">
             <tr><td>Village groups (empty = all owned villages)</td><td><div select="" list="groups" selected="settings.enabled_groups" drop-down="true"></div></td></tr>
@@ -22,11 +22,17 @@
         <div class="building-choices"><label ng-repeat="building in buildings"><input type="checkbox" ng-model="building.enabled"> {{ building.name }}</label></div>
         <h3>{{ status }}</h3>
         <div ng-repeat="(villageId, entry) in pending"><p>Village {{ villageId }}: pending {{ entry.amount }} {{ entry.unit }}.</p><a href="#" ng-show="!running" class="btn-border btn-orange" ng-click="resolvePending(villageId)">Resolve guard after checking game</a></div>
+        <div ng-if="pendingToResolve !== null && pendingToResolve !== undefined && !running" class="recruit-plan">
+            <h3>Resolve pending recruitment for village {{ pendingToResolve }}</h3>
+            <p>Check the village barracks queue, owned troop totals, and resources in the game first. Clearing this guard allows another batch and may repeat an earlier order if game data is still stale.</p>
+            <a href="#" class="btn-border btn-orange" ng-click="confirmPendingResolution()">I checked the game; clear guard</a>
+            <a href="#" class="btn-border" ng-click="cancelPendingResolution()">Cancel</a>
+        </div>
         <div ng-repeat="plan in plans" class="recruit-plan">
             <h3>Village {{ plan.villageId }} — {{ plan.reason }}</h3>
             <p>Protected: {{ plan.protected }}<br>Upcoming buildings: {{ plan.buildingCosts }}<br>Cycle budget: {{ plan.budget }}</p>
             <table class="tbl-border-light tbl-content"><tr><th>Unit</th><th>Owned</th><th>In training</th><th>Target</th><th>Missing</th></tr><tr ng-repeat="item in plan.deficits"><td>{{ item.name }}</td><td>{{ item.owned }}</td><td>{{ item.queued }}</td><td>{{ item.target }}</td><td>{{ item.deficit }}</td></tr></table>
-            <p ng-repeat="order in plan.orders">{{ $first ? 'Next batch' : 'Later priority' }}: {{ order.amount }} {{ order.unit_type }} — cost {{ order.cost }}</p>
+            <p ng-repeat="order in plan.orders">{{ $first ? 'Next batch' : 'Following batch' }}: {{ order.amount }} {{ order.unit_type }} — cost {{ order.cost }}</p>
         </div>
     </div></div></div>
     <footer class="win-foot"><ul class="list-btn list-center"><li><a href="#" class="btn-border btn-orange" ng-click="save()">Save</a></li><li><a href="#" class="btn-border" ng-class="running ? 'btn-red' : 'btn-green'" ng-click="toggle()">{{ running ? 'Pause' : 'Start' }}</a></li></ul></footer>

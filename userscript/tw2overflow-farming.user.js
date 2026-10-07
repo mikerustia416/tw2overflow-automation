@@ -2,7 +2,7 @@
 // @name        TW2Overflow Farmer, Recruiter, Builder, Quest and Deposit Planner
 // @description Automating the boring stuff on Tribal Wars 2 with tools like auto farming, auto builder, command scheduler, minimap and more.
 // @namespace   local/tw2overflow-farming
-// @version     2.1.500.8
+// @version     2.1.500.10
 // @grant       unsafeWindow
 // @run-at      document-start
 // @include     https://*.tribalwars2.com/game.php*
@@ -11,7 +11,7 @@
 
 /*!
  * tw2overflow v2.1.500
- * Wed, 07 Oct 2026 02:46:45 GMT
+ * Wed, 07 Oct 2026 03:31:52 GMT
  * Developed by Relaxeaza <relaxeaza@outlook.com>
  *
  * This work is free. You can redistribute it and/or modify it under the
@@ -18127,6 +18127,8 @@ define('two/recruiter', [
     const resources = ['wood', 'clay', 'iron', 'food'];
     const timers = new Map();
     const reservations = new Map();
+    const batches = new Map();
+    const continuations = new Map();
     const publish = () => eventQueue.trigger('two_recruiter_updated');
     const unitData = () => modelDataService.getGameData().getUnitsObject();
     const buildingData = () => modelDataService.getGameData().getBuildings();
@@ -18228,6 +18230,81 @@ define('two/recruiter', [
         return false;
     };
 
+    const showPlan = function (villageId, plan) {
+        plan.villageId = villageId;
+        plans = plans.filter(item => item.villageId !== villageId);
+        plans.push(plan);
+    };
+
+    const continueVillage = function (village) {
+        const villageId = village.getId();
+        if (continuations.has(villageId)) {
+            return;
+        }
+        const token = version;
+        continuations.set(villageId, setTimeout(() => {
+            continuations.delete(villageId);
+            if (running && token === version) {
+                processVillage(village, false);
+                publish();
+            }
+        }, 500));
+    };
+
+    const processVillage = function (village, newCycle) {
+        const villageId = village.getId();
+        try {
+            const config = villageConfig(villageId);
+            if (!policy.validSettings(config, settingsMap, unitData(), buildingData()) || !config.enabled) {
+                batches.delete(villageId);
+                showPlan(villageId, {reason: config.enabled ? 'Invalid village recruitment settings'
+                    : 'Recruitment disabled for this village', orders: []});
+                return;
+            }
+            const state = snapshot(village, config);
+            let batch = batches.get(villageId);
+            if (!config.preview_only && !reconcile(village, state)) {
+                const plan = policy.plan(state, config, unitData(), batch && batch.remaining);
+                plan.reason = 'Waiting for an earlier spend to appear in game data';
+                showPlan(villageId, plan);
+                if (pending[villageId] && Date.now() - pending[villageId].sentAt >= 30000) {
+                    recruiter.stop('Pending recruitment needs a queue/resource check');
+                } else {
+                    // Poll confirmation, without starting another interval budget.
+                    continueVillage(village);
+                }
+                return;
+            }
+            if (!newCycle && !batch) {
+                // A guard inherited from a previous run is now clear. Budget it at
+                // the next configured interval rather than restarting a finished cycle.
+                return;
+            }
+            const plan = policy.plan(state, config, unitData(), batch && batch.remaining);
+            showPlan(villageId, plan);
+            if (config.preview_only) {
+                return;
+            }
+            if (!batch && plan.orders.length) {
+                batch = {remaining: {...plan.budget}};
+                batches.set(villageId, batch);
+            }
+            if (!plan.orders.length || !batch) {
+                batches.delete(villageId);
+                return;
+            }
+            // Each spend consumes the original interval budget. Replan queue
+            // capacity, targets and protections against fresh data before every send.
+            send(village, state, plan.orders[0], batch);
+            if (running && batches.get(villageId) === batch) {
+                continueVillage(village);
+            }
+        } catch (error) {
+            batches.delete(villageId);
+            showPlan(villageId, {reason: error.message, orders: []});
+        }
+    };
+
     const cycle = function () {
         if (!running) {
             return;
@@ -18241,40 +18318,12 @@ define('two/recruiter', [
             if (!running) {
                 break;
             }
-            try {
-                const config = villageConfig(village.getId());
-                if (!policy.validSettings(config, settingsMap, unitData(), buildingData())) {
-                    plans.push({villageId: village.getId(), reason: 'Invalid village recruitment settings', orders: []});
-                    continue;
-                }
-                if (!config.enabled) {
-                    plans.push({villageId: village.getId(), reason: 'Recruitment disabled for this village', orders: []});
-                    continue;
-                }
-                const state = snapshot(village, config);
-                const plan = policy.plan(state, config, unitData());
-                plan.villageId = village.getId();
-                plans.push(plan);
-                if (!config.preview_only && !reconcile(village, state)) {
-                    plan.reason = 'Waiting for an earlier spend to appear in game data';
-                    if (pending[village.getId()] && Date.now() - pending[village.getId()].sentAt >= 30000) {
-                        recruiter.stop('Pending recruitment needs a queue/resource check');
-                        break;
-                    }
-                    continue;
-                }
-                if (running && !config.preview_only && plan.orders.length) {
-                    // One batch per village/cycle; next cycle replans against fresh game data.
-                    send(village, state, plan.orders[0]);
-                }
-            } catch (error) {
-                plans.push({villageId: village.getId(), reason: error.message, orders: []});
-            }
+            processVillage(village, true);
         }
         publish();
     };
 
-    const send = function (village, state, order) {
+    const send = function (village, state, order, batch) {
         if (!routeProvider.BARRACKS_RECRUIT) {
             recruiter.stop('Recruitment route unavailable');
             return;
@@ -18282,6 +18331,9 @@ define('two/recruiter', [
         const reservation = resourceBudget.begin(village, order.cost);
         if (!reservation) {
             return;
+        }
+        for (const type of resources) {
+            batch.remaining[type] -= order.cost[type];
         }
         reservations.set(village.getId(), reservation);
         const entry = {beforeJobs: (state.jobs || []).map(job => String(job.job_id || job.id)), before: state.stock, cost: order.cost, sentAt: Date.now(), unit: order.unit_type, amount: order.amount};
@@ -18390,6 +18442,11 @@ define('two/recruiter', [
             running = false;
             version++;
             clearInterval(timer);
+            for (const continuation of continuations.values()) {
+                clearTimeout(continuation);
+            }
+            continuations.clear();
+            batches.clear();
             recruiter.status = reason;
             eventQueue.trigger('two_recruiter_stop');
             publish();
@@ -18407,6 +18464,7 @@ define('two/recruiter', [
             reservations.delete(Number(villageId));
             clearTimeout(timers.get(Number(villageId)));
             timers.delete(Number(villageId));
+            plans = plans.filter(plan => String(plan.villageId) !== String(villageId));
             recruiter.status = 'Guard cleared after manual check; start again';
             publish();
             return true;
@@ -18435,7 +18493,7 @@ define('two/recruiter/ui', [
         };
         eventQueue.register('two_recruiter_updated', updateButton);
         updateButton();
-        ui.addTemplate('two_recruiter_window', `<div id=\"two-recruiter\" class=\"win-content two-window\"><header class=\"win-head\"><h2>Recruiter</h2><ul class=\"list-btn\"><li><a href=\"#\" class=\"size-34x34 btn-red icon-26x26-close\" ng-click=\"closeWindow()\"></a></ul></header><div class=\"win-main\" scrollbar=\"\"><div class=\"box-paper footer\"><div class=\"scroll-wrap\"><label>Configure <select class=\"textfield-border\" ng-model=\"profileVillage\" ng-options=\"village.value as village.name for village in profileVillages\" ng-change=\"selectVillage()\"></select></label> <a href=\"#\" class=\"btn-border btn-orange\" ng-show=\"profileVillage\" ng-click=\"useDefaults()\">Use shared defaults for this village</a><p>Save before switching villages. Villages without a saved profile use shared defaults. Preview mode, check interval and group filter are shared.<p>Maintain troop targets per village. Targets include owned troops away from home and soldiers still in training. Zero disables a unit type. Each cycle sends at most one batch per village; types are considered in the order shown.<p>Spendable budget = current stock − savings − additional building budget − selected upcoming upgrade costs. Queued buildings and troops are already paid and are not charged twice. Food means free population.<table class=\"tbl-border-light tbl-content tbl-medium-height\"><tr><td>Village groups (empty = all owned villages)<td><div select=\"\" list=\"groups\" selected=\"settings.enabled_groups\" drop-down=\"true\"></div><tr ng-repeat=\"id in controls\" ng-switch=\"map[id].inputType\"><td>{{ labels[id] }}<td ng-switch-when=\"checkbox\"><div switch-slider=\"\" enabled=\"true\" border=\"true\" value=\"settings[id]\" vertical=\"false\" size=\"'56x28'\"></div><td ng-switch-when=\"number\"><input type=\"number\" class=\"fit textfield-border\" ng-model=\"settings[id]\" min=\"{{ map[id].min }}\" max=\"{{ map[id].max }}\" step=\"1\"><td ng-switch-when=\"readable_time\"><input class=\"fit textfield-border\" ng-model=\"settings[id]\"><tr><th>Unit kind<th>Target soldiers per village<tr ng-repeat=\"unit in units\"><td>{{ unit.name }}<td><input type=\"number\" class=\"fit textfield-border\" min=\"0\" max=\"1000000\" step=\"1\" ng-model=\"unit.target\"></table><h3>Save for upcoming building upgrades</h3><p>Reserve the next level cost of each selected building. A building with an upgrade already in the queue is skipped until that upgrade finishes. Use additional building budgets above to save for further levels or other spending.<div class=\"building-choices\"><label ng-repeat=\"building in buildings\"><input type=\"checkbox\" ng-model=\"building.enabled\"> {{ building.name }}</label></div><h3>{{ status }}</h3><div ng-repeat=\"(villageId, entry) in pending\"><p>Village {{ villageId }}: pending {{ entry.amount }} {{ entry.unit }}.</p><a href=\"#\" ng-show=\"!running\" class=\"btn-border btn-orange\" ng-click=\"resolvePending(villageId)\">Resolve guard after checking game</a></div><div ng-repeat=\"plan in plans\" class=\"recruit-plan\"><h3>Village {{ plan.villageId }} — {{ plan.reason }}</h3><p>Protected: {{ plan.protected }}<br>Upcoming buildings: {{ plan.buildingCosts }}<br>Cycle budget: {{ plan.budget }}<table class=\"tbl-border-light tbl-content\"><tr><th>Unit<th>Owned<th>In training<th>Target<th>Missing<tr ng-repeat=\"item in plan.deficits\"><td>{{ item.name }}<td>{{ item.owned }}<td>{{ item.queued }}<td>{{ item.target }}<td>{{ item.deficit }}</table><p ng-repeat=\"order in plan.orders\">{{ $first ? 'Next batch' : 'Later priority' }}: {{ order.amount }} {{ order.unit_type }} — cost {{ order.cost }}</div></div></div></div><footer class=\"win-foot\"><ul class=\"list-btn list-center\"><li><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"save()\">Save</a><li><a href=\"#\" class=\"btn-border\" ng-class=\"running ? 'btn-red' : 'btn-green'\" ng-click=\"toggle()\">{{ running ? 'Pause' : 'Start' }}</a></ul></footer></div>`);
+        ui.addTemplate('two_recruiter_window', `<div id=\"two-recruiter\" class=\"win-content two-window\"><header class=\"win-head\"><h2>Recruiter</h2><ul class=\"list-btn\"><li><a href=\"#\" class=\"size-34x34 btn-red icon-26x26-close\" ng-click=\"closeWindow()\"></a></ul></header><div class=\"win-main\" scrollbar=\"\"><div class=\"box-paper footer\"><div class=\"scroll-wrap\"><label>Configure <select class=\"textfield-border\" ng-model=\"profileVillage\" ng-options=\"village.value as village.name for village in profileVillages\" ng-change=\"selectVillage()\"></select></label> <a href=\"#\" class=\"btn-border btn-orange\" ng-show=\"profileVillage\" ng-click=\"useDefaults()\">Use shared defaults for this village</a><p>Save before switching villages. Villages without a saved profile use shared defaults. Preview mode, check interval and group filter are shared.<p>Maintain troop targets per village. Targets include owned troops away from home and soldiers still in training. Zero disables a unit type. Each cycle fills available queue slots in the order shown, splitting troop deficits into batches up to the configured cap. All batches share one spending budget for the interval. Each village uses its own resources.<p>Spendable budget = current stock − savings − additional building budget − selected upcoming upgrade costs. Queued buildings and troops are already paid and are not charged twice. Food means free population.<table class=\"tbl-border-light tbl-content tbl-medium-height\"><tr><td>Village groups (empty = all owned villages)<td><div select=\"\" list=\"groups\" selected=\"settings.enabled_groups\" drop-down=\"true\"></div><tr ng-repeat=\"id in controls\" ng-switch=\"map[id].inputType\"><td>{{ labels[id] }}<td ng-switch-when=\"checkbox\"><div switch-slider=\"\" enabled=\"true\" border=\"true\" value=\"settings[id]\" vertical=\"false\" size=\"'56x28'\"></div><td ng-switch-when=\"number\"><input type=\"number\" class=\"fit textfield-border\" ng-model=\"settings[id]\" min=\"{{ map[id].min }}\" max=\"{{ map[id].max }}\" step=\"1\"><td ng-switch-when=\"readable_time\"><input class=\"fit textfield-border\" ng-model=\"settings[id]\"><tr><th>Unit kind<th>Target soldiers per village<tr ng-repeat=\"unit in units\"><td>{{ unit.name }}<td><input type=\"number\" class=\"fit textfield-border\" min=\"0\" max=\"1000000\" step=\"1\" ng-model=\"unit.target\"></table><h3>Save for upcoming building upgrades</h3><p>Reserve the next level cost of each selected building. A building with an upgrade already in the queue is skipped until that upgrade finishes. Use additional building budgets above to save for further levels or other spending.<div class=\"building-choices\"><label ng-repeat=\"building in buildings\"><input type=\"checkbox\" ng-model=\"building.enabled\"> {{ building.name }}</label></div><h3>{{ status }}</h3><div ng-repeat=\"(villageId, entry) in pending\"><p>Village {{ villageId }}: pending {{ entry.amount }} {{ entry.unit }}.</p><a href=\"#\" ng-show=\"!running\" class=\"btn-border btn-orange\" ng-click=\"resolvePending(villageId)\">Resolve guard after checking game</a></div><div ng-if=\"pendingToResolve !== null && pendingToResolve !== undefined && !running\" class=\"recruit-plan\"><h3>Resolve pending recruitment for village {{ pendingToResolve }}</h3><p>Check the village barracks queue, owned troop totals, and resources in the game first. Clearing this guard allows another batch and may repeat an earlier order if game data is still stale.</p><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"confirmPendingResolution()\">I checked the game; clear guard</a> <a href=\"#\" class=\"btn-border\" ng-click=\"cancelPendingResolution()\">Cancel</a></div><div ng-repeat=\"plan in plans\" class=\"recruit-plan\"><h3>Village {{ plan.villageId }} — {{ plan.reason }}</h3><p>Protected: {{ plan.protected }}<br>Upcoming buildings: {{ plan.buildingCosts }}<br>Cycle budget: {{ plan.budget }}<table class=\"tbl-border-light tbl-content\"><tr><th>Unit<th>Owned<th>In training<th>Target<th>Missing<tr ng-repeat=\"item in plan.deficits\"><td>{{ item.name }}<td>{{ item.owned }}<td>{{ item.queued }}<td>{{ item.target }}<td>{{ item.deficit }}</table><p ng-repeat=\"order in plan.orders\">{{ $first ? 'Next batch' : 'Following batch' }}: {{ order.amount }} {{ order.unit_type }} — cost {{ order.cost }}</div></div></div></div><footer class=\"win-foot\"><ul class=\"list-btn list-center\"><li><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"save()\">Save</a><li><a href=\"#\" class=\"btn-border\" ng-class=\"running ? 'btn-red' : 'btn-green'\" ng-click=\"toggle()\">{{ running ? 'Pause' : 'Start' }}</a></ul></footer></div>`);
         ui.addStyle('#two-recruiter .scroll-wrap{padding:12px}#two-recruiter p{margin:10px 0}#two-recruiter h3{margin-top:16px}#two-recruiter .building-choices label{display:inline-block;width:180px;padding:5px}#two-recruiter .recruit-plan{border-top:1px solid #bca475;margin-top:16px}');
         button.addEventListener('click', function () {
             const scope = $rootScope.$new();
@@ -18472,6 +18530,9 @@ define('two/recruiter/ui', [
                 scope.status = recruiter.status;
                 scope.plans = recruiter.getPlans();
                 scope.pending = recruiter.getPending();
+                if (scope.running || !scope.pending[scope.pendingToResolve]) {
+                    scope.pendingToResolve = null;
+                }
                 updateButton();
             };
             scope.save = function () {
@@ -18499,18 +18560,24 @@ define('two/recruiter/ui', [
                 update();
             };
             scope.resolvePending = function (villageId) {
-                const modal = $rootScope.$new();
-                modal.title = 'Resolve pending recruitment';
-                modal.text = 'Check the village barracks queue, owned troop totals, and resources in the game first. Clearing this guard allows another batch and may repeat an earlier order if game data is still stale.';
-                modal.submitText = 'I checked the game; clear guard';
-                modal.cancelText = 'Cancel';
-                modal.submit = function () {
-                    modal.closeWindow();
-                    recruiter.resolvePending(villageId);
+                if (!recruiter.isRunning() && recruiter.getPending()[villageId]) {
+                    scope.pendingToResolve = String(villageId);
+                }
+            };
+            scope.cancelPendingResolution = () => {
+                scope.pendingToResolve = null;
+            };
+            scope.confirmPendingResolution = function () {
+                const villageId = scope.pendingToResolve;
+                if (villageId === null || villageId === undefined || recruiter.isRunning()
+                    || !recruiter.getPending()[villageId]) {
                     update();
-                };
-                modal.cancel = () => modal.closeWindow();
-                windowManagerService.getModal('modal_attention', modal);
+                    return false;
+                }
+                const resolved = recruiter.resolvePending(villageId);
+                scope.pendingToResolve = null;
+                update();
+                return resolved;
             };
             update();
             const events = new EventScope('two_recruiter_window', noop);
@@ -18548,7 +18615,7 @@ define('two/recruiter/policy', [], function () {
             && Array.isArray(settings.protect_buildings) && settings.protect_buildings.every(name => buildings[name]);
     };
 
-    const plan = function (snapshot, settings, unitData) {
+    const plan = function (snapshot, settings, unitData, cycleBudget) {
         const empty = reason => ({reason, orders: [], budget: {}, protected: {}});
         if (!Number.isInteger(snapshot.barracksLevel) || snapshot.barracksLevel < 1) {
             return empty('Barracks unavailable');
@@ -18565,8 +18632,12 @@ define('two/recruiter/policy', [], function () {
                 return empty('Resources or building costs unavailable');
             }
             protectedResources[type] = settings[`preserve_${type}`] + settings[`building_${type}`] + building;
-            budget[type] = Math.floor(Math.max(0, stock - protectedResources[type])
-                * (type === 'food' ? 1 : settings.spend_percent / 100));
+            const spendable = Math.max(0, stock - protectedResources[type]);
+            if (cycleBudget && !validCount(cycleBudget[type])) {
+                return empty('Cycle budget unavailable');
+            }
+            budget[type] = cycleBudget ? Math.floor(Math.min(spendable, cycleBudget[type]))
+                : Math.floor(spendable * (type === 'food' ? 1 : settings.spend_percent / 100));
         }
         const remaining = {...budget};
         const queued = {};
@@ -18601,21 +18672,25 @@ define('two/recruiter/policy', [], function () {
             if (!resources.every(type => Number.isFinite(cost[type]) && cost[type] >= 0) || cost.food <= 0) {
                 return empty('Troop costs unavailable');
             }
-            let amount = Math.min(deficit, settings.max_batch);
-            for (const type of resources) {
-                if (cost[type] > 0) {
-                    amount = Math.min(amount, Math.floor(remaining[type] / cost[type]));
+            let missing = deficit;
+            while (missing > 0 && orders.length + snapshot.jobs.length < settings.max_queue_jobs) {
+                let amount = Math.min(missing, settings.max_batch);
+                for (const type of resources) {
+                    if (cost[type] > 0) {
+                        amount = Math.min(amount, Math.floor(remaining[type] / cost[type]));
+                    }
                 }
+                if (amount <= 0) {
+                    break;
+                }
+                const totalCost = {};
+                for (const type of resources) {
+                    totalCost[type] = amount * cost[type];
+                    remaining[type] -= totalCost[type];
+                }
+                orders.push({unit_type: name, amount, cost: totalCost});
+                missing -= amount;
             }
-            if (amount <= 0) {
-                continue;
-            }
-            const totalCost = {};
-            for (const type of resources) {
-                totalCost[type] = amount * cost[type];
-                remaining[type] -= totalCost[type];
-            }
-            orders.push({unit_type: name, amount, cost: totalCost});
         }
         return {reason: orders.length ? 'Ready' : 'Targets met, units locked, or budget reserved', orders,
             deficits, budget, remaining, protected: protectedResources, buildingCosts: snapshot.buildingCosts};
