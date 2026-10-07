@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const {fixture} = require('./farm-fixture.cjs');
 
-function uiFixture () {
+function uiFixture (options = {}) {
     const f = fixture({deferFarmInit: true});
     const notifications = [];
     let click;
@@ -16,28 +16,27 @@ function uiFixture () {
     f.setModule('two/EventScope', class {register () {}});
     f.setModule('two/ui', {addMenuButton: () => ({classList: {toggle: () => {}},
         addEventListener: (name, listener) => {click = listener;}}), addTemplate: () => {}, addStyle: () => {}});
-    for (const name of ['settings', 'policy']) f.loadSource('src/modules/deposit_planner/src/' + name + '.js');
+    for (const name of ['settings', 'policy', 'notice']) f.loadSource('src/modules/deposit_planner/src/' + name + '.js');
     const settings = new (f.get('two/Settings'))({settingsMap: f.get('two/depositPlanner/settings/map'), storageKey: 'planner_ui'});
     f.setModule('two/depositPlanner', {
         isRunning: () => running, getSettings: () => settings, getStatus: () => 'Paused',
-        getPlan: () => ({jobs: []}), getPending: () => null, refresh: () => {},
-        start: () => {starts++; running = true; return true;}, stop: () => {running = false;}
+        getPlan: () => options.plan || ({jobs: []}), getPending: () => options.pending || null, refresh: () => {},
+        start: () => {starts++; if (running) return false; running = true; return true;}, stop: () => {running = false;}
     });
+    if (options.resumeOnSave) settings.onChange(() => {running = true;});
     f.loadSource('src/modules/deposit_planner/src/interface.js');
     f.get('two/depositPlanner/ui')();
     click();
     return {...f, scope, settings, notifications, starts: () => starts};
 }
 
-test('preview Start accepts boolean switches and both forecast percentage boundaries', () => {
+test('Start accepts boolean switches and both forecast percentage boundaries', () => {
     for (const percent of [10, 20, 50, 70, 100]) {
         const f = uiFixture();
-        f.scope.settings.preview_only = true;
         f.scope.settings.auto_reroll = true;
         f.scope.settings.success_percent = percent;
         f.scope.toggle();
         assert.equal(f.starts(), 1);
-        assert.equal(f.settings.get('preview_only'), true);
         assert.equal(f.settings.get('success_percent'), percent);
         assert.equal(Object.keys(f.scope.settingErrors).length, 0);
     }
@@ -55,7 +54,7 @@ test('invalid forecast values identify the field and range without saving or sta
     }
 });
 
-test('correcting an invalid Angular numeric model clears its error and permits preview Start', () => {
+test('correcting an invalid Angular numeric model clears its error and permits Start', () => {
     const f = uiFixture();
     // Angular numeric range validation clears the model while the input still shows 9.
     f.scope.settings.success_percent = undefined;
@@ -66,20 +65,18 @@ test('correcting an invalid Angular numeric model clears its error and permits p
     assert.equal(f.scope.settingErrors.success_percent, undefined);
     f.scope.toggle();
     assert.equal(f.starts(), 1);
-    assert.equal(f.settings.get('preview_only'), true);
     assert.equal(f.settings.get('success_percent'), 20);
 });
 
 test('all invalid fields are reported and automatic mode enforces the same limits', () => {
     const f = uiFixture();
-    f.scope.settings.preview_only = false;
     f.scope.settings.success_percent = 9;
     f.scope.settings.poll_seconds = undefined;
     f.scope.toggle();
     assert.equal(f.starts(), 0);
     assert.match(f.scope.settingErrors.success_percent, /10 and 100/);
     assert.match(f.scope.settingErrors.poll_seconds, /Refresh interval.*5 and 300/);
-    assert.equal(f.settings.get('preview_only'), true, 'Invalid Save cannot partially switch modes');
+    assert.equal(f.settings.get('success_percent'), 95, 'Invalid Save cannot partially alter settings');
 });
 
 test('new depositor controls persist and minimum item value uses the same numeric validation', () => {
@@ -100,4 +97,57 @@ test('new depositor controls persist and minimum item value uses the same numeri
     assert.equal(f.scope.save(), false);
     assert.match(f.scope.settingErrors.min_gain_per_item, /whole number between 0 and 1000000/);
     assert.equal(f.settings.get('min_gain_per_item'), 500);
+});
+
+
+test('Start persists the reroll flag and can restart after Pause', () => {
+    const f = uiFixture();
+    f.scope.settings.auto_reroll = true;
+    f.scope.toggle();
+    f.scope.toggle();
+    f.scope.settings.auto_reroll = false;
+    f.scope.toggle();
+    assert.equal(f.starts(), 2);
+    assert.equal(f.scope.running, true);
+    assert.equal(f.settings.get('auto_reroll'), false);
+    assert.equal(f.notifications.some(item => item.kind === 'error'), false);
+});
+
+test('Start does not report failure if saving settings has already resumed the planner', () => {
+    const f = uiFixture({resumeOnSave: true});
+    f.scope.settings.auto_reroll = true;
+    f.scope.toggle();
+    assert.equal(f.scope.running, true);
+    assert.equal(f.starts(), 0, 'An already-running planner is not started twice');
+    assert.equal(f.notifications.some(item => item.kind === 'error'), false);
+});
+
+test('Deposit Planner exposes one Start/Pause control and no preview mode setting', () => {
+    const f = uiFixture();
+    assert.equal(f.scope.controls.includes('preview_only'), false);
+    assert.equal(f.scope.settings.preview_only, undefined);
+    f.scope.toggle();
+    assert.equal(f.scope.running, true);
+    f.scope.toggle();
+    assert.equal(f.scope.running, false);
+});
+
+
+test('reroll notice updates in an open planner window without starting game actions', async () => {
+    const options = {plan: {jobs: [], action: 'wait'}};
+    const f = uiFixture(options);
+    assert.match(f.scope.rerollNotice.reasons[0], /fresh deposit data/);
+    options.plan = {jobs: [], action: 'reroll', state: {milestones: []}};
+    await f.tick(1000);
+    assert.equal(f.scope.rerollNotice, null);
+    options.pending = {action: 'reroll'};
+    await f.tick(1000);
+    assert.equal(f.scope.rerollNotice.level, 'warning');
+    assert.match(f.scope.rerollNotice.reasons[0], /game confirmation/);
+    options.pending = null;
+    options.plan = {jobs: [], action: 'target', state: {progress: 500, target: 500, milestones: []}};
+    await f.tick(1000);
+    assert.match(f.scope.rerollNotice.reasons[0], /target is already reached/);
+    assert.equal(f.starts(), 0);
+    assert.equal(f.requests.length, 0);
 });

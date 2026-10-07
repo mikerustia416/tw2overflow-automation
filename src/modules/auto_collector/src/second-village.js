@@ -1,11 +1,9 @@
 define('two/autoCollector/secondVillage', [
-    'two/autoCollector',
     'two/utils',
     'queues/EventQueue',
     'helper/time',
     'models/SecondVillageModel'
 ], function (
-    autoCollector,
     utils,
     eventQueue,
     $timeHelper,
@@ -202,5 +200,5 @@ define('two/autoCollector/secondVillage', [
         });
     };
 
-    autoCollector.secondVillage = secondVillageCollector;
+    return secondVillageCollector;
 });

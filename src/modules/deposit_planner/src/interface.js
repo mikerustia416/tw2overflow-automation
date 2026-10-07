@@ -1,8 +1,8 @@
 define('two/depositPlanner/ui', [
-    'two/ui', 'two/depositPlanner', 'two/depositPlanner/policy', 'two/EventScope', 'two/utils', 'queues/EventQueue'
-], function (ui, planner, policy, EventScope, utils, events) {
+    'two/ui', 'two/depositPlanner', 'two/depositPlanner/policy', 'two/depositPlanner/rerollNotice', 'two/EventScope', 'two/utils', 'queues/EventQueue'
+], function (ui, planner, policy, rerollNotice, EventScope, utils, events) {
     const labels = {
-        preview_only: 'Preview only (no game actions)', auto_reroll: 'Allow automatic item rerolls',
+        auto_reroll: 'Allow automatic item rerolls',
         confidence_guard: 'Use cautious forecast bands for automatic rerolls',
         learn_action_delay: 'Learn start/collection overhead from confirmed errands',
         milestone_fallback: 'Plan a lower attainable milestone when the target is unlikely',
@@ -51,6 +51,8 @@ define('two/depositPlanner/ui', [
                 scope.status = planner.getStatus();
                 scope.plan = planner.getPlan();
                 scope.pending = planner.getPending();
+                const config = settings.getAll();
+                scope.rerollNotice = rerollNotice(scope.plan, {...config, action_delay: scope.plan.timing ? scope.plan.timing.effectiveDelay : config.action_delay}, scope.pending);
                 const state = scope.plan.state;
                 scope.state = state;
                 scope.reward = state && state.milestones.find(item => item.target >= state.target);
@@ -82,8 +84,8 @@ define('two/depositPlanner/ui', [
             scope.toggle = function () {
                 if (planner.isRunning()) {
                     planner.stop();
-                } else if (scope.save() && !planner.start()) {
-                    utils.notif('error', 'Deposit Planner could not start; check settings and world availability');
+                } else if (scope.save() && !planner.isRunning() && !planner.start()) {
+                    utils.notif('error', planner.getStatus());
                 }
                 update();
             };

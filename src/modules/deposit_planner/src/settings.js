@@ -2,7 +2,6 @@ define('two/depositPlanner/settings/map', [], function () {
     const number = (value, min, max) => ({default: value, updates: [], inputType: 'number', min, max});
     const checkbox = value => ({default: value, updates: [], inputType: 'checkbox'});
     return {
-        preview_only: checkbox(true),
         auto_reroll: checkbox(false),
         confidence_guard: checkbox(true),
         learn_action_delay: checkbox(true),

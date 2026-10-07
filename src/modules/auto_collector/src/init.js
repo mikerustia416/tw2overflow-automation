@@ -1,21 +1,24 @@
 require([
     'two/ready',
-    'two/autoCollector',
+    'two/autoCollector/secondVillage',
     'two/autoCollector/ui',
     'Lockr',
     'two/moduleState',
-    'two/autoCollector/secondVillage',
     'two/autoCollector/events'
-], function (ready, autoCollector, ui, Lockr, restoreModuleState) {
+], function (ready, secondVillage, ui, Lockr, restoreModuleState) {
     ready(function () {
-        if (autoCollector.isInitialized()) {
+        if (secondVillage.isInitialized()) {
             return;
         }
-        autoCollector.init();
-        autoCollector.secondVillage.init();
-        ui();
         const legacyActive = Lockr.get('auto_collector_active', false) === true;
-        restoreModuleState(autoCollector, 'auto_collector_active', eventTypeProvider.AUTO_COLLECTOR_STARTED, eventTypeProvider.AUTO_COLLECTOR_STOPPED);
-        restoreModuleState(autoCollector.secondVillage, 'auto_collector_second_village_active', eventTypeProvider.AUTO_COLLECTOR_SECONDVILLAGE_STARTED, eventTypeProvider.AUTO_COLLECTOR_SECONDVILLAGE_STOPPED, legacyActive);
+        // Capture the old shared preference before Deposit Planner retires it.
+        if (Lockr.get('auto_collector_second_village_active', null) === null) {
+            Lockr.set('auto_collector_second_village_active', legacyActive);
+        }
+        secondVillage.init();
+        if (secondVillage.isInitialized()) {
+            ui();
+        }
+        restoreModuleState(secondVillage, 'auto_collector_second_village_active', eventTypeProvider.AUTO_COLLECTOR_SECONDVILLAGE_STARTED, eventTypeProvider.AUTO_COLLECTOR_SECONDVILLAGE_STOPPED);
     }, ['initial_village', 'world_config']);
 });

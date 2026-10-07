@@ -56,7 +56,16 @@ function fixture (options = {}) {
             for (const handler of listeners.get(event) || []) handler(null, data);
         }
     };
-    const eventQueue = {trigger: rootScope.$broadcast, register: rootScope.$on};
+    const queueListeners = new Map();
+    const eventQueue = options.separateEventQueue ? {
+        register: (event, handler) => {
+            if (!queueListeners.has(event)) queueListeners.set(event, []);
+            queueListeners.get(event).push(handler);
+        },
+        trigger: (event, data) => {
+            for (const handler of queueListeners.get(event) || []) handler(event, data || {});
+        }
+    } : {trigger: rootScope.$broadcast, register: rootScope.$on};
     const lockr = {
         get: (key, fallback) => copy(storage.has(key) ? storage.get(key) : fallback),
         set: (key, value) => storage.set(key, copy(value))

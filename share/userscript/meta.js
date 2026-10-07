@@ -2,7 +2,7 @@
 // @name        TW2Overflow Farmer, Recruiter, Builder, Quest and Deposit Planner
 // @description ___overflow_description
 // @namespace   local/tw2overflow-farming
-// @version     ___overflow_version.10
+// @version     ___overflow_version.13
 // @grant       unsafeWindow
 // @run-at      document-start
 // @include     https://*.tribalwars2.com/game.php*

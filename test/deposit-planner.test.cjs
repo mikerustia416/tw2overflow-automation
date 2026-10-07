@@ -4,7 +4,7 @@ const {fixture} = require('./farm-fixture.cjs');
 const plain = value => JSON.parse(JSON.stringify(value));
 
 function setup(options = {}) {
-    const f = fixture({deferFarmInit: true, storageEntries: options.storageEntries});
+    const f = fixture({deferFarmInit: true, storageEntries: options.storageEntries, separateEventQueue: true});
     const clock = f.get('helper/time');
     f.context.Date = class extends Date { static now() { return clock.gameTime(); } };
     const data = {jobs: [], progress: 0, cap: 10000, reset: 5000, milestones: 10000, ...options.data};
@@ -38,7 +38,7 @@ function setup(options = {}) {
         requests.push({route: route.type, payload, callback});
         if (route.type === 'RESOURCE_DEPOSIT_GET_INFO' && options.autoInfo !== false) receiveInfo();
     };
-    for (const file of ['settings', 'policy', 'adapter', 'core']) f.loadSource('src/modules/deposit_planner/src/' + file + '.js');
+    for (const file of ['settings', 'policy', 'adapter', 'core', 'migration']) f.loadSource('src/modules/deposit_planner/src/' + file + '.js');
     f.loadSource('src/module-state.js');
     const planner = f.get('two/depositPlanner');
     const policy = f.get('two/depositPlanner/policy');
@@ -144,11 +144,13 @@ test('known reachable targets need no rerolls; running errands have conditional 
     assert.equal(result.forecast.best.itemLimit, 0);
 });
 
-test('preview has zero game mutations, and running/paused settings restore through actual startup', async () => {
+test('paused forecasts have zero game mutations, and running/paused settings restore through actual startup', async () => {
     const f = setup({data: {jobs: [job(1, 20, 500)]}});
-    f.planner.start();
     await f.tick(60000);
     assert.equal(f.sends().length, 0);
+    assert.equal(f.planner.isRunning(), false);
+    assert.ok(f.requests.length >= 3, 'Paused polling keeps refreshing server data');
+    f.planner.start();
     assert.equal(f.storage.get('deposit_planner_active'), true);
     f.planner.getSettings().set('target', 500);
     const reloaded = setup({storageEntries: [...f.storage.entries()], data: {jobs: [job(1, 20, 500)]}});
@@ -166,9 +168,9 @@ test('preview has zero game mutations, and running/paused settings restore throu
 
 test('start/collection are single-flight; delayed callbacks after pause cannot send another action', async () => {
     const f = setup({data: {jobs: [job(1, 20, 500)]}});
-    f.planner.getSettings().setAll({preview_only: false, target: 500});
+    f.planner.getSettings().setAll({target: 500});
     f.planner.start();
-    await f.tick(31000);
+    await f.tick(29000);
     assert.equal(f.sends().length, 1);
     assert.equal(f.sends()[0].route, 'RESOURCE_DEPOSIT_START_JOB');
     f.receiveInfo();
@@ -197,7 +199,7 @@ test('an uncertain reroll is charged and survives stop/reload; no Crown route is
     f.storage.set('deposit_planner_samples', history(state));
     // Reload so persisted observations are loaded through the real initialization path.
     const active = setup({storageEntries: [...f.storage.entries()], data: {reset: 10000, milestones: 2000}});
-    active.planner.getSettings().setAll({preview_only: false, auto_reroll: true, target: 500});
+    active.planner.getSettings().setAll({auto_reroll: true, target: 500});
     active.planner.start();
     await active.tick(31000);
     assert.equal(active.sends().length, 1);
@@ -376,9 +378,9 @@ test('persisted timing changes exact deadline feasibility and survives reload', 
     assert.equal(g.planner.getSettings().get('action_delay'), 2, 'Learning does not overwrite the configured floor');
 });
 
-test('timing learns only after owned start and collection are confirmed, never from preview or callback alone', async () => {
+test('timing learns only after owned start and collection are confirmed, never while paused or from callback alone', async () => {
     const f = setup({data: {jobs: [job(1, 20, 500)]}});
-    f.planner.getSettings().setAll({preview_only: false, target: 500});
+    f.planner.getSettings().setAll({target: 500});
     f.planner.start();
     await f.tick(4000);
     const start = f.planner.getPending();
@@ -400,10 +402,9 @@ test('timing learns only after owned start and collection are confirmed, never f
     const observations = f.storage.get('deposit_planner_timing');
     assert.equal(observations.length, 1);
     assert.ok(Math.abs(observations[0].delay - (7 + 1035 - (start.sentAt + 27))) < 0.001);
-    const preview = setup({data: {jobs: [job(1, 10, 500)]}});
-    preview.planner.start();
-    await preview.tick(60000);
-    assert.equal(preview.storage.has('deposit_planner_timing'), false);
+    const paused = setup({data: {jobs: [job(1, 10, 500)]}});
+    await paused.tick(60000);
+    assert.equal(paused.storage.has('deposit_planner_timing'), false);
 });
 
 test('cached visible selection returns current game objects when rewards and durations repeat', () => {
@@ -492,7 +493,7 @@ test('automatic last-errand look-ahead emits no reroll until collection is confi
     const observations = history(seed.sampleState());
     const f = setup({storageEntries: [['deposit_planner_samples', observations]],
         data: {progress: 300, reset: 10000, milestones: 1190, jobs: [job('last', 20, 200, {state: 0, time_completed: 1020})]}});
-    f.planner.getSettings().setAll({preview_only: false, auto_reroll: true, milestone_fallback: true, max_rerolls: 20});
+    f.planner.getSettings().setAll({auto_reroll: true, milestone_fallback: true, max_rerolls: 20});
     f.planner.start();
     await f.tick(10000);
     assert.equal(f.planner.getPlan().goalTarget, 750);
@@ -576,7 +577,7 @@ test('early automatic reroll preserves the active errand and waits for inventory
     const seed = setup();
     const f = setup({runningRerollAllowed: true, storageEntries: [['deposit_planner_samples', history(seed.sampleState())]],
         data: {progress: 300, reset: 10000, milestones: 1190, jobs: [job('last', 20, 200, {state: 0, time_completed: 1020})]}});
-    f.planner.getSettings().setAll({preview_only: false, auto_reroll: true, milestone_fallback: true});
+    f.planner.getSettings().setAll({auto_reroll: true, milestone_fallback: true});
     f.planner.start();
     await f.tick(5000);
     assert.equal(f.sends().length, 1);
@@ -598,7 +599,7 @@ test('an early reroll that loses the running job retains the guard and stops aut
     const seed = setup();
     const f = setup({runningRerollAllowed: true, storageEntries: [['deposit_planner_samples', history(seed.sampleState())]],
         data: {progress: 300, reset: 10000, milestones: 1190, jobs: [job('last', 20, 200, {state: 0, time_completed: 1020})]}});
-    f.planner.getSettings().setAll({preview_only: false, auto_reroll: true, milestone_fallback: true});
+    f.planner.getSettings().setAll({auto_reroll: true, milestone_fallback: true});
     f.planner.start();
     await f.tick(5000);
     f.data.jobs = board();
@@ -611,14 +612,99 @@ test('an early reroll that loses the running job retains the guard and stops aut
     assert.equal(f.sends().length, 1);
 });
 
-test('Nothing-to-do early reroll recommendation remains read-only in preview mode', async () => {
+test('Nothing-to-do early reroll forecast remains read-only while paused', async () => {
     const seed = setup();
     const f = setup({runningRerollAllowed: true, storageEntries: [['deposit_planner_samples', history(seed.sampleState())]],
         data: {progress: 300, reset: 10000, milestones: 1190, jobs: [job('last', 20, 200, {state: 0, time_completed: 1020})]}});
     f.planner.getSettings().setAll({auto_reroll: true, milestone_fallback: true});
-    f.planner.start();
     await f.tick(5000);
     assert.equal(f.planner.getPlan().runningPreview.canRerollNow, true);
     assert.equal(f.sends().length, 0);
     assert.equal(f.storage.get('deposit_planner_cycle').spent, 0);
+});
+
+
+test('the retired Collector cannot submit deposit actions or pause the unified planner', async () => {
+    const f = setup({data: {jobs: [job(1, 20, 500)]}});
+    f.loadSource('src/modules/auto_collector/src/core.js');
+    const collector = f.get('two/autoCollector');
+    assert.equal(collector.start, undefined);
+    f.planner.getSettings().set('target', 500);
+    f.planner.start();
+    f.get('queues/EventQueue').trigger('auto_collector_started');
+    await f.tick(1000);
+    assert.equal(f.planner.isRunning(), true);
+    assert.equal(f.sends().length, 1);
+    assert.equal(f.sends()[0].route, 'RESOURCE_DEPOSIT_START_JOB');
+});
+
+test('migration preserves actual runs and explicit pauses, and converts old running previews to paused forecasts', () => {
+    const cases = [
+        {entries: [], running: false},
+        {entries: [['deposit_planner_active', true], ['deposit_planner_settings', {preview_only: true, auto_reroll: true}]], running: false},
+        {entries: [['deposit_planner_active', true]], running: false},
+        {entries: [['deposit_planner_active', true], ['deposit_planner_settings', {preview_only: false, target: 750}]], running: true},
+        {entries: [['deposit_planner_active', false], ['auto_collector_active', true]], running: false},
+        {entries: [['auto_collector_active', true], ['deposit_planner_settings', {preview_only: true, auto_reroll: true}]], running: true, inherited: true},
+        {entries: [['auto_collector_active', true], ['auto_collector_second_village_active', false]], running: true, inherited: true, second: false}
+    ];
+    for (const scenario of cases) {
+        const f = setup({storageEntries: scenario.entries});
+        assert.equal(f.planner.isRunning(), scenario.running);
+        assert.equal(f.storage.get('deposit_planner_active'), scenario.running);
+        assert.equal(f.storage.get('auto_collector_active'), false);
+        assert.equal(f.storage.get('deposit_planner_unified'), true);
+        assert.equal(f.planner.getSettings().settingsMap.preview_only, undefined);
+        assert.equal(Object.hasOwn(f.storage.get('deposit_planner_settings'), 'preview_only'), false);
+        if (scenario.inherited) assert.equal(f.planner.getSettings().get('auto_reroll'), false);
+        if (scenario.second === false) assert.equal(f.storage.get('auto_collector_second_village_active'), false);
+        f.planner.stop();
+        f.storage.set('auto_collector_active', true);
+        const reloaded = setup({storageEntries: [...f.storage.entries()]});
+        assert.equal(reloaded.planner.isRunning(), false, 'Migration runs once and cannot undo a new explicit pause');
+    }
+});
+
+test('Start executes without a preview switch, Pause refreshes forecasts without orders, and rerolls stay opt-in', async () => {
+    const f = setup({data: {jobs: [job(1, 20, 500)]}});
+    f.planner.getSettings().set('target', 500);
+    await f.tick(31000);
+    assert.equal(f.sends().length, 0);
+    assert.equal(f.planner.getPlan().action, 'start');
+    f.planner.start();
+    await f.tick(1000);
+    assert.equal(f.sends().length, 1);
+    f.planner.stop();
+    f.data.jobs[0].state = 0;
+    f.data.jobs[0].time_completed = 1055;
+    f.receiveInfo();
+    assert.equal(f.planner.getPending(), null);
+    f.data.jobs[0].state = 1;
+    await f.tick(31000);
+    assert.equal(f.planner.getPlan().action, 'collect', 'Paused forecasts still observe game changes');
+    assert.equal(f.sends().length, 1, 'Pause prevents collecting and every other mutation');
+    assert.equal(f.planner.getSettings().get('auto_reroll'), false);
+});
+
+test('unresolved guards reject Start without resubmission and remain protected across reload', async () => {
+    const pending = {action: 'start', jobId: 'missing', sentAt: 900, progress: 0, cycleId: 10000};
+    const f = setup({storageEntries: [['deposit_planner_pending', pending]], data: {jobs: [job(1, 20, 500)]}});
+    assert.equal(f.planner.start(), false);
+    assert.match(f.planner.getStatus(), /resolve the guard before Start/);
+    await f.tick(31000);
+    assert.equal(f.sends().length, 0);
+    assert.ok(f.planner.getPending());
+    const reloaded = setup({storageEntries: [...f.storage.entries()]});
+    assert.equal(reloaded.planner.start(), false);
+    assert.ok(reloaded.planner.getPending());
+});
+
+
+test('invalid saved poll intervals cannot start automation or create a rapid paused polling loop', async () => {
+    const f = setup({storageEntries: [['deposit_planner_settings', {poll_seconds: 0}]]});
+    assert.equal(f.planner.start(), false);
+    const before = f.requests.length;
+    await f.tick(31000);
+    assert.equal(f.requests.length - before, 1);
+    assert.equal(f.sends().length, 0);
 });

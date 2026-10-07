@@ -22,11 +22,10 @@ define('two/depositPlanner', [
     let boardRevision = 0;
     let wake;
     let plan = {action: 'wait', reason: 'Open the planner to refresh deposit data', jobs: []};
-    let status = 'Paused';
+    let status = 'Paused — forecasts only';
     let poll;
     let deferred;
     let generation = 0;
-    let takeoverUntil = 0;
     let refreshing = false;
     let refreshTimeout;
     let forecastKey;
@@ -35,7 +34,7 @@ define('two/depositPlanner', [
     const storePending = () => Lockr.set(KEYS.pending, pending || null);
 
     const refresh = function () {
-        if (!refreshing && routeProvider.RESOURCE_DEPOSIT_GET_INFO) {
+        if (!refreshing && modelDataService.getWorldConfig().isResourceDepositEnabled() && routeProvider.RESOURCE_DEPOSIT_GET_INFO) {
             refreshing = true;
             clearTimeout(refreshTimeout);
             refreshTimeout = setTimeout(() => {
@@ -70,7 +69,7 @@ define('two/depositPlanner', [
             || state.cycleId === pending.cycleId && state.progress > pending.progress;
         const rerollConfirmed = pending.action === 'reroll' && runningPreserved && (pending.rerollAck || adapter.boardKey(state) !== pending.boardKey)
             && (pending.itemDebited || state.itemCount < pending.itemCount);
-        if (startConfirmed && pending === ownedStart && pending.context === state.context && running && !config.preview_only) {
+        if (startConfirmed && pending === ownedStart && pending.context === state.context && running) {
             const job = idMatches(state.current) ? state.current : state.collectible.find(idMatches);
             const delay = job.completedAt - job.duration - pending.sentAt;
             activeTiming = Number.isFinite(delay) && delay >= -1 && delay <= 30
@@ -78,7 +77,7 @@ define('two/depositPlanner', [
         }
         if (collectionConfirmed && activeTiming && String(activeTiming.jobId) === String(pending.jobId)) {
             const delay = activeTiming.startDelay + state.now - activeTiming.completedAt;
-            if (running && !config.preview_only && activeTiming.context === state.context && activeTiming.cycleId === state.cycleId
+            if (running && activeTiming.context === state.context && activeTiming.cycleId === state.cycleId
                 && Number.isFinite(delay) && delay >= 0 && delay <= 300) {
                 timings.push({context: state.context, at: state.now, delay});
                 timings = timings.filter(entry => entry.at >= state.now - 30 * 86400).slice(-60);
@@ -89,6 +88,9 @@ define('two/depositPlanner', [
         if (startConfirmed || collectionConfirmed || rerollConfirmed) {
             pending = null;
             storePending();
+            if (!running && status.startsWith('Pending ')) {
+                status = 'Paused — pending action confirmed; press Start to resume';
+            }
             return true;
         }
         if (running && pending.action === 'reroll' && !runningPreserved) {
@@ -110,9 +112,6 @@ define('two/depositPlanner', [
         }
         if (pending) {
             candidates.push(pending.sentAt + 30);
-        }
-        if (takeoverUntil > state.now) {
-            candidates.push(takeoverUntil + 0.1);
         }
         const next = Math.min(...candidates.filter(timestamp => timestamp > state.now));
         if (Number.isFinite(next)) {
@@ -186,7 +185,7 @@ define('two/depositPlanner', [
         }
     };
     const send = function (action, state, job) {
-        if (!running || config.preview_only || pending) {
+        if (!running || pending) {
             return;
         }
         let route;
@@ -248,15 +247,11 @@ define('two/depositPlanner', [
             refresh();
             return;
         }
-        if (pending || Date.now() / 1000 < takeoverUntil) {
-            status = pending ? 'Waiting for game confirmation' : 'Waiting for Collector handover';
+        if (pending) {
+            status = 'Waiting for game confirmation';
             return;
         }
-        status = config.preview_only ? 'Running — preview only' : 'Running — ' + next.reason;
-        if (config.preview_only) {
-            publish();
-            return;
-        }
+        status = 'Running — ' + next.reason;
         if (next.action === 'target' && !config.hold_after_target && next.state.collectible.length) {
             send('collect', next.state, next.state.collectible[0]);
         } else if (['start', 'collect', 'reroll'].includes(next.action)) {
@@ -267,6 +262,17 @@ define('two/depositPlanner', [
             }
         }
         publish();
+    };
+    const armPoll = function () {
+        clearInterval(poll);
+        if (modelDataService.getWorldConfig().isResourceDepositEnabled()) {
+            const seconds = Number.isInteger(config.poll_seconds) && config.poll_seconds >= map.poll_seconds.min && config.poll_seconds <= map.poll_seconds.max
+                ? config.poll_seconds : map.poll_seconds.default;
+            poll = setInterval(() => {
+                refresh();
+                execute();
+            }, seconds * 1000);
+        }
     };
     const onInfo = function (data) {
         refreshing = false;
@@ -304,6 +310,7 @@ define('two/depositPlanner', [
                     planner.stop();
                 }
                 config = settings.getAll();
+                armPoll();
                 forecastKey = null;
                 if (resume) {
                     planner.start();
@@ -312,6 +319,7 @@ define('two/depositPlanner', [
                 }
             }});
             config = settings.getAll();
+            armPoll();
             $rootScope.$on(eventTypeProvider.RESOURCE_DEPOSIT_INFO, (event, data) => onInfo(data));
             for (const name of ['RESOURCE_DEPOSIT_JOBS_REROLLED',
                 'RESOURCE_DEPOSIT_JOB_STARTED',
@@ -356,11 +364,6 @@ define('two/depositPlanner', [
                     });
                 }
             }
-            $rootScope.$on('auto_collector_started', function () {
-                if (running && !config.preview_only) {
-                    planner.stop('Paused because Collector took control of the deposit');
-                }
-            });
             refresh();
         },
         start: function () {
@@ -368,20 +371,23 @@ define('two/depositPlanner', [
                 || !modelDataService.getWorldConfig().isResourceDepositEnabled()) {
                 return false;
             }
+            if (pending) {
+                refresh();
+                preview();
+                if (pending) {
+                    status = 'Pending ' + pending.action + ' needs a game check; resolve the guard before Start';
+                    publish();
+                    return false;
+                }
+            }
             running = true;
             generation++;
-            if (!config.preview_only) {
-                takeoverUntil = Date.now() / 1000 + 3;
-                events.trigger('two_deposit_planner_controls_deposit');
-            }
-            status = config.preview_only ? 'Running — preview only' : 'Running';
+            status = 'Running';
             events.trigger('two_deposit_planner_start');
             // Fresh data is mandatory after every start and reload.
             lastInfoAt = 0;
             refresh();
-            poll = setInterval(() => {
-                refresh(); execute();
-            }, config.poll_seconds * 1000);
+            armPoll();
             schedule();
             publish();
             return true;
@@ -391,11 +397,10 @@ define('two/depositPlanner', [
             activeTiming = null;
             ownedStart = null;
             generation++;
-            clearInterval(poll);
             clearTimeout(deferred);
             clearTimeout(wake);
             deferred = null;
-            status = reason || 'Paused';
+            status = reason || 'Paused — forecasts only';
             events.trigger('two_deposit_planner_stop');
             publish();
         },
@@ -405,6 +410,7 @@ define('two/depositPlanner', [
             }
             pending = null;
             storePending();
+            status = 'Paused — forecasts only';
             forecastKey = null;
             refresh();
             preview();

@@ -2,7 +2,11 @@
     <header class="win-head"><h2>Deposit Planner</h2><ul class="list-btn"><li><a href="#" class="size-34x34 btn-red icon-26x26-close" ng-click="closeWindow()"></a></li></ul></header>
     <div class="win-main" scrollbar=""><div class="box-paper footer"><div class="scroll-wrap">
         <h3>{{ status }}</h3>
-        <p>Running and paused state, settings, observed boards and pending actions persist across page reloads. Preview mode reads game data without starting, collecting or rerolling errands. Automatic mode uses inventory reroll items only.</p>
+        <p>Running and paused state, settings, observed boards and pending actions persist across page reloads. Paused forecasts keep updating without game actions. Start runs planned errands and collects completed rewards. Item rerolls run only when enabled and use inventory items.</p>
+        <div ng-if="rerollNotice" class="deposit-reroll-notice" ng-class="'deposit-reroll-' + rerollNotice.level" role="status" aria-live="polite">
+            <strong>{{ rerollNotice.title }}</strong>
+            <ul><li ng-repeat="reason in rerollNotice.reasons track by $index">{{ reason }}</li></ul>
+        </div>
         <div ng-if="state" class="deposit-summary">
             <p><strong>Progress:</strong> {{ state.progress | number:0 }} / {{ state.target | number:0 }} &mdash; {{ state.target - state.progress > 0 ? state.target - state.progress : 0 | number:0 }} needed<br><strong>Target reward:</strong> {{ reward.reward }} ({{ reward.amount }})</p>
             <p><strong>Free errands:</strong> {{ until(state.errandsReset) }}<br><strong>Milestone reset:</strong> {{ until(state.milestonesReset) }}<br><strong>Reroll inventory:</strong> {{ state.itemCount }} items; {{ state.rerollsUsed }} reserved/used this milestone cycle</p>
@@ -24,8 +28,8 @@
         </div>
         <p>Dates use {{ localZone }}. Errands selected automatically must finish and be collected before both reset deadlines, including the configured buffer. After reaching the target, the module waits for the next milestone cycle.</p>
         <h3>Settings</h3>
-        <p>Turn on item rerolls while keeping Preview only enabled to inspect the proposed item budget. Turn Preview only off to execute plans. Taking control pauses Collector's deposit actions; its Second Village helper stays separate.</p>
+        <p>While paused, review the forecasts and item budget. Start enables errand starts and collection. Allow automatic item rerolls separately to spend inventory items within your limits. Second Village has its own control.</p>
         <table class="tbl-border-light tbl-content tbl-medium-height"><tr ng-repeat="id in controls" ng-switch="map[id].inputType"><td>{{ labels[id] }}</td><td ng-switch-when="checkbox"><div switch-slider="" enabled="true" border="true" value="settings[id]" vertical="false" size="'56x28'"></div></td><td ng-switch-when="number"><input type="number" class="fit textfield-border" ng-model="settings[id]" aria-label="{{ labels[id] }}" ng-change="clearSettingError(id)" ng-class="{'setting-invalid': settingErrors[id]}" min="{{ map[id].min }}" max="{{ map[id].max }}" step="1"><span class="setting-range">{{ map[id].min }} &ndash; {{ map[id].max }}</span><span ng-if="settingErrors[id]" class="setting-error" role="alert">{{ settingErrors[id] }}</span></td></tr></table>
     </div></div></div>
-    <footer class="win-foot"><ul class="list-btn list-center"><li><a href="#" class="btn-border btn-orange" ng-click="refresh()">Refresh preview</a></li><li><a href="#" class="btn-border btn-orange" ng-click="save()">Save</a></li><li><a href="#" class="btn-border" ng-class="running ? 'btn-red' : 'btn-green'" ng-click="toggle()">{{ running ? 'Pause' : 'Start' }}</a></li></ul></footer>
+    <footer class="win-foot"><ul class="list-btn list-center"><li><a href="#" class="btn-border btn-orange" ng-click="refresh()">Refresh forecast</a></li><li><a href="#" class="btn-border btn-orange" ng-click="save()">Save</a></li><li><a href="#" class="btn-border" ng-class="running ? 'btn-red' : 'btn-green'" ng-click="toggle()">{{ running ? 'Pause' : 'Start' }}</a></li></ul></footer>
 </div>

@@ -1,5 +1,22 @@
 # TWOverflow Changelog
 
+## Unreleased — 2026-10-07 (userscript 2.1.500.13)
+
+- **Deposit Planner:** Add a persistent information or warning box when the current plan advises keeping reroll items. Explain target coverage, collection, free resets, timing, pending confirmations, inventory reserves, cycle limits, learning and forecast confidence, improvement or item-value checks. Update the notice with current saved settings; hide it when rerolling is recommended.
+- **Validation:** All 197 offline tests, source lint, userscript syntax, startup dependencies, generated/tracked artifact comparison and diff checks pass. Notice regressions cover exact target coverage, inventory and cycle constraints, learning, confidence, improvement, item value, pending guards, reset timing, running errands, lower milestones and live window updates without game actions. Ship 2.1.500.13 with the merged deposit controls and independent Second Village module. Browser installation and live actions with this version remain unverified. Preserve the pre-existing local userscript in dist/tw2overflow-before-2.1.500.13.user.js before syncing the tracked distributable.
+
+## Unreleased — 2026-10-07 (userscript 2.1.500.12)
+
+- **Deposit Planner:** Merge the Collector deposit helper into one Start/Pause control for planning, starting, collecting and optional inventory rerolls. Remove the Preview only switch; forecasts keep refreshing while paused. Preserve unresolved pending guards across Start and reload, and allow confirmed game updates to reconcile them while paused.
+- **Second Village:** Give Second Village its own menu and Start/Pause control for starting jobs and collecting rewards. Its saved state remains independent of Deposit Planner.
+- **Migration:** Preserve explicit pauses and Second Village preferences. Resume old automatic planner sessions, pause old preview sessions, and transfer Collector-only deposit sessions with item rerolls off. Apply migration once.
+- **Validation:** All 190 offline tests pass against the freshly generated userscript, including module startup dependencies, settings migration, pending guards, paused forecasts, and independent Second Village starts and reward collection. Source lint, userscript syntax and diff checks pass. Preserve existing local edits to the tracked userscript; the ready-to-install build is available in dist/tw2overflow.user.js. Installation and live actions with this merged version remain unverified.
+
+## Unreleased — 2026-10-07 (userscript 2.1.500.11)
+
+- **Deposit Planner:** Repair Collector handover by listening on the game's EventQueue for module control events. Keep Angular listeners for server deposit events. Avoid a false Start error when saving settings has already resumed the planner.
+- **Validation:** Add independent event-channel regression coverage for preview, pause, restart with preview and automatic rerolls disabled, confirmed handover, errand startup and Collector takeover. Add UI regressions for disabled flags and avoiding duplicate starts. Live installation and game orders remain unverified. Preserve existing local edits to the tracked userscript; the new build is available in dist/tw2overflow.user.js.
+
 ## Unreleased — 2026-10-07 (userscript 2.1.500.10)
 
 - **Recruiter:** Fill available queue slots during one interval, splitting troop deficits into capped batches in configured unit priority. Confirm each preceding order and fresh resources before the next send. Share one interval spending budget across all batches, recheck current protections and deficits, and cancel continuation on pause, settings changes or rejection. Keep village resource budgets independent. Preview shows every planned batch.

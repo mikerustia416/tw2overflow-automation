@@ -1,49 +1,28 @@
 define('two/autoCollector/ui', [
-    'two/ui',
-    'two/autoCollector',
-    'two/utils',
-    'queues/EventQueue'
-], function (
-    interfaceOverflow,
-    autoCollector,
-    utils,
-    eventQueue
-) {
-    let $button;
-
-    const init = function () {
-        if (!modelDataService.getWorldConfig().isResourceDepositEnabled()) {
-            return false;
+    'two/ui', 'two/autoCollector/secondVillage', 'two/utils', 'queues/EventQueue'
+], function (ui, secondVillage, utils, events) {
+    let initialized = false;
+    return function () {
+        if (initialized || !secondVillage.isInitialized()) {
+            return;
         }
-
-        $button = interfaceOverflow.addMenuButton('Collector', 50, $filter('i18n')('description', $rootScope.loc.ale, 'auto_collector'));
-        
-        $button.addEventListener('click', function () {
-            if (autoCollector.isRunning()) {
-                autoCollector.stop();
-                autoCollector.secondVillage.stop();
-                utils.notif('success', $filter('i18n')('deactivated', $rootScope.loc.ale, 'auto_collector'));
-            } else {
-                autoCollector.start();
-                autoCollector.secondVillage.start();
-                utils.notif('success', $filter('i18n')('activated', $rootScope.loc.ale, 'auto_collector'));
+        initialized = true;
+        const button = ui.addMenuButton('Second Village', 50, 'Run and collect Second Village jobs independently of Deposit Planner');
+        const update = function () {
+            button.classList.toggle('btn-red', secondVillage.isRunning());
+            button.classList.toggle('btn-orange', !secondVillage.isRunning());
+        };
+        button.addEventListener('click', function () {
+            if (secondVillage.isRunning()) {
+                secondVillage.stop();
+                utils.notif('success', 'Second Village paused');
+            } else if (secondVillage.start()) {
+                utils.notif('success', 'Second Village started');
             }
+            update();
         });
-
-        eventQueue.register(eventTypeProvider.AUTO_COLLECTOR_STARTED, function () {
-            $button.classList.remove('btn-orange');
-            $button.classList.add('btn-red');
-        });
-
-        eventQueue.register(eventTypeProvider.AUTO_COLLECTOR_STOPPED, function () {
-            $button.classList.remove('btn-red');
-            $button.classList.add('btn-orange');
-        });
-
-        if (autoCollector.isRunning()) {
-            eventQueue.trigger(eventTypeProvider.AUTO_COLLECTOR_STARTED);
-        }
+        events.register(eventTypeProvider.AUTO_COLLECTOR_SECONDVILLAGE_STARTED, update);
+        events.register(eventTypeProvider.AUTO_COLLECTOR_SECONDVILLAGE_STOPPED, update);
+        update();
     };
-
-    return init;
 });
