@@ -6,8 +6,8 @@ Automate farming, maintain troop targets without spending protected resources, a
 | --- | --- |
 | **Farmer / FarmOverflow** | Barbarian farming, automatic local troop presets, travel and target filters, troop reserves, cooldowns, attack limits, and preview logs. |
 | **Deposit Planner** | Deposit countdowns, exact visible-errand selection, waiting/item-reroll forecasts, target ETAs, item reserves and configurable automation. |
-| **Recruiter** | Barracks troop targets, queued-soldier accounting, savings, building budgets, population limits, spending caps, and recruitment previews. |
-| **Builder / BuilderQueue** | Building sequences, resource reserves, automatic upgrades, and build logs. |
+| **Recruiter** | Saved village profiles, barracks troop targets, queued-soldier accounting, savings, building budgets, population limits, spending caps, and recruitment previews. |
+| **Builder / BuilderQueue** | Saved village profiles, building sequences, resource reserves, automatic upgrades, and build logs. |
 | **Quest / AutoQuest** | Open marked quest lines, select completed tasks to reveal rewards, collect them, and close the quest panel. |
 
 This README is the feature and setup guide. [CHANGELOG.md](CHANGELOG.md) tracks change history.
@@ -30,7 +30,7 @@ Open **Deposit Planner** to inspect progress, the free errand reset, the milesto
 
 The planner examines every subset of the visible errands. It chooses the greatest reward that can be collected before both resets, with the shortest completion time breaking ties. When the visible board reaches the target, the displayed ETA follows this exact selection. Durations and rewards come directly from the game, including active bonuses.
 
-Future boards are unknown. The planner learns complete six-errand boards and runs repeatable empirical simulations to compare continuing, waiting for a free reset and using inventory reroll items. It prefers fewer items when the desired modeled success rate is reached, and requires a configurable improvement before rerolling immediately. These forecasts are approximate; median and 90th-percentile ETAs describe successful simulated runs, not guarantees or a globally optimal future strategy. Until enough matching boards are observed, it collects useful visible errands and waits rather than spending reroll items.
+Future boards are unknown. The planner learns complete six-errand boards and runs repeatable empirical simulations to compare continuing, waiting for a free reset and using inventory reroll items. It prefers fewer items when the desired modeled success rate is reached, and requires a configurable improvement before rerolling immediately. The forecast table shows approximate chance bands, expected items, and extra expected progress per item compared with the best no-item strategy. Whole-board bootstrap resampling shows sensitivity to the observed history; a simulation sampling interval also prevents treating 128 successful runs as certainty. These bands cannot account for unseen board types and are not calibrated game odds. With **Use cautious forecast bands** enabled by default, immediate rerolls must meet the desired success rate at the lower band and improve on the alternative’s upper band by the configured percentage points. A cautious 100% threshold blocks uncertain item rerolls; exact visible plans still proceed. These forecasts are approximate; median and 90th-percentile ETAs describe successful simulated runs, not guarantees or a globally optimal future strategy. Until enough matching boards are observed, it collects useful visible errands and waits rather than spending reroll items.
 
 | Setting | Default |
 | --- | --- |
@@ -41,17 +41,54 @@ Future boards are unknown. The planner learns complete six-errand boards and run
 | Buffer before each reset / estimated overhead per errand | 60 seconds / 2 seconds |
 | Desired modeled success / minimum gain to reroll now | 95% / 5 percentage points |
 | Complete matching boards required / refresh interval | 5 / 30 seconds |
+| Cautious forecast bands / learn action overhead | On / on |
+| Plan a lower attainable milestone | Off |
+| Minimum extra expected progress per item | 0 (requires positive gain) |
 | Hold completed errands after reaching the target | On |
+
+**Learn start/collection overhead** measures confirmed planner-owned errands in automatic mode. After three matching observations, it uses the 90th percentile of start delay plus completion-to-confirmed-collection delay, with your configured overhead as a minimum. Timing samples persist, match village/bonuses, and expire after 30 days (60 samples maximum); delays over five minutes, interrupted sessions and preview/manual actions are excluded. Learning updates planning and displayed ETAs without overwriting your configured overhead. Until enough measurements exist, the configured estimate applies.
+
+While an errand is running—even the last one on an empty board—the planner projects future boards after collection and shows the highest supported unachieved milestone, its chance band, collection ETA and expected items to reach it. Each projection includes current progress and the running reward only when collectable before both reset buffers; it respects the inventory reserve and remaining cycle budget. Having many items cannot bypass the time limit or the configured reroll limit. Until enough matching boards are observed, it can show a milestone covered by the current errand, but does not invent future rewards. Milestone estimates reuse the same bounded simulated strategies and may miss better strategies; they are not guaranteed maximum rewards.
+
+Enable **Plan a lower attainable milestone** to pursue the highest supported lower milestone when the original target lacks a supported forecast. Exact visible rewards are preferred when they already reach that milestone; future-board fallback can use inventory items subject to the same confidence, improvement and value checks. Normally it waits for the running errand to complete and confirms collection before starting the next errand, then rechecks actual progress. **Only when the ready errand list says Nothing to do, no rewards await collection, and the last errand is still running**, it also previews collected progress plus the running reward, the remaining target gap, and whether an item can prepare a new board now. An early reroll requires the game’s enabled reroll capability, safe collection timing, an uncovered target, matching forecast history, confidence/improvement/value checks and remaining item budget. It may prepare the next board while preserving the running job; it never starts a second errand. Once ready jobs appear, this proactive path stops. Unknown game capability or an unexpected loss of the running job blocks automation. Preview mode remains read-only. The saved target stays unchanged, and reaching a temporary milestone does not trigger final-target holding. This automatic fallback is off by default; look-ahead estimates still appear while it is off. Set **Minimum extra expected progress per reroll item** to require more value from item spending; expected gains include simulated runs that miss the final target.
 
 Invalid settings are named in the notification and beside the field. For example, **Desired forecast success (%)** accepts whole numbers from **10 to 100** (default **95**); 20 is valid, while a value of 9 prevents Save and Start in both preview and automatic modes. Correcting a value clears its field error. Preview mode uses the same settings validation as automatic mode.
 
 Enable **Allow automatic item rerolls** while keeping preview on to review forecasts. Pause, turn preview off, save and start to execute the plan. Rerolls use the inventory item route; the planner never purchases rerolls with Crowns. Samples are retained for up to 30 days, matched to village and bonuses, and capped at 60 boards. Repeated polling of one board does not add samples.
 
-Automatic deposit control pauses Collector's deposit helper; Second Village continues independently. Starting Collector pauses an active automatic planner. The planner persists settings, running state, observed boards, used/reserved reroll budget and pending requests. An uncertain response pauses automation and blocks retries across reloads. Use **Resolve after checking game** only after checking the errand, progress and inventory; clearing a guard keeps its reroll budget charged. After reaching the target, the planner waits for the next milestone cycle, holding completed rewards when configured.
+Automatic deposit control pauses Collector's deposit helper; Second Village continues independently. Starting Collector pauses an active automatic planner. The planner persists settings, running state, observed boards, used/reserved reroll budget, learned action timing and pending requests. An uncertain response pauses automation and blocks retries across reloads. Use **Resolve after checking game** only after checking the errand, progress and inventory; clearing a guard keeps its reroll budget charged. After reaching the target, the planner waits for the next milestone cycle, holding completed rewards when configured.
 
 ## Builder
 
-Open **Builder**, choose an active building sequence and village group, configure resource reserves, then press Start. Builder follows the sequence while respecting available queue slots and the shared recruitment spending guard. It restores its running state after refresh. Saving changed settings cancels its old timers, refreshes the active sequence limits, and starts a new run if it was running. An unavailable active sequence leaves it stopped.
+Open **Builder**, use **Configure** to select a village, choose its active building sequence, resource reserves and farm priority, then Save. **Build in this village** can disable an individual village. The sequence library and village-group filter remain shared. Save before switching villages. Villages without a saved profile inherit **Shared defaults**; **Use shared defaults for this village** removes a profile. Existing settings become the shared defaults without changing them. Profiles persist by world, character and village. Press Start to run all enabled villages in the selected group. Builder follows the sequence while respecting available queue slots and the shared recruitment spending guard. It restores its running state after refresh. Saving changed settings cancels its old timers, refreshes the active sequence limits, and starts a new run if it was running. Villages assigned an unavailable sequence are skipped; Builder stops when no configured sequence is available. Farm-priority upgrades also respect that village's reserves.
+
+### City roles and village labels
+
+Builder includes **Offensive**, **Defensive** and **Resource** sequences. All start with farms, warehouses, basic production and the Headquarters levels required to unlock their later buildings. Offensive emphasizes barracks and academy access; Defensive emphasizes barracks, walls and hospital; Resource emphasizes all three production buildings, storage and market capacity.
+
+With **Follow village role label** enabled, an owned village in a game group named Offensive, Defensive or Resource selects the corresponding sequence. Matching is exact apart from capitalization and surrounding spaces. Label assignment/removal is checked during normal cycles and group events. The **Effective sequence** and preview show the selected type and source; the saved dropdown remains the fallback when no role matches. Choosing a sequence manually disables label selection for that village; re-enable the checkbox to follow labels again.
+
+Use **Add shared label mapping** for custom labels, such as mapping a group named Frontline to Defensive. Mappings use group IDs so a renamed group retains its mapping. The first matching mapping wins; Up/Down change priority. With no custom mapping, overlapping role labels use Offensive, then Defensive, then Resource. A manual village choice takes precedence. The selected village-group filter and village enablement still govern where Builder runs.
+
+Edit presets in the sequence editor, or modify the cumulative `foundation` and `roleTargets` arrays near the end of `src/modules/builder_queue/src/default-orders.js`. Phases alternate one upgrade per listed building until each target level is reached. Keep Headquarters unlock phases before new military/support buildings. Existing libraries receive missing role presets once; saved custom arrays, deliberate empty libraries and subsequent removals are preserved. Editing source defaults does not overwrite an already saved sequence; use the sequence editor to update that saved copy.
+
+### Dynamic building priorities
+
+Enable **Use dynamic building priorities** for the selected village. Builder keeps its sequence as the main plan, but can bring later steps forward while blocked. All alternatives stay within the sequence's target levels and must satisfy game upgradeability, available queue slots, village reserves and the shared spending guard.
+
+It first considers farms that resolve a population blocker and warehouses needed to fit the next cost. It also prioritizes low free population and near-full storage when the delay limit permits. During a long resource wait, bounded resource upgrades or another affordable later sequence step may use the idle time. Costs, durations, stock, free population and production rates come from the game model; optional detours conservatively use current production without assuming an unconfirmed production boost.
+
+| Dynamic setting | Default |
+| --- | --- |
+| Dynamic priorities | Off |
+| Long resource wait threshold | 30 minutes |
+| Maximum extra delay to the main step | 15 minutes |
+| Warehouse fullness trigger | Any resource at 90% |
+| Minimum free population | 50 |
+| Maximum resource-building level for detours | 15 |
+| Resource detours per blocked sequence step | 2 |
+
+Necessary farm/storage repairs may exceed the extra-delay limit because the main step cannot proceed without them. Optional detours require known duration and production timing. Until non-empty queue timing can be verified, those detours wait for the queue to clear. The resource-detour counter and original main-step ETA persist across reloads, so successive optional detours share one cumulative extra-delay budget. **Refresh preview** evaluates draft settings without submitting an upgrade and explains the choice, resource wait and expected extra delay; Save applies the settings.
 
 ## Farmer
 
@@ -138,7 +175,7 @@ UI updates use AngularJS `$evalAsync`, and the cycle countdown uses the actual s
 
 ## Recruiter
 
-Recruiter maintains a target army independently of Farmer. Targets apply separately to each selected village. Owned totals include your troops away from home; foreign support is not added. For each unit kind, it deducts the untrained portion of queued jobs from the deficit:
+Recruiter maintains a target army independently of Farmer. Use **Configure** to select a village and Save its troop targets, savings, additional building budgets, protected upgrades, spending share and batch/queue limits. **Recruit for this village** can disable a village. Preview mode, check interval and village-group filter remain shared. Save before switching villages. Villages without a saved profile inherit **Shared defaults**; **Use shared defaults for this village** removes a profile. Existing settings remain the shared defaults. Profiles persist by world, character and village. Owned totals include your troops away from home; foreign support is not added. For each unit kind, it deducts the untrained portion of queued jobs from the deficit:
 
 ```text
 queued soldiers = sum(job amount - soldiers already recruited)

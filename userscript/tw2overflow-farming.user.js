@@ -2,7 +2,7 @@
 // @name        TW2Overflow Farmer, Recruiter, Builder, Quest and Deposit Planner
 // @description Automating the boring stuff on Tribal Wars 2 with tools like auto farming, auto builder, command scheduler, minimap and more.
 // @namespace   local/tw2overflow-farming
-// @version     2.1.500.7
+// @version     2.1.500.8
 // @grant       unsafeWindow
 // @run-at      document-start
 // @include     https://*.tribalwars2.com/game.php*
@@ -11,7 +11,7 @@
 
 /*!
  * tw2overflow v2.1.500
- * Wed, 07 Oct 2026 01:57:48 GMT
+ * Wed, 07 Oct 2026 02:46:45 GMT
  * Developed by Relaxeaza <relaxeaza@outlook.com>
  *
  * This work is free. You can redistribute it and/or modify it under the
@@ -5917,6 +5917,62 @@ define('two/Settings', [
     return Settings;
 });
 
+// Village profiles share the existing world/character-namespaced Settings storage.
+define('two/villageSettings', ['two/Settings'], function (Settings) {
+    return function (base, villageId, sharedKeys) {
+        if (!villageId) {
+            return base;
+        }
+        const view = Object.create(Settings.prototype);
+        view.settingsMap = Object.fromEntries(Object.entries(base.settingsMap).filter(([key]) => key !== 'village_profiles'));
+        view.defaults = base.defaults;
+        view.storageKey = base.storageKey;
+        view.events = {settingsChange: noop};
+        view.injected = false;
+        const refresh = function () {
+            const profiles = base.getRaw('village_profiles');
+            const profile = profiles && profiles[villageId] || {};
+            view.settings = Object.fromEntries(Object.keys(view.settingsMap).map(key => [key,
+                !sharedKeys.includes(key) && hasOwn.call(profile, key) ? angular.copy(profile[key]) : base.getRaw(key)]));
+        };
+        refresh();
+        // Read through to the base so sequence-library edits and other windows stay current.
+        for (const method of ['get', 'getRaw', 'getAll', 'encode', 'set', 'setAll']) {
+            view[method] = function (...args) {
+                refresh();
+                const changed = Settings.prototype[method].apply(view, args);
+                if (method === 'setAll' && !changed && !hasOwn.call(base.getRaw('village_profiles') || {}, villageId)) {
+                    view.store();
+                    view.updateScope();
+                    return true;
+                }
+                return changed;
+            };
+        }
+        view.store = function () {
+            const profiles = base.getRaw('village_profiles') || {};
+            const values = {};
+            profiles[villageId] = {};
+            for (const key of Object.keys(view.settingsMap)) {
+                if (sharedKeys.includes(key)) {
+                    values[key] = angular.copy(view.settings[key]);
+                } else {
+                    profiles[villageId][key] = angular.copy(view.settings[key]);
+                }
+            }
+            base.setAll({...values, village_profiles: profiles});
+        };
+        view.resetProfile = function () {
+            const profiles = base.getRaw('village_profiles') || {};
+            delete profiles[villageId];
+            base.set('village_profiles', profiles);
+            refresh();
+            view.updateScope();
+        };
+        return view;
+    };
+});
+
 define('two/resourceBudget', [], function () {
     const pending = new Map();
     const resources = ['wood', 'clay', 'iron', 'food'];
@@ -8641,10 +8697,174 @@ require([
     }, ['map']);
 });
 
+// Pure scheduling policy; the adapter below supplies game data in seconds.
+define('two/builderQueue/planner', [], function () {
+    const RESOURCES = ['wood', 'clay', 'iron'];
+    const number = value => Number.isFinite(Number(value)) && value !== null && value !== '' ? Number(value) : NaN;
+    const bounded = (value, fallback, min, max) => Math.min(max, Math.max(min, Number.isFinite(number(value)) ? number(value) : fallback));
+    const affordable = (snapshot, building) => RESOURCES.every(type => {
+        const stock = number(snapshot.stock[type]);
+        const cost = number(building.cost[type]);
+        return Number.isFinite(stock) && Number.isFinite(cost) && cost >= 0 && stock - (snapshot.reserves[type] || 0) >= cost;
+    }) && (number(building.cost.food || 0) === 0 || number(snapshot.foodFree) >= number(building.cost.food));
+
+    const waitFor = function (snapshot, building, spent = {}) {
+        let wait = 0;
+        for (const type of RESOURCES) {
+            const cost = number(building.cost[type]);
+            const stock = number(snapshot.stock[type]);
+            if (!Number.isFinite(cost) || !Number.isFinite(stock)) {
+                return NaN;
+            }
+            const deficit = cost + (snapshot.reserves[type] || 0) + (Number(spent[type]) || 0) - stock;
+            if (deficit > 0) {
+                if (number(snapshot.capacity) < cost + (snapshot.reserves[type] || 0)) {
+                    return Infinity;
+                }
+                const rate = number(snapshot.production[type]);
+                if (!Number.isFinite(rate) || rate < 0) {
+                    return NaN;
+                }
+                if (rate === 0) {
+                    return Infinity;
+                }
+                wait = Math.max(wait, deficit / rate);
+            }
+        }
+        return wait;
+    };
+
+    const plan = function (snapshot, options = {}) {
+        const counts = {};
+        const limits = {};
+        let main;
+        const pending = [];
+        for (const name of snapshot.sequence || []) {
+            limits[name] = (limits[name] || 0) + 1;
+            counts[name] = (counts[name] || 0) + 1;
+            const building = snapshot.buildings[name];
+            if (!building) {
+                return {building: null, main: name, reason: 'Waiting for missing sequence building data.'};
+            }
+            if (counts[name] > building.level + (building.queued || 0)) {
+                if (!main) {
+                    main = name;
+                }
+                if (!pending.includes(name)) {
+                    pending.push(name);
+                }
+            }
+        }
+        if (!main) {
+            return {building: null, main: null, reason: 'Sequence targets reached or already queued.'};
+        }
+        const official = snapshot.buildings[main];
+        const result = {building: null, main, mainLevel: official.level + (official.queued || 0) + 1,
+            waitSeconds: waitFor(snapshot, official), detour: false};
+        const feasible = name => snapshot.buildings[name] && snapshot.buildings[name].allowed
+            && affordable(snapshot, snapshot.buildings[name]);
+        const mainPossible = feasible(main);
+        if (!options.dynamic) {
+            if (mainPossible) {
+                return {...result, building: main, reason: 'Next sequence upgrade is ready.'};
+            }
+            const farm = snapshot.types.farm;
+            if (official.foodBlocked && options.prioritizeFarm && pending.includes(farm) && feasible(farm)) {
+                return {...result, building: farm, detour: true, reason: 'Farm resolves the sequence population blocker.'};
+            }
+            return {...result, reason: 'Waiting for the next sequence upgrade.'};
+        }
+
+        const maxDelay = bounded(options.maxDelayMinutes, 15, 0, 1440) * 60;
+        const waitThreshold = bounded(options.waitMinutes, 30, 1, 1440) * 60;
+        const maxResourceLevel = bounded(options.resourceLevelLimit, 15, 0, 30);
+        const maxResourceDetours = bounded(options.resourceDetourLimit, 2, 0, 10);
+        const farm = snapshot.types.farm;
+        const warehouse = snapshot.types.warehouse;
+        const storageBlocked = RESOURCES.some(type => number(snapshot.capacity) > 0
+            && number(official.cost[type]) + (snapshot.reserves[type] || 0) > number(snapshot.capacity));
+        const populationLow = Number.isFinite(number(snapshot.foodFree))
+            && number(snapshot.foodFree) < bounded(options.minimumFood, 50, 0, 10000);
+        const fullness = bounded(options.warehousePercent, 90, 50, 100) / 100;
+        const storageLow = number(snapshot.capacity) > 0 && RESOURCES.some(type => number(snapshot.stock[type]) >= snapshot.capacity * fullness);
+        const candidates = [];
+        for (const name of pending) {
+            if (name === main || !feasible(name)) {
+                continue;
+            }
+            const building = snapshot.buildings[name];
+            // Queued population/storage improvements must finish before another is added.
+            if ((name === farm || name === warehouse) && building.queued) {
+                continue;
+            }
+            const resource = Object.keys(snapshot.types.resources || {}).find(type => snapshot.types.resources[type] === name);
+            if (resource && (building.level + (building.queued || 0) >= Math.min(limits[name], maxResourceLevel)
+                || (snapshot.resourceDetours || 0) >= maxResourceDetours)) {
+                continue;
+            }
+            const repairsFood = name === farm && options.prioritizeFarm && official.foodBlocked;
+            const repairsStorage = name === warehouse && options.prioritizeWarehouse && storageBlocked;
+            const urgentFarm = name === farm && options.prioritizeFarm && populationLow;
+            const urgentWarehouse = name === warehouse && options.prioritizeWarehouse && storageLow;
+            const urgent = repairsFood || repairsStorage || urgentFarm || urgentWarehouse;
+            if (!urgent && (mainPossible || !(result.waitSeconds >= waitThreshold))) {
+                continue;
+            }
+            const afterWait = waitFor(snapshot, official, building.cost);
+            const duration = number(building.durationSeconds);
+            const queueSeconds = number(snapshot.queueSeconds);
+            const baseStart = Math.max(result.waitSeconds, queueSeconds);
+            const nextStart = Math.max(afterWait, queueSeconds + duration);
+            const baseline = Number.isFinite(snapshot.mainBudgetSeconds) ? snapshot.mainBudgetSeconds : baseStart;
+            const delay = nextStart - baseline;
+            // Necessary repairs remove an impossible blocker. Other detours need a provable timing budget.
+            if (!repairsFood && !repairsStorage && (!Number.isFinite(delay) || !Number.isFinite(duration)
+                || duration < 0 || !Number.isFinite(queueSeconds) || queueSeconds < 0 || delay > maxDelay)) {
+                continue;
+            }
+            let score = urgentWarehouse ? 400 : urgentFarm ? 350 : resource ? 200 : 100;
+            if (repairsFood || repairsStorage) {
+                score += 1000;
+            }
+            if (resource) {
+                const rate = number(snapshot.production[resource]);
+                const deficit = Math.max(0, number(official.cost[resource]) + (snapshot.reserves[resource] || 0) - snapshot.stock[resource]);
+                score += Number.isFinite(rate) && rate > 0 ? Math.min(90, deficit / rate / 60) : 0;
+                score -= building.level;
+            }
+            const reason = repairsFood ? 'Farm resolves the sequence population blocker.'
+                : repairsStorage ? 'Warehouse makes the next sequence cost fit storage.'
+                    : urgentWarehouse ? 'Warehouse protects near-full resource storage.'
+                        : urgentFarm ? 'Farm increases low available population.'
+                            : resource ? 'Resource upgrade uses a long wait to improve production.'
+                                : 'Later sequence upgrade fits inside the long wait.';
+            candidates.push({name, score, delay, reason, resource: !!resource});
+        }
+        candidates.sort((a, b) => b.score - a.score || a.delay - b.delay || pending.indexOf(a.name) - pending.indexOf(b.name));
+        if (candidates.length) {
+            const choice = candidates[0];
+            return {...result, building: choice.name, detour: true, resourceDetour: choice.resource,
+                extraDelaySeconds: Number.isFinite(choice.delay) ? Math.max(0, choice.delay) : null, reason: choice.reason};
+        }
+        if (mainPossible) {
+            return {...result, building: main, reason: 'Next sequence upgrade is ready.'};
+        }
+        return {...result, reason: !Number.isFinite(number(snapshot.queueSeconds))
+            ? 'Waiting for queued buildings; queue timing is unavailable, so optional detours are skipped.'
+            : Number.isNaN(result.waitSeconds)
+                ? 'Waiting for the sequence; production timing is unavailable, so optional detours are skipped.'
+                : 'Waiting for the sequence; no affordable detour fits the configured limits.'};
+    };
+
+    return {plan, waitFor};
+});
+
+
 define('two/builderQueue', [
     'two/ready',
     'two/utils',
     'two/Settings',
+    'two/villageSettings',
     'two/builderQueue/settings',
     'two/builderQueue/settings/map',
     'two/builderQueue/sequenceStatus',
@@ -8654,11 +8874,14 @@ define('two/builderQueue', [
     'queues/EventQueue',
     'Lockr',
     'helper/time',
-    'two/resourceBudget'
+    'two/resourceBudget',
+    'two/builderQueue/planner',
+    'two/builderQueue/labelPolicy'
 ], function (
     ready,
     utils,
     Settings,
+    villageSettings,
     SETTINGS,
     SETTINGS_MAP,
     SEQUENCE_STATUS,
@@ -8668,7 +8891,9 @@ define('two/builderQueue', [
     eventQueue,
     Lockr,
     timeHelper,
-    resourceBudget
+    resourceBudget,
+    planner,
+    labelPolicy
 ) {
     const buildingService = injector.get('buildingService');
     const premiumActionService = injector.get('premiumActionService');
@@ -8678,7 +8903,6 @@ define('two/builderQueue', [
     let runVersion = 0;
     let intervalCheckId;
     let intervalInstantCheckId;
-    let buildingSequenceLimit;
     const ANALYSES_PER_MINUTE = 1;
     const ANALYSES_PER_MINUTE_INSTANT_FINISH = 10;
     const VILLAGE_BUILDINGS = {};
@@ -8689,9 +8913,32 @@ define('two/builderQueue', [
     let sequencesAvail = true;
     let settings;
     let localSettings;
+    const SHARED_SETTINGS = [SETTINGS.GROUP_VILLAGES, SETTINGS.BUILDING_SEQUENCES, SETTINGS.LABEL_MAPPINGS];
+    const resourceDetours = new Map();
+    const villageConfig = function (villageId) {
+        const config = villageSettings(settings, villageId, SHARED_SETTINGS).getAll();
+        const profile = localSettings[SETTINGS.VILLAGE_PROFILES] && localSettings[SETTINGS.VILLAGE_PROFILES][villageId];
+        if (profile && Object.prototype.hasOwnProperty.call(profile, SETTINGS.ACTIVE_SEQUENCE)
+            && !Object.prototype.hasOwnProperty.call(profile, SETTINGS.AUTO_SEQUENCE)
+            && !Object.prototype.hasOwnProperty.call(profile, SETTINGS.MANUAL_OVERRIDE)) {
+            config[SETTINGS.MANUAL_OVERRIDE] = true;
+        }
+        return config;
+    };
+    const resolveSequence = (config, villageId) => labelPolicy.resolve(config, villageId, groupList, config[SETTINGS.BUILDING_SEQUENCES]);
+    const villageHasSequence = villageId => {
+        const config = villageConfig(villageId);
+        return config[SETTINGS.ENABLED] && Array.isArray(config[SETTINGS.BUILDING_SEQUENCES][resolveSequence(config, villageId).sequence]);
+    };
+    const hasSequence = config => Array.isArray(config[SETTINGS.BUILDING_SEQUENCES][config[SETTINGS.ACTIVE_SEQUENCE]]);
+    const updateSequencesAvailable = function () {
+        sequencesAvail = hasSequence(localSettings) || Object.keys($player.getVillages()).some(villageHasSequence);
+    };
     const STORAGE_KEYS = {
         LOGS: 'builder_queue_log',
-        SETTINGS: 'builder_queue_settings'
+        SETTINGS: 'builder_queue_settings',
+        DETOURS: 'builder_queue_resource_detours',
+        PRESETS_VERSION: 'builder_queue_role_presets_version'
     };
 
     /**
@@ -8775,7 +9022,7 @@ define('two/builderQueue', [
             });
         }
 
-        return villages;
+        return [...new Set(villages)].filter(villageHasSequence);
     };
 
     /**
@@ -8784,38 +9031,102 @@ define('two/builderQueue', [
      * @param {VillageModel} village
      */
     const analyseVillageBuildings = function (village) {
-        if (resourceBudget.isBusy(village)) {
+        if (!village || !getVillageIds().some(id => String(id) === String(village.getId())) || resourceBudget.isBusy(village)) {
             return false;
         }
-        const buildingLevels = angular.copy(village.buildingData.getBuildingLevels());
-        const currentQueue = village.buildingQueue.getQueue();
-        const sequence = angular.copy(VILLAGE_BUILDINGS);
-        const sequences = localSettings[SETTINGS.BUILDING_SEQUENCES];
-        const activeSequenceId = localSettings[SETTINGS.ACTIVE_SEQUENCE];
-        const activeSequence = sequences[activeSequenceId];
-
-        currentQueue.forEach(function (job) {
-            buildingLevels[job.building]++;
-        });
-
-        if (checkVillageBuildingLimit(buildingLevels)) {
+        const queue = village.buildingQueue;
+        const readyState = village.checkReadyState();
+        if (!readyState.buildingQueue || !readyState.buildings || queue.getAmountJobs() >= queue.getUnlockedSlots()) {
             return false;
         }
-
-        for (const buildingName of activeSequence) {
-            if (++sequence[buildingName] > buildingLevels[buildingName]) {
-                buildingService.compute(village);
-
-                checkAndUpgradeBuilding(village, buildingName, function (jobAdded, data) {
-                    if (jobAdded && data.job) {
-                        eventQueue.trigger(eventTypeProvider.BUILDER_QUEUE_JOB_STARTED, data.job);
-                        addLog(village.getId(), data.job);
-                    }
-                });
-
-                break;
+        const decision = previewVillage(village);
+        if (!decision.building) {
+            return false;
+        }
+        // Recheck game feasibility and village reserves immediately before reserving resources.
+        checkAndUpgradeBuilding(village, decision.building, function (jobAdded, data) {
+            if (jobAdded && data.job) {
+                if (decision.detour) {
+                    const key = decision.sequence + ':' + decision.main + ':' + decision.mainLevel;
+                    const prior = resourceDetours.get(village.getId());
+                    const count = prior && prior.key === key ? prior.count : 0;
+                    const deadline = prior && prior.key === key && Number.isFinite(prior.deadline) ? prior.deadline
+                        : Number.isFinite(decision.waitSeconds) ? timeHelper.gameTime() + decision.waitSeconds * 1000 : null;
+                    resourceDetours.set(village.getId(), {key, count: count + (decision.resourceDetour ? 1 : 0), deadline});
+                    Lockr.set(STORAGE_KEYS.DETOURS, Object.fromEntries(resourceDetours));
+                }
+                eventQueue.trigger(eventTypeProvider.BUILDER_QUEUE_JOB_STARTED, data.job);
+                addLog(village.getId(), data.job, decision.reason);
             }
+        });
+    };
+
+    const previewVillage = function (village, draft) {
+        const config = draft || villageConfig(village.getId());
+        const resolved = resolveSequence(config, village.getId());
+        const sequence = config[SETTINGS.BUILDING_SEQUENCES][resolved.sequence];
+        const profileInfo = {sequence: resolved.sequence, sequenceSource: resolved.source, groupId: resolved.groupId};
+        if (!Array.isArray(sequence) || !config[SETTINGS.ENABLED]) {
+            return {...profileInfo, building: null, reason: !config[SETTINGS.ENABLED] ? 'Building disabled for this village.' : 'No valid sequence selected.'};
         }
+        buildingService.compute(village);
+        const snapshot = createSnapshot(village, sequence, config);
+        const initial = planner.plan(snapshot, {dynamic: false});
+        const key = resolved.sequence + ':' + initial.main + ':' + initial.mainLevel;
+        const previous = resourceDetours.get(village.getId());
+        snapshot.resourceDetours = previous && previous.key === key ? previous.count : 0;
+        snapshot.mainBudgetSeconds = previous && previous.key === key && Number.isFinite(previous.deadline)
+            ? (previous.deadline - timeHelper.gameTime()) / 1000 : NaN;
+        const decision = planner.plan(snapshot, {
+            dynamic: config[SETTINGS.DYNAMIC], prioritizeFarm: config[SETTINGS.PRIORIZE_FARM],
+            prioritizeWarehouse: config[SETTINGS.PRIORIZE_WAREHOUSE], waitMinutes: config[SETTINGS.WAIT_MINUTES],
+            maxDelayMinutes: config[SETTINGS.MAX_DELAY_MINUTES], minimumFood: config[SETTINGS.MINIMUM_FOOD],
+            warehousePercent: config[SETTINGS.WAREHOUSE_PERCENT], resourceLevelLimit: config[SETTINGS.RESOURCE_LEVEL_LIMIT],
+            resourceDetourLimit: config[SETTINGS.RESOURCE_DETOUR_LIMIT]
+        });
+        return {...decision, ...profileInfo};
+    };
+
+    const createSnapshot = function (village, sequence, config) {
+        const resourceModel = village.getResources();
+        const computed = resourceModel.getComputed();
+        const queue = village.buildingQueue.getQueue();
+        const levels = village.getBuildingData().getBuildingLevels();
+        const gameBuildings = modelDataService.getGameData().getBuildings();
+        const productionRates = typeof resourceModel.getProductionRates === 'function' ? resourceModel.getProductionRates() : {};
+        const buildings = {};
+        for (const name of new Set(sequence)) {
+            const data = village.getBuildingData().getDataForBuilding(name);
+            if (!data) {
+                continue;
+            }
+            const queued = queue.filter(job => job.building === name).length;
+            const nextLevel = (Number(levels[name]) || 0) + queued + 1;
+            const gameCosts = gameBuildings[name] && gameBuildings[name].individual_level_costs
+                && gameBuildings[name].individual_level_costs[nextLevel];
+            buildings[name] = {
+                level: Number(levels[name]) || 0, queued,
+                cost: data.nextLevelCosts || {},
+                durationSeconds: data.nextLevelCosts && data.nextLevelCosts.build_time !== undefined
+                    ? Number(data.nextLevelCosts.build_time) : gameCosts ? Number(gameCosts.build_time) : NaN,
+                allowed: data.upgradeability === UPGRADEABILITY_STATES.POSSIBLE,
+                foodBlocked: data.upgradeability === UPGRADEABILITY_STATES.NOT_ENOUGH_FOOD
+            };
+        }
+        return {
+            sequence, buildings,
+            stock: Object.fromEntries(['wood', 'clay', 'iron'].map(type => [type, computed[type] ? computed[type].currentStock : NaN])),
+            reserves: {wood: config[SETTINGS.PRESERVE_WOOD], clay: config[SETTINGS.PRESERVE_CLAY], iron: config[SETTINGS.PRESERVE_IRON]},
+            production: Object.fromEntries(['wood', 'clay', 'iron'].map(type => {
+                const rate = typeof resourceModel.getProductionRateByType === 'function' ? resourceModel.getProductionRateByType(type) : productionRates[type];
+                return [type, rate && rate.current !== undefined ? Number(rate.current) / 3600 : NaN];
+            })),
+            capacity: typeof resourceModel.getMaxStorage === 'function' ? resourceModel.getMaxStorage() : NaN,
+            foodFree: computed.food ? computed.food.currentStock : NaN,
+            queueSeconds: queue.length ? NaN : 0,
+            types: {farm: BUILDING_TYPES.FARM, warehouse: BUILDING_TYPES.WAREHOUSE,
+                resources: {wood: BUILDING_TYPES.TIMBER_CAMP, clay: BUILDING_TYPES.CLAY_PIT, iron: BUILDING_TYPES.IRON_MINE}}
+        };
     };
 
     /**
@@ -8826,26 +9137,13 @@ define('two/builderQueue', [
      * @param {Function} callback
      */
     const checkAndUpgradeBuilding = function (village, buildingName, callback) {
-        const upgradeability = checkBuildingUpgradeability(village, buildingName);
-
-        if (upgradeability === UPGRADEABILITY_STATES.POSSIBLE) {
+        if (checkBuildingUpgradeability(village, buildingName) === UPGRADEABILITY_STATES.POSSIBLE) {
             upgradeBuilding(village, buildingName, function (data) {
-                callback(true, data);
+                callback(!!data.job, data);
             });
-        } else if (upgradeability === UPGRADEABILITY_STATES.NOT_ENOUGH_FOOD) {
-            if (localSettings[SETTINGS.PRIORIZE_FARM]) {
-                const limitFarm = buildingSequenceLimit[BUILDING_TYPES.FARM];
-                const villageFarm = village.getBuildingData().getDataForBuilding(BUILDING_TYPES.FARM);
-
-                if (villageFarm.level < limitFarm) {
-                    upgradeBuilding(village, BUILDING_TYPES.FARM, function (data) {
-                        callback(true, data);
-                    });
-                }
-            }
+        } else {
+            callback(false);
         }
-
-        callback(false);
     };
 
     const upgradeBuilding = function (village, buildingName, callback) {
@@ -8876,36 +9174,20 @@ define('two/builderQueue', [
         const buildingData = village.getBuildingData().getDataForBuilding(buildingName);
 
         if (buildingData.upgradeability === UPGRADEABILITY_STATES.POSSIBLE) {
+            const config = villageConfig(village.getId());
             const nextLevelCosts = buildingData.nextLevelCosts;
             const resources = village.getResources().getComputed();
 
             if (
-                resources.clay.currentStock - localSettings[SETTINGS.PRESERVE_CLAY] < nextLevelCosts.clay ||
-                resources.iron.currentStock - localSettings[SETTINGS.PRESERVE_IRON] < nextLevelCosts.iron ||
-                resources.wood.currentStock - localSettings[SETTINGS.PRESERVE_WOOD] < nextLevelCosts.wood
+                resources.clay.currentStock - config[SETTINGS.PRESERVE_CLAY] < nextLevelCosts.clay ||
+                resources.iron.currentStock - config[SETTINGS.PRESERVE_IRON] < nextLevelCosts.iron ||
+                resources.wood.currentStock - config[SETTINGS.PRESERVE_WOOD] < nextLevelCosts.wood
             ) {
                 return UPGRADEABILITY_STATES.NOT_ENOUGH_RESOURCES;
             }
         }
 
         return buildingData.upgradeability;
-    };
-
-    /**
-     * Check if all buildings from the sequence already reached
-     * the specified level.
-     *
-     * @param {Object} buildingLevels - Current buildings level from the village.
-     * @return {Boolean} True if the levels already reached the limit.
-     */
-    const checkVillageBuildingLimit = function (buildingLevels) {
-        for (const buildingName in buildingLevels) {
-            if (buildingLevels[buildingName] < buildingSequenceLimit[buildingName]) {
-                return false;
-            }
-        }
-
-        return true;
     };
 
     /**
@@ -8917,11 +9199,13 @@ define('two/builderQueue', [
      */
     const validSequence = function (sequence) {
         const buildingData = modelDataService.getGameData().getBuildings();
+        const counts = {};
 
         for (let i = 0; i < sequence.length; i++) {
             const building = sequence[i];
 
-            if (++sequence[building] > buildingData[building].max_level) {
+            counts[building] = (counts[building] || 0) + 1;
+            if (!buildingData[building] || counts[building] > buildingData[building].max_level) {
                 return false;
             }
         }
@@ -8929,30 +9213,13 @@ define('two/builderQueue', [
         return true;
     };
 
-    /**
-     * Get the level max for each building.
-     *
-     * @param {String} sequenceId
-     * @return {Object} Maximum level for each building.
-     */
-    const getSequenceLimit = function (sequenceId) {
-        const sequences = localSettings[SETTINGS.BUILDING_SEQUENCES];
-        const sequence = sequences[sequenceId];
-        const sequenceLimit = angular.copy(VILLAGE_BUILDINGS);
-
-        sequence.forEach(function (buildingName) {
-            sequenceLimit[buildingName]++;
-        });
-
-        return sequenceLimit;
-    };
-
-    const addLog = function (villageId, jobData) {
+    const addLog = function (villageId, jobData, reason) {
         const data = {
             time: timeHelper.gameTime(),
             villageId: villageId,
             building: jobData.building,
-            level: jobData.level
+            level: jobData.level,
+            reason: reason || 'Sequence upgrade.'
         };
 
         logs.unshift(data);
@@ -9010,8 +9277,47 @@ define('two/builderQueue', [
         return initialized;
     };
 
-    builderQueue.getSettings = function () {
-        return settings;
+    builderQueue.getSettings = function (villageId) {
+        const view = villageSettings(settings, villageId, SHARED_SETTINGS);
+        if (!villageId) {
+            return view;
+        }
+        const set = view.set;
+        const setAll = view.setAll;
+        view.set = function (id, value, opt) {
+            if (id === SETTINGS.ACTIVE_SEQUENCE) {
+                return setAll.call(view, {[id]: value, [SETTINGS.MANUAL_OVERRIDE]: true, [SETTINGS.AUTO_SEQUENCE]: false}, opt);
+            }
+            return set.call(view, id, value, opt);
+        };
+        view.setAll = function (values, opt) {
+            if (Object.prototype.hasOwnProperty.call(values, SETTINGS.ACTIVE_SEQUENCE)
+                && !Object.prototype.hasOwnProperty.call(values, SETTINGS.AUTO_SEQUENCE)
+                && !Object.prototype.hasOwnProperty.call(values, SETTINGS.MANUAL_OVERRIDE)) {
+                values = {...values, [SETTINGS.MANUAL_OVERRIDE]: true, [SETTINGS.AUTO_SEQUENCE]: false};
+            }
+            return setAll.call(view, values, opt);
+        };
+        return view;
+    };
+
+    builderQueue.preview = function (villageId, draft) {
+        const village = $player.getVillage(villageId);
+        if (!village) {
+            return {building: null, reason: 'Village is unavailable.'};
+        }
+        const readyState = village.checkReadyState();
+        if (!readyState.buildingQueue || !readyState.buildings) {
+            return {building: null, reason: 'Waiting for village building data.'};
+        }
+        const decision = previewVillage(village, draft);
+        if (village.buildingQueue.getAmountJobs() >= village.buildingQueue.getUnlockedSlots()) {
+            return {...decision, building: null, reason: 'All building queue slots are occupied.'};
+        }
+        if (resourceBudget.isBusy(village)) {
+            return {...decision, building: null, reason: 'Waiting for another resource order to be confirmed.'};
+        }
+        return decision;
     };
 
     builderQueue.getLogs = function () {
@@ -9025,13 +9331,13 @@ define('two/builderQueue', [
     };
 
     builderQueue.addBuildingSequence = function (id, sequence) {
-        const sequences = localSettings[SETTINGS.BUILDING_SEQUENCES];
+        const sequences = settings.get(SETTINGS.BUILDING_SEQUENCES);
 
         if (id in sequences) {
             return SEQUENCE_STATUS.SEQUENCE_EXISTS;
         }
 
-        if (!Array.isArray(sequence)) {
+        if (!Array.isArray(sequence) || !validSequence(sequence)) {
             return SEQUENCE_STATUS.SEQUENCE_INVALID;
         }
 
@@ -9045,7 +9351,7 @@ define('two/builderQueue', [
     };
 
     builderQueue.updateBuildingSequence = function (id, sequence) {
-        const sequences = localSettings[SETTINGS.BUILDING_SEQUENCES];
+        const sequences = settings.get(SETTINGS.BUILDING_SEQUENCES);
 
         if (!(id in sequences)) {
             return SEQUENCE_STATUS.SEQUENCE_NO_EXISTS;
@@ -9065,7 +9371,7 @@ define('two/builderQueue', [
     };
 
     builderQueue.removeSequence = function (id) {
-        const sequences = localSettings[SETTINGS.BUILDING_SEQUENCES];
+        const sequences = settings.get(SETTINGS.BUILDING_SEQUENCES);
 
         if (!(id in sequences)) {
             return SEQUENCE_STATUS.SEQUENCE_NO_EXISTS;
@@ -9081,6 +9387,11 @@ define('two/builderQueue', [
     builderQueue.init = function () {
         initialized = true;
         logs = Lockr.get(STORAGE_KEYS.LOGS, [], true);
+        for (const [id, state] of Object.entries(Lockr.get(STORAGE_KEYS.DETOURS, {}))) {
+            if (state && typeof state.key === 'string' && Number.isFinite(state.count) && state.count >= 0) {
+                resourceDetours.set(Number(id), state);
+            }
+        }
         $player = modelDataService.getSelectedCharacter();
         groupList = modelDataService.getGroupList();
 
@@ -9089,14 +9400,42 @@ define('two/builderQueue', [
             storageKey: STORAGE_KEYS.SETTINGS
         });
 
+        // Preserve saved arrays atomically; Angular merge otherwise appends default steps to shorter edits.
+        const stored = Lockr.get(STORAGE_KEYS.SETTINGS, {});
+        if (stored[SETTINGS.BUILDING_SEQUENCES] && typeof stored[SETTINGS.BUILDING_SEQUENCES] === 'object') {
+            const library = angular.copy(stored[SETTINGS.BUILDING_SEQUENCES]);
+            if (Object.keys(library).length && Lockr.get(STORAGE_KEYS.PRESETS_VERSION, 0) < 1) {
+                for (const role of ['Offensive', 'Defensive', 'Resource']) {
+                    if (!(role in library) && Array.isArray(SETTINGS_MAP[SETTINGS.BUILDING_SEQUENCES].default[role])) {
+                        library[role] = angular.copy(SETTINGS_MAP[SETTINGS.BUILDING_SEQUENCES].default[role]);
+                    }
+                }
+            }
+            settings.set(SETTINGS.BUILDING_SEQUENCES, library, {quiet: true});
+        }
+        Lockr.set(STORAGE_KEYS.PRESETS_VERSION, 1);
+        const profiles = settings.getRaw(SETTINGS.VILLAGE_PROFILES);
+        let profilesChanged = false;
+        for (const profile of Object.values(profiles || {})) {
+            if (profile && Object.prototype.hasOwnProperty.call(profile, SETTINGS.ACTIVE_SEQUENCE)
+                && !Object.prototype.hasOwnProperty.call(profile, SETTINGS.AUTO_SEQUENCE)
+                && !Object.prototype.hasOwnProperty.call(profile, SETTINGS.MANUAL_OVERRIDE)) {
+                profile[SETTINGS.AUTO_SEQUENCE] = false;
+                profile[SETTINGS.MANUAL_OVERRIDE] = true;
+                profilesChanged = true;
+            }
+        }
+        if (profilesChanged) {
+            settings.set(SETTINGS.VILLAGE_PROFILES, profiles, {quiet: true});
+        }
+
         settings.onChange(function (changes, updates, opt) {
             const restart = running;
             if (restart) {
                 builderQueue.stop();
             }
             localSettings = settings.getAll();
-            sequencesAvail = Object.prototype.hasOwnProperty.call(localSettings[SETTINGS.BUILDING_SEQUENCES], localSettings[SETTINGS.ACTIVE_SEQUENCE]);
-            buildingSequenceLimit = sequencesAvail ? getSequenceLimit(localSettings[SETTINGS.ACTIVE_SEQUENCE]) : false;
+            updateSequencesAvailable();
 
             if (restart) {
                 builderQueue.start();
@@ -9113,8 +9452,19 @@ define('two/builderQueue', [
             VILLAGE_BUILDINGS[BUILDING_TYPES[buildingName]] = 0;
         }
 
-        sequencesAvail = Object.prototype.hasOwnProperty.call(localSettings[SETTINGS.BUILDING_SEQUENCES], localSettings[SETTINGS.ACTIVE_SEQUENCE]);
-        buildingSequenceLimit = sequencesAvail ? getSequenceLimit(localSettings[SETTINGS.ACTIVE_SEQUENCE]) : false;
+        updateSequencesAvailable();
+        [eventTypeProvider.GROUPS_UPDATED,
+            eventTypeProvider.GROUPS_CREATED,
+            eventTypeProvider.GROUPS_DESTROYED,
+            eventTypeProvider.GROUPS_VILLAGE_LINKED,
+            eventTypeProvider.GROUPS_VILLAGE_UNLINKED].filter(Boolean).forEach(type => {
+            $rootScope.$on(type, function () {
+                updateSequencesAvailable();
+                if (running) {
+                    analyseVillages();
+                }
+            });
+        });
 
         $rootScope.$on(eventTypeProvider.BUILDING_LEVEL_CHANGED, function (event, data) {
             if (!running) {
@@ -9708,6 +10058,66 @@ define('two/builderQueue/defaultOrders', [
         BUILDING_TYPES.FARM // 30
     ];
 
+    // Editable city plans: each phase is an ordered list of [building, target level].
+    // Targets are cumulative from level 0; a phase alternates one level per building
+    // until its targets are reached. Put prerequisite HQ phases before unlocks.
+    // HQ gates and maximum targets follow the verified game building data;
+    // live game max levels and upgradeability remain authoritative in the planner.
+    const B = BUILDING_TYPES;
+    const foundation = [
+        [[B.HEADQUARTER, 1]],
+        [[B.FARM, 1], [B.WAREHOUSE, 1], [B.RALLY_POINT, 1]],
+        [[B.HEADQUARTER, 2]],
+        [[B.BARRACKS, 1]],
+        [[B.WAREHOUSE, 5], [B.FARM, 3], [B.TIMBER_CAMP, 6], [B.CLAY_PIT, 6], [B.IRON_MINE, 6]],
+        [[B.HEADQUARTER, 5], [B.WAREHOUSE, 8], [B.FARM, 8], [B.TIMBER_CAMP, 10], [B.CLAY_PIT, 10], [B.IRON_MINE, 10]],
+        [[B.WALL, 1]],
+        [[B.HEADQUARTER, 6]],
+        [[B.MARKET, 1], [B.HOSPITAL, 1]]
+    ];
+    const roleTargets = {
+        Offensive: [
+            [[B.WAREHOUSE, 14], [B.FARM, 16], [B.BARRACKS, 12], [B.TIMBER_CAMP, 16], [B.CLAY_PIT, 16], [B.IRON_MINE, 18]],
+            [[B.HEADQUARTER, 20], [B.WAREHOUSE, 22], [B.FARM, 25], [B.BARRACKS, 20]],
+            [[B.ACADEMY, 1], [B.RALLY_POINT, 5], [B.MARKET, 10], [B.WALL, 10]],
+            [[B.WAREHOUSE, 30], [B.FARM, 30], [B.BARRACKS, 25], [B.TIMBER_CAMP, 24], [B.CLAY_PIT, 24], [B.IRON_MINE, 26]],
+            [[B.HEADQUARTER, 25], [B.HOSPITAL, 5]]
+        ],
+        Defensive: [
+            [[B.WAREHOUSE, 14], [B.FARM, 16], [B.WALL, 10], [B.BARRACKS, 10], [B.TIMBER_CAMP, 16], [B.CLAY_PIT, 16], [B.IRON_MINE, 16]],
+            [[B.HEADQUARTER, 15], [B.WAREHOUSE, 22], [B.FARM, 25], [B.WALL, 20], [B.BARRACKS, 20], [B.HOSPITAL, 5]],
+            [[B.WAREHOUSE, 30], [B.FARM, 30], [B.BARRACKS, 25], [B.TIMBER_CAMP, 24], [B.CLAY_PIT, 24], [B.IRON_MINE, 24]],
+            [[B.HEADQUARTER, 25], [B.HOSPITAL, 10], [B.MARKET, 15], [B.RALLY_POINT, 5]]
+        ],
+        Resource: [
+            [[B.WAREHOUSE, 15], [B.FARM, 12], [B.TIMBER_CAMP, 18], [B.CLAY_PIT, 18], [B.IRON_MINE, 18]],
+            [[B.HEADQUARTER, 15], [B.WAREHOUSE, 24], [B.FARM, 18], [B.TIMBER_CAMP, 24], [B.CLAY_PIT, 24], [B.IRON_MINE, 24], [B.MARKET, 10]],
+            [[B.WAREHOUSE, 30], [B.FARM, 25], [B.TIMBER_CAMP, 30], [B.CLAY_PIT, 30], [B.IRON_MINE, 30]],
+            [[B.HEADQUARTER, 20], [B.MARKET, 25], [B.WALL, 10], [B.BARRACKS, 5]]
+        ]
+    };
+    const compileTargets = function (phases) {
+        const levels = {};
+        const sequence = [];
+        for (const phase of phases) {
+            let pending = true;
+            while (pending) {
+                pending = false;
+                for (const [building, target] of phase) {
+                    if (building && (levels[building] || 0) < target) {
+                        sequence.push(building);
+                        levels[building] = (levels[building] || 0) + 1;
+                        pending = true;
+                    }
+                }
+            }
+        }
+        return sequence;
+    };
+    for (const role in roleTargets) {
+        defaultSequences[role] = compileTargets(foundation.concat(roleTargets[role]));
+    }
+
     return parseSequences(defaultSequences);
 });
 
@@ -9807,13 +10217,16 @@ define('two/builderQueue/ui', [
         });
     };
 
+    const previewVillage = () => $scope && $scope.profileVillage
+        ? modelDataService.getSelectedCharacter().getVillage($scope.profileVillage) : modelDataService.getSelectedVillage();
+
     const buildingLevelReached = function (building, level) {
-        const buildingData = modelDataService.getSelectedVillage().getBuildingData();
+        const buildingData = previewVillage().getBuildingData();
         return buildingData.getBuildingLevel(building) >= level;
     };
 
     const buildingLevelProgress = function (building, level) {
-        const queue = modelDataService.getSelectedVillage().getBuildingQueue().getQueue();
+        const queue = previewVillage().getBuildingQueue().getQueue();
         let progress = false;
 
         for (const job of queue) {
@@ -9879,6 +10292,31 @@ define('two/builderQueue/ui', [
         return false;
     };
 
+    const applyManualPolicy = function () {
+        if ($scope.profileVillage && builderQueue.preview($scope.profileVillage).sequenceSource === 'manual') {
+            $scope.settings[SETTINGS.MANUAL_OVERRIDE] = true;
+            $scope.settings[SETTINGS.AUTO_SEQUENCE] = false;
+        }
+        $scope.settings[SETTINGS.LABEL_MAPPINGS] = ($scope.settings[SETTINGS.LABEL_MAPPINGS] || []).map(mapping => ({
+            group_id: String(mapping.group_id), sequence: mapping.sequence
+        }));
+    };
+
+    settingsView.refreshPlanner = function () {
+        if (!$scope || !$scope.settings) {
+            return;
+        }
+        const village = previewVillage();
+        settingsView.plan = builderQueue.preview(village.getId(), settings.decode($scope.settings));
+        settingsView.plan.waitLabel = Number.isFinite(settingsView.plan.waitSeconds)
+            ? timeHelper.readableSeconds(Math.ceil(settingsView.plan.waitSeconds)) : 'Unknown / blocked';
+        settingsView.plan.delayLabel = Number.isFinite(settingsView.plan.extraDelaySeconds)
+            ? timeHelper.readableSeconds(Math.ceil(settingsView.plan.extraDelaySeconds)) : 'Required capacity repair';
+        const groups = groupList.getGroups();
+        const group = groups && Object.values(groups).find(item => String(item.id) === String(settingsView.plan.groupId));
+        settingsView.plan.groupName = group ? group.name : '';
+    };
+
     settingsView.generateSequences = function () {
         const sequences = settings.get(SETTINGS.BUILDING_SEQUENCES);
         const sequencesAvail = Object.keys(sequences).length;
@@ -9895,7 +10333,8 @@ define('two/builderQueue/ui', [
     };
 
     settingsView.generateBuildingSequence = function () {
-        const sequenceId = $scope.settings[SETTINGS.ACTIVE_SEQUENCE].value;
+        settingsView.refreshPlanner();
+        const sequenceId = settingsView.plan.sequence || $scope.settings[SETTINGS.ACTIVE_SEQUENCE].value;
         const buildingSequenceRaw = $scope.settings[SETTINGS.BUILDING_SEQUENCES][sequenceId];
         const buildingData = modelDataService.getGameData().getBuildings();
         const buildingLevels = {};
@@ -9933,7 +10372,7 @@ define('two/builderQueue/ui', [
     };
 
     settingsView.generateBuildingSequenceFinal = function (_sequenceId) {
-        const selectedSequence = $scope.settings[SETTINGS.ACTIVE_SEQUENCE].value;
+        const selectedSequence = settingsView.plan.sequence || $scope.settings[SETTINGS.ACTIVE_SEQUENCE].value;
         const sequenceBuildings = $scope.settings[SETTINGS.BUILDING_SEQUENCES][_sequenceId || selectedSequence];
         const sequenceObj = {};
         const sequence = [];
@@ -10353,7 +10792,9 @@ define('two/builderQueue/ui', [
 
     const saveSettings = function () {
         settings.setAll(settings.decode($scope.settings));
+        $scope.settings = settings.encode();
         unsavedChanges = false;
+        settingsView.generateSequences();
     };
 
     const switchBuilder = function () {
@@ -10397,10 +10838,15 @@ define('two/builderQueue/ui', [
 
     const eventHandlers = {
         updateGroups: function () {
+            $scope.labelGroups = Object.values(groupList.getGroups()).map(group => ({id: String(group.id), name: group.name}));
             $scope.groups = Settings.encodeList(groupList.getGroups(), {
                 type: 'groups',
                 disabled: true
             });
+        },
+        groupsChanged: function () {
+            eventHandlers.updateGroups();
+            settingsView.generateSequences();
         },
         updateSequences: function () {
             const sequences = settings.get(SETTINGS.BUILDING_SEQUENCES);
@@ -10490,16 +10936,35 @@ define('two/builderQueue/ui', [
             utils.notif('success', $filter('i18n')('stopped', $rootScope.loc.ale, 'builder_queue'));
         });
 
-        interfaceOverflow.addTemplate('twoverflow_builder_queue_window', `<div id=\"two-builder-queue\" class=\"win-content two-window\"><header class=\"win-head\"><h2>BuilderQueue</h2><ul class=\"list-btn\"><li><a href=\"#\" class=\"size-34x34 btn-red icon-26x26-close\" ng-click=\"closeWindow()\"></a></ul></header><div class=\"win-main small-select\" scrollbar=\"\"><div class=\"tabs tabs-bg\"><div class=\"tabs-three-col\"><div class=\"tab\" ng-click=\"selectTab(TAB_TYPES.SETTINGS)\" ng-class=\"{'tab-active': selectedTab == TAB_TYPES.SETTINGS}\"><div class=\"tab-inner\"><div ng-class=\"{'box-border-light': selectedTab === TAB_TYPES.SETTINGS}\"><a href=\"#\" ng-class=\"{'btn-icon btn-orange': selectedTab !== TAB_TYPES.SETTINGS}\">{{ TAB_TYPES.SETTINGS | i18n:loc.ale:'common' }}</a></div></div></div><div class=\"tab\" ng-click=\"selectTab(TAB_TYPES.SEQUENCES)\" ng-class=\"{'tab-active': selectedTab == TAB_TYPES.SEQUENCES}\"><div class=\"tab-inner\"><div ng-class=\"{'box-border-light': selectedTab === TAB_TYPES.SEQUENCES}\"><a href=\"#\" ng-class=\"{'btn-icon btn-orange': selectedTab !== TAB_TYPES.SEQUENCES}\">{{ TAB_TYPES.SEQUENCES | i18n:loc.ale:'builder_queue' }}</a></div></div></div><div class=\"tab\" ng-click=\"selectTab(TAB_TYPES.LOGS)\" ng-class=\"{'tab-active': selectedTab == TAB_TYPES.LOGS}\"><div class=\"tab-inner\"><div ng-class=\"{'box-border-light': selectedTab === TAB_TYPES.LOGS}\"><a href=\"#\" ng-class=\"{'btn-icon btn-orange': selectedTab !== TAB_TYPES.LOGS}\">{{ TAB_TYPES.LOGS | i18n:loc.ale:'common' }}</a></div></div></div></div></div><div class=\"box-paper footer\"><div class=\"scroll-wrap\"><div ng-show=\"selectedTab === TAB_TYPES.SETTINGS\"><h5 class=\"twx-section\">{{ 'settings' | i18n:loc.ale:'builder_queue' }}</h5><table class=\"settings tbl-border-light tbl-striped\"><col width=\"40%\"><col><col width=\"60px\"><tr><td><span class=\"ff-cell-fix\">{{ 'settings_village_groups' | i18n:loc.ale:'builder_queue' }}</span><td colspan=\"2\" class=\"text-right\"><div select=\"\" list=\"groups\" selected=\"settings[SETTINGS.GROUP_VILLAGES]\" drop-down=\"true\"></div><tr ng-show=\"settingsView.sequencesAvail\"><td><span class=\"ff-cell-fix\">{{ 'settings_building_sequence' | i18n:loc.ale:'builder_queue' }}</span><td colspan=\"2\" class=\"text-right\"><div select=\"\" list=\"sequences\" selected=\"settings[SETTINGS.ACTIVE_SEQUENCE]\" drop-down=\"true\"></div><tr><td><span class=\"ff-cell-fix\">{{ 'settings_preserve_wood' | i18n:loc.ale:'builder_queue' }}</span><td><div range-slider=\"\" min=\"settingsMap[SETTINGS.PRESERVE_WOOD].min\" max=\"settingsMap[SETTINGS.PRESERVE_WOOD].max\" value=\"settings[SETTINGS.PRESERVE_WOOD]\" enabled=\"true\"></div><td><input type=\"number\" class=\"preserve-resource textfield-border text-center\" ng-model=\"settings[SETTINGS.PRESERVE_WOOD]\"><tr><td><span class=\"ff-cell-fix\">{{ 'settings_preserve_clay' | i18n:loc.ale:'builder_queue' }}</span><td><div range-slider=\"\" min=\"settingsMap[SETTINGS.PRESERVE_CLAY].min\" max=\"settingsMap[SETTINGS.PRESERVE_CLAY].max\" value=\"settings[SETTINGS.PRESERVE_CLAY]\" enabled=\"true\"></div><td><input type=\"number\" class=\"preserve-resource textfield-border text-center\" ng-model=\"settings[SETTINGS.PRESERVE_CLAY]\"><tr><td><span class=\"ff-cell-fix\">{{ 'settings_preserve_iron' | i18n:loc.ale:'builder_queue' }}</span><td><div range-slider=\"\" min=\"settingsMap[SETTINGS.PRESERVE_IRON].min\" max=\"settingsMap[SETTINGS.PRESERVE_IRON].max\" value=\"settings[SETTINGS.PRESERVE_IRON]\" enabled=\"true\"></div><td><input type=\"number\" class=\"preserve-resource textfield-border text-center\" ng-model=\"settings[SETTINGS.PRESERVE_IRON]\"><tr><td colspan=\"2\"><span class=\"ff-cell-fix\">{{ 'settings_priorize_farm' | i18n:loc.ale:'builder_queue' }}</span><td class=\"text-center\"><div switch-slider=\"\" enabled=\"true\" border=\"true\" value=\"settings[SETTINGS.PRIORIZE_FARM]\" vertical=\"false\" size=\"'56x28'\"></div></table><h5 class=\"twx-section\">{{ 'settings_building_sequence' | i18n:loc.ale:'builder_queue' }}</h5><p ng-show=\"!settingsView.sequencesAvail\" class=\"text-center\"><a href=\"#\" class=\"btn-orange btn-border create-sequence\" ng-click=\"createSequence()\">{{ 'create_sequence' | i18n:loc.ale:'builder_queue' }}</a><div ng-if=\"settingsView.sequencesAvail && settingsView.visibleBuildingSequence.length\"><div class=\"page-wrap\" pagination=\"pagination.buildingSequence\"></div><table class=\"tbl-border-light header-center building-sequence\"><col width=\"5%\"><col><col width=\"7%\"><col width=\"13%\"><col width=\"8%\"><col width=\"9%\"><col width=\"9%\"><col width=\"9%\"><col width=\"6%\"><tr><th tooltip=\"\" tooltip-content=\"{{ 'position' | i18n:loc.ale:'builder_queue' }}\">#<th>{{ 'building' | i18n:loc.ale:'common' }}<th>{{ 'level' | i18n:loc.ale:'common' }}<th>{{ 'duration' | i18n:loc.ale:'common' }}<th>{{ 'points' | i18n:loc.ale:'common' }}<th><span class=\"icon-26x26-resource-wood\"></span><th><span class=\"icon-26x26-resource-clay\"></span><th><span class=\"icon-26x26-resource-iron\"></span><th><span class=\"icon-26x26-resource-food\"></span><tr ng-repeat=\"item in settingsView.visibleBuildingSequence track by $index\" class=\"{{ item.state }}\"><td>{{ pagination.buildingSequence.offset + $index + 1 }}<td><span class=\"building-icon icon-20x20-building-{{ item.building }}\"></span> {{ item.building | i18n:loc.ale:'building_names' }}<td>{{ item.level }}<td>{{ item.duration }}<td class=\"green\">+{{ item.levelPoints | number }}<td>{{ item.price.wood | number }}<td>{{ item.price.clay | number }}<td>{{ item.price.iron | number }}<td>{{ item.price.food | number }}</table><div class=\"page-wrap\" pagination=\"pagination.buildingSequence\"></div></div><h5 ng-if=\"settingsView.sequencesAvail && settingsView.visibleBuildingSequence.length\" class=\"twx-section\">{{ 'settings_building_sequence_final' | i18n:loc.ale:'builder_queue' }}</h5><table ng-if=\"settingsView.sequencesAvail && settingsView.visibleBuildingSequence.length\" class=\"tbl-border-light tbl-striped header-center building-sequence-final\"><col><col width=\"5%\"><col width=\"12%\"><col width=\"8%\"><col width=\"11%\"><col width=\"11%\"><col width=\"11%\"><col width=\"7%\"><tr><th>{{ 'building' | i18n:loc.ale:'common' }}<th>{{ 'level' | i18n:loc.ale:'common' }}<th>{{ 'duration' | i18n:loc.ale:'common' }}<th>{{ 'points' | i18n:loc.ale:'common' }}<th><span class=\"icon-26x26-resource-wood\"></span><th><span class=\"icon-26x26-resource-clay\"></span><th><span class=\"icon-26x26-resource-iron\"></span><th><span class=\"icon-26x26-resource-food\"></span><tr ng-repeat=\"item in settingsView.buildingSequenceFinal | orderBy:'order'\"><td><span class=\"building-icon icon-20x20-building-{{ item.building }}\"></span> {{ item.building | i18n:loc.ale:'building_names' }}<td>{{ item.level }}<td>{{ item.build_time | readableSecondsFilter }}<td class=\"green\">+{{ item.points | number }}<td>{{ item.resources.wood | number }}<td>{{ item.resources.clay | number }}<td>{{ item.resources.iron | number }}<td>{{ item.resources.food | number }}</table><p ng-show=\"settingsView.sequencesAvail && !settingsView.visibleBuildingSequence.length\" class=\"text-center\">{{ 'empty_sequence' | i18n:loc.ale:'builder_queue' }}</div><div ng-show=\"selectedTab === TAB_TYPES.SEQUENCES\"><h5 class=\"twx-section\">{{ 'sequences_edit_sequence' | i18n:loc.ale:'builder_queue' }}</h5><p ng-show=\"!editorView.sequencesAvail\" class=\"text-center\"><a class=\"btn btn-orange create-sequence\" ng-click=\"createSequence()\">{{ 'create_sequence' | i18n:loc.ale:'builder_queue' }}</a><table ng-if=\"editorView.sequencesAvail\" class=\"tbl-border-light tbl-striped editor-select-sequence\"><tr><td colspan=\"2\"><span class=\"ff-cell-fix\">{{ 'sequences_select_edit' | i18n:loc.ale:'builder_queue' }}</span><td><div class=\"select-sequence-editor\" select=\"\" list=\"sequences\" selected=\"editorView.selectedSequence\" drop-down=\"true\"></div><tr><td class=\"text-center\"><a class=\"btn btn-orange create-sequence\" ng-click=\"createSequence()\">{{ 'create_sequence' | i18n:loc.ale:'builder_queue' }}</a><td class=\"text-center\"><a class=\"btn btn-orange clone-sequence\" ng-click=\"editorView.modal.nameSequence()\">{{ 'clone_sequence' | i18n:loc.ale:'builder_queue' }}</a><td class=\"text-center\"><a class=\"btn btn-red remove-sequence\" ng-click=\"editorView.modal.removeSequence()\">{{ 'remove_sequence' | i18n:loc.ale:'builder_queue' }}</a></table><div ng-if=\"editorView.sequencesAvail\"><div class=\"page-wrap\" pagination=\"pagination.buildingSequenceEditor\"></div><table ng-show=\"editorView.visibleBuildingSequence.length\" class=\"tbl-border-light tbl-striped header-center building-sequence-editor\"><col width=\"5%\"><col width=\"5%\"><col><col width=\"7%\"><col width=\"10%\"><tr><th><th tooltip=\"\" tooltip-content=\"{{ 'position' | i18n:loc.ale:'builder_queue' }}\">#<th>{{ 'building' | i18n:loc.ale:'common' }}<th>{{ 'level' | i18n:loc.ale:'common' }}<th>{{ 'actions' | i18n:loc.ale:'common' }}<tr ng-repeat=\"item in editorView.visibleBuildingSequence track by $index\" ng-class=\"{'selected': item.checked}\"><td><label class=\"size-26x26 btn-orange icon-26x26-checkbox\" ng-class=\"{'icon-26x26-checkbox-checked': item.checked}\"><input type=\"checkbox\" ng-model=\"item.checked\"></label><td>{{ pagination.buildingSequenceEditor.offset + $index + 1 }}<td><span class=\"building-icon icon-20x20-building-{{ item.building }}\"></span> {{ item.building | i18n:loc.ale:'building_names' }}<td>{{ item.level }}<td><a href=\"#\" class=\"size-20x20 btn-red icon-20x20-close\" ng-click=\"editorView.removeBuilding(pagination.buildingSequenceEditor.offset + $index)\" tooltip=\"\" tooltip-content=\"{{ 'remove_building' | i18n:loc.ale:'builder_queue' }}\"></a></table><div class=\"page-wrap\" pagination=\"pagination.buildingSequenceEditor\"></div><p ng-show=\"!editorView.visibleBuildingSequence.length\" class=\"text-center\"><a class=\"btn btn-border btn-orange\" ng-click=\"editorView.modal.addBuilding()\">{{ 'sequences_add_building' | i18n:loc.ale:'builder_queue' }}</a></div></div><div ng-show=\"selectedTab === TAB_TYPES.LOGS\" class=\"rich-text\"><div class=\"page-wrap\" pagination=\"pagination.logs\"></div><p class=\"text-center\" ng-show=\"!logsView.logs.length\">{{ 'logs_no_builds' | i18n:loc.ale:'builder_queue' }}<table class=\"tbl-border-light tbl-striped header-center logs\" ng-show=\"logsView.logs.length\"><col width=\"40%\"><col width=\"30%\"><col width=\"5%\"><col width=\"25%\"><col><thead><tr><th>{{ 'village' | i18n:loc.ale:'common' }}<th>{{ 'building' | i18n:loc.ale:'common' }}<th>{{ 'level' | i18n:loc.ale:'common' }}<th>{{ 'started_at' | i18n:loc.ale:'common' }}<tbody><tr ng-repeat=\"log in logsView.logs\"><td><a class=\"link\" ng-click=\"openVillageInfo(log.villageId)\"><span class=\"icon-20x20-village\"></span> {{ villagesLabel[log.villageId] }}</a><td><span class=\"building-icon icon-20x20-building-{{ log.building }}\"></span> {{ log.building | i18n:loc.ale:'building_names' }}<td>{{ log.level }}<td>{{ log.time | readableDateFilter:loc.ale:GAME_TIMEZONE:GAME_TIME_OFFSET }}</table><div class=\"page-wrap\" pagination=\"pagination.logs\"></div></div></div></div></div><footer class=\"win-foot\"><ul class=\"list-btn list-center\"><li ng-show=\"selectedTab === TAB_TYPES.SETTINGS && settingsView.sequencesAvail\"><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"saveSettings()\">{{ 'save' | i18n:loc.ale:'common' }}</a><li ng-show=\"selectedTab === TAB_TYPES.SETTINGS && settingsView.sequencesAvail\"><a href=\"#\" ng-class=\"{false:'btn-orange', true:'btn-red'}[running]\" class=\"btn-border\" ng-click=\"switchBuilder()\"><span ng-show=\"running\">{{ 'pause' | i18n:loc.ale:'common' }}</span> <span ng-show=\"!running\">{{ 'start' | i18n:loc.ale:'common' }}</span></a><li ng-show=\"selectedTab === TAB_TYPES.LOGS\"><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"logsView.clearLogs()\">{{ 'logs_clear' | i18n:loc.ale:'builder_queue' }}</a><li ng-show=\"selectedTab === TAB_TYPES.SEQUENCES && editorView.sequencesAvail\"><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"editorView.moveUp()\">{{ 'sequences_move_up' | i18n:loc.ale:'builder_queue' }}</a><li ng-show=\"selectedTab === TAB_TYPES.SEQUENCES && editorView.sequencesAvail\"><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"editorView.moveDown()\">{{ 'sequences_move_down' | i18n:loc.ale:'builder_queue' }}</a><li ng-show=\"selectedTab === TAB_TYPES.SEQUENCES && editorView.sequencesAvail\"><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"editorView.modal.addBuilding()\">{{ 'sequences_add_building' | i18n:loc.ale:'builder_queue' }}</a><li ng-show=\"selectedTab === TAB_TYPES.SEQUENCES && editorView.sequencesAvail\"><a href=\"#\" class=\"btn-border btn-red\" ng-click=\"editorView.updateBuildingSequence()\">{{ 'save' | i18n:loc.ale:'common' }}</a></ul></footer></div>`);
+        interfaceOverflow.addTemplate('twoverflow_builder_queue_window', `<div id=\"two-builder-queue\" class=\"win-content two-window\"><header class=\"win-head\"><h2>BuilderQueue</h2><ul class=\"list-btn\"><li><a href=\"#\" class=\"size-34x34 btn-red icon-26x26-close\" ng-click=\"closeWindow()\"></a></ul></header><div class=\"win-main small-select\" scrollbar=\"\"><div class=\"tabs tabs-bg\"><div class=\"tabs-three-col\"><div class=\"tab\" ng-click=\"selectTab(TAB_TYPES.SETTINGS)\" ng-class=\"{'tab-active': selectedTab == TAB_TYPES.SETTINGS}\"><div class=\"tab-inner\"><div ng-class=\"{'box-border-light': selectedTab === TAB_TYPES.SETTINGS}\"><a href=\"#\" ng-class=\"{'btn-icon btn-orange': selectedTab !== TAB_TYPES.SETTINGS}\">{{ TAB_TYPES.SETTINGS | i18n:loc.ale:'common' }}</a></div></div></div><div class=\"tab\" ng-click=\"selectTab(TAB_TYPES.SEQUENCES)\" ng-class=\"{'tab-active': selectedTab == TAB_TYPES.SEQUENCES}\"><div class=\"tab-inner\"><div ng-class=\"{'box-border-light': selectedTab === TAB_TYPES.SEQUENCES}\"><a href=\"#\" ng-class=\"{'btn-icon btn-orange': selectedTab !== TAB_TYPES.SEQUENCES}\">{{ TAB_TYPES.SEQUENCES | i18n:loc.ale:'builder_queue' }}</a></div></div></div><div class=\"tab\" ng-click=\"selectTab(TAB_TYPES.LOGS)\" ng-class=\"{'tab-active': selectedTab == TAB_TYPES.LOGS}\"><div class=\"tab-inner\"><div ng-class=\"{'box-border-light': selectedTab === TAB_TYPES.LOGS}\"><a href=\"#\" ng-class=\"{'btn-icon btn-orange': selectedTab !== TAB_TYPES.LOGS}\">{{ TAB_TYPES.LOGS | i18n:loc.ale:'common' }}</a></div></div></div></div></div><div class=\"box-paper footer\"><div class=\"scroll-wrap\"><div ng-show=\"selectedTab === TAB_TYPES.SETTINGS\"><h5 class=\"twx-section\">{{ 'settings' | i18n:loc.ale:'builder_queue' }}</h5><label>Configure <select class=\"textfield-border\" ng-model=\"profileVillage\" ng-options=\"village.value as village.name for village in profileVillages\" ng-change=\"selectVillage()\"></select></label> <a href=\"#\" class=\"btn-border btn-orange\" ng-show=\"profileVillage\" ng-click=\"useDefaults()\">Use shared defaults for this village</a><p>Save before switching villages. Villages without a saved profile use shared defaults. Group filter and sequence library are shared.<table class=\"settings tbl-border-light tbl-striped\"><col width=\"40%\"><col><col width=\"60px\"><tr><td colspan=\"2\">Build in this village<td class=\"text-center\"><div switch-slider=\"\" enabled=\"true\" border=\"true\" value=\"settings[SETTINGS.ENABLED]\" vertical=\"false\" size=\"'56x28'\"></div><tr><td><span class=\"ff-cell-fix\">{{ 'settings_village_groups' | i18n:loc.ale:'builder_queue' }}</span><td colspan=\"2\" class=\"text-right\"><div select=\"\" list=\"groups\" selected=\"settings[SETTINGS.GROUP_VILLAGES]\" drop-down=\"true\"></div><tr><td colspan=\"2\">Follow village role label<td class=\"text-center\"><input type=\"checkbox\" ng-model=\"settings[SETTINGS.AUTO_SEQUENCE]\" ng-change=\"followVillageLabels()\"><tr ng-show=\"settingsView.sequencesAvail\"><td><span class=\"ff-cell-fix\">{{ 'settings_building_sequence' | i18n:loc.ale:'builder_queue' }}</span><td colspan=\"2\" class=\"text-right\"><div select=\"\" list=\"sequences\" selected=\"settings[SETTINGS.ACTIVE_SEQUENCE]\" drop-down=\"true\"></div><tr><td><span class=\"ff-cell-fix\">{{ 'settings_preserve_wood' | i18n:loc.ale:'builder_queue' }}</span><td><div range-slider=\"\" min=\"settingsMap[SETTINGS.PRESERVE_WOOD].min\" max=\"settingsMap[SETTINGS.PRESERVE_WOOD].max\" value=\"settings[SETTINGS.PRESERVE_WOOD]\" enabled=\"true\"></div><td><input type=\"number\" class=\"preserve-resource textfield-border text-center\" ng-model=\"settings[SETTINGS.PRESERVE_WOOD]\"><tr><td><span class=\"ff-cell-fix\">{{ 'settings_preserve_clay' | i18n:loc.ale:'builder_queue' }}</span><td><div range-slider=\"\" min=\"settingsMap[SETTINGS.PRESERVE_CLAY].min\" max=\"settingsMap[SETTINGS.PRESERVE_CLAY].max\" value=\"settings[SETTINGS.PRESERVE_CLAY]\" enabled=\"true\"></div><td><input type=\"number\" class=\"preserve-resource textfield-border text-center\" ng-model=\"settings[SETTINGS.PRESERVE_CLAY]\"><tr><td><span class=\"ff-cell-fix\">{{ 'settings_preserve_iron' | i18n:loc.ale:'builder_queue' }}</span><td><div range-slider=\"\" min=\"settingsMap[SETTINGS.PRESERVE_IRON].min\" max=\"settingsMap[SETTINGS.PRESERVE_IRON].max\" value=\"settings[SETTINGS.PRESERVE_IRON]\" enabled=\"true\"></div><td><input type=\"number\" class=\"preserve-resource textfield-border text-center\" ng-model=\"settings[SETTINGS.PRESERVE_IRON]\"><tr><td colspan=\"2\"><span class=\"ff-cell-fix\">{{ 'settings_priorize_farm' | i18n:loc.ale:'builder_queue' }}</span><td class=\"text-center\"><div switch-slider=\"\" enabled=\"true\" border=\"true\" value=\"settings[SETTINGS.PRIORIZE_FARM]\" vertical=\"false\" size=\"'56x28'\"></div><tr><td colspan=\"2\">Use dynamic building priorities<td class=\"text-center\"><input type=\"checkbox\" ng-model=\"settings[SETTINGS.DYNAMIC]\"><tr ng-show=\"settings[SETTINGS.DYNAMIC]\"><td colspan=\"2\">Prioritize warehouse capacity<td class=\"text-center\"><input type=\"checkbox\" ng-model=\"settings[SETTINGS.PRIORIZE_WAREHOUSE]\"><tr ng-show=\"settings[SETTINGS.DYNAMIC]\"><td colspan=\"2\">Try another upgrade after waiting (minutes)<td><input type=\"number\" min=\"1\" max=\"1440\" class=\"textfield-border\" ng-model=\"settings[SETTINGS.WAIT_MINUTES]\"><tr ng-show=\"settings[SETTINGS.DYNAMIC]\"><td colspan=\"2\">Maximum extra delay to sequence step (minutes)<td><input type=\"number\" min=\"0\" max=\"1440\" class=\"textfield-border\" ng-model=\"settings[SETTINGS.MAX_DELAY_MINUTES]\"><tr ng-show=\"settings[SETTINGS.DYNAMIC]\"><td colspan=\"2\">Upgrade warehouse when any resource reaches (%)<td><input type=\"number\" min=\"50\" max=\"100\" class=\"textfield-border\" ng-model=\"settings[SETTINGS.WAREHOUSE_PERCENT]\"><tr ng-show=\"settings[SETTINGS.DYNAMIC]\"><td colspan=\"2\">Keep free population above<td><input type=\"number\" min=\"0\" max=\"10000\" class=\"textfield-border\" ng-model=\"settings[SETTINGS.MINIMUM_FOOD]\"><tr ng-show=\"settings[SETTINGS.DYNAMIC]\"><td colspan=\"2\">Maximum resource-building level for detours<td><input type=\"number\" min=\"0\" max=\"30\" class=\"textfield-border\" ng-model=\"settings[SETTINGS.RESOURCE_LEVEL_LIMIT]\"><tr ng-show=\"settings[SETTINGS.DYNAMIC]\"><td colspan=\"2\">Resource detours per blocked sequence step<td><input type=\"number\" min=\"0\" max=\"10\" class=\"textfield-border\" ng-model=\"settings[SETTINGS.RESOURCE_DETOUR_LIMIT]\"></table><p>Dynamic upgrades stay within sequence targets. Necessary farm or storage repairs may exceed the delay limit. Other detours require known production and queue timing; resource upgrades never assume an unconfirmed production gain.<h5 class=\"twx-section\">Village role labels</h5><p>Offensive, Defensive and Resource labels select their matching presets. When labels overlap, the first matching mapping below wins; otherwise Offensive, Defensive, then Resource. Choosing a sequence manually turns label selection off for this village.<table class=\"tbl-border-light tbl-striped\"><tr ng-repeat=\"mapping in settings[SETTINGS.LABEL_MAPPINGS] track by $index\"><td><select class=\"textfield-border\" ng-model=\"mapping.group_id\" ng-options=\"group.id as group.name for group in labelGroups\"></select><td><select class=\"textfield-border\" ng-model=\"mapping.sequence\" ng-options=\"sequence.value as sequence.name for sequence in sequences\"></select><td><a href=\"#\" ng-click=\"moveLabelMapping($index, -1)\">Up</a> <a href=\"#\" ng-click=\"moveLabelMapping($index, 1)\">Down</a> <a href=\"#\" ng-click=\"settings[SETTINGS.LABEL_MAPPINGS].splice($index, 1)\">Remove</a></table><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"addLabelMapping()\">Add shared label mapping</a> <a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"chooseManualSequence()\">Use selected sequence manually</a><h5 class=\"twx-section\">Next upgrade preview</h5><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"settingsView.generateSequences()\">Refresh preview</a><p>Effective sequence: <strong>{{ settingsView.plan.sequence }}</strong> ({{ settingsView.plan.sequenceSource }}<span ng-if=\"settingsView.plan.groupName\">: {{ settingsView.plan.groupName }}</span>).<p ng-if=\"settingsView.plan.building\"><span class=\"building-icon icon-20x20-building-{{ settingsView.plan.building }}\"></span> {{ settingsView.plan.building | i18n:loc.ale:'building_names' }}<span ng-if=\"settingsView.plan.detour\"> — brought forward from this sequence</span>.<p>{{ settingsView.plan.reason }}<p ng-if=\"settingsView.plan.main\">Sequence step: {{ settingsView.plan.main | i18n:loc.ale:'building_names' }} {{ settingsView.plan.mainLevel }}. Estimated resource wait: {{ settingsView.plan.waitLabel }}.<span ng-if=\"settingsView.plan.detour\"> Extra delay: {{ settingsView.plan.delayLabel }}.</span><p>Preview uses these draft settings and the current village data. Save to apply the configuration.<h5 class=\"twx-section\">{{ 'settings_building_sequence' | i18n:loc.ale:'builder_queue' }}</h5><p ng-show=\"!settingsView.sequencesAvail\" class=\"text-center\"><a href=\"#\" class=\"btn-orange btn-border create-sequence\" ng-click=\"createSequence()\">{{ 'create_sequence' | i18n:loc.ale:'builder_queue' }}</a><div ng-if=\"settingsView.sequencesAvail && settingsView.visibleBuildingSequence.length\"><div class=\"page-wrap\" pagination=\"pagination.buildingSequence\"></div><table class=\"tbl-border-light header-center building-sequence\"><col width=\"5%\"><col><col width=\"7%\"><col width=\"13%\"><col width=\"8%\"><col width=\"9%\"><col width=\"9%\"><col width=\"9%\"><col width=\"6%\"><tr><th tooltip=\"\" tooltip-content=\"{{ 'position' | i18n:loc.ale:'builder_queue' }}\">#<th>{{ 'building' | i18n:loc.ale:'common' }}<th>{{ 'level' | i18n:loc.ale:'common' }}<th>{{ 'duration' | i18n:loc.ale:'common' }}<th>{{ 'points' | i18n:loc.ale:'common' }}<th><span class=\"icon-26x26-resource-wood\"></span><th><span class=\"icon-26x26-resource-clay\"></span><th><span class=\"icon-26x26-resource-iron\"></span><th><span class=\"icon-26x26-resource-food\"></span><tr ng-repeat=\"item in settingsView.visibleBuildingSequence track by $index\" class=\"{{ item.state }}\"><td>{{ pagination.buildingSequence.offset + $index + 1 }}<td><span class=\"building-icon icon-20x20-building-{{ item.building }}\"></span> {{ item.building | i18n:loc.ale:'building_names' }}<td>{{ item.level }}<td>{{ item.duration }}<td class=\"green\">+{{ item.levelPoints | number }}<td>{{ item.price.wood | number }}<td>{{ item.price.clay | number }}<td>{{ item.price.iron | number }}<td>{{ item.price.food | number }}</table><div class=\"page-wrap\" pagination=\"pagination.buildingSequence\"></div></div><h5 ng-if=\"settingsView.sequencesAvail && settingsView.visibleBuildingSequence.length\" class=\"twx-section\">{{ 'settings_building_sequence_final' | i18n:loc.ale:'builder_queue' }}</h5><table ng-if=\"settingsView.sequencesAvail && settingsView.visibleBuildingSequence.length\" class=\"tbl-border-light tbl-striped header-center building-sequence-final\"><col><col width=\"5%\"><col width=\"12%\"><col width=\"8%\"><col width=\"11%\"><col width=\"11%\"><col width=\"11%\"><col width=\"7%\"><tr><th>{{ 'building' | i18n:loc.ale:'common' }}<th>{{ 'level' | i18n:loc.ale:'common' }}<th>{{ 'duration' | i18n:loc.ale:'common' }}<th>{{ 'points' | i18n:loc.ale:'common' }}<th><span class=\"icon-26x26-resource-wood\"></span><th><span class=\"icon-26x26-resource-clay\"></span><th><span class=\"icon-26x26-resource-iron\"></span><th><span class=\"icon-26x26-resource-food\"></span><tr ng-repeat=\"item in settingsView.buildingSequenceFinal | orderBy:'order'\"><td><span class=\"building-icon icon-20x20-building-{{ item.building }}\"></span> {{ item.building | i18n:loc.ale:'building_names' }}<td>{{ item.level }}<td>{{ item.build_time | readableSecondsFilter }}<td class=\"green\">+{{ item.points | number }}<td>{{ item.resources.wood | number }}<td>{{ item.resources.clay | number }}<td>{{ item.resources.iron | number }}<td>{{ item.resources.food | number }}</table><p ng-show=\"settingsView.sequencesAvail && !settingsView.visibleBuildingSequence.length\" class=\"text-center\">{{ 'empty_sequence' | i18n:loc.ale:'builder_queue' }}</div><div ng-show=\"selectedTab === TAB_TYPES.SEQUENCES\"><h5 class=\"twx-section\">{{ 'sequences_edit_sequence' | i18n:loc.ale:'builder_queue' }}</h5><p ng-show=\"!editorView.sequencesAvail\" class=\"text-center\"><a class=\"btn btn-orange create-sequence\" ng-click=\"createSequence()\">{{ 'create_sequence' | i18n:loc.ale:'builder_queue' }}</a><table ng-if=\"editorView.sequencesAvail\" class=\"tbl-border-light tbl-striped editor-select-sequence\"><tr><td colspan=\"2\"><span class=\"ff-cell-fix\">{{ 'sequences_select_edit' | i18n:loc.ale:'builder_queue' }}</span><td><div class=\"select-sequence-editor\" select=\"\" list=\"sequences\" selected=\"editorView.selectedSequence\" drop-down=\"true\"></div><tr><td class=\"text-center\"><a class=\"btn btn-orange create-sequence\" ng-click=\"createSequence()\">{{ 'create_sequence' | i18n:loc.ale:'builder_queue' }}</a><td class=\"text-center\"><a class=\"btn btn-orange clone-sequence\" ng-click=\"editorView.modal.nameSequence()\">{{ 'clone_sequence' | i18n:loc.ale:'builder_queue' }}</a><td class=\"text-center\"><a class=\"btn btn-red remove-sequence\" ng-click=\"editorView.modal.removeSequence()\">{{ 'remove_sequence' | i18n:loc.ale:'builder_queue' }}</a></table><div ng-if=\"editorView.sequencesAvail\"><div class=\"page-wrap\" pagination=\"pagination.buildingSequenceEditor\"></div><table ng-show=\"editorView.visibleBuildingSequence.length\" class=\"tbl-border-light tbl-striped header-center building-sequence-editor\"><col width=\"5%\"><col width=\"5%\"><col><col width=\"7%\"><col width=\"10%\"><tr><th><th tooltip=\"\" tooltip-content=\"{{ 'position' | i18n:loc.ale:'builder_queue' }}\">#<th>{{ 'building' | i18n:loc.ale:'common' }}<th>{{ 'level' | i18n:loc.ale:'common' }}<th>{{ 'actions' | i18n:loc.ale:'common' }}<tr ng-repeat=\"item in editorView.visibleBuildingSequence track by $index\" ng-class=\"{'selected': item.checked}\"><td><label class=\"size-26x26 btn-orange icon-26x26-checkbox\" ng-class=\"{'icon-26x26-checkbox-checked': item.checked}\"><input type=\"checkbox\" ng-model=\"item.checked\"></label><td>{{ pagination.buildingSequenceEditor.offset + $index + 1 }}<td><span class=\"building-icon icon-20x20-building-{{ item.building }}\"></span> {{ item.building | i18n:loc.ale:'building_names' }}<td>{{ item.level }}<td><a href=\"#\" class=\"size-20x20 btn-red icon-20x20-close\" ng-click=\"editorView.removeBuilding(pagination.buildingSequenceEditor.offset + $index)\" tooltip=\"\" tooltip-content=\"{{ 'remove_building' | i18n:loc.ale:'builder_queue' }}\"></a></table><div class=\"page-wrap\" pagination=\"pagination.buildingSequenceEditor\"></div><p ng-show=\"!editorView.visibleBuildingSequence.length\" class=\"text-center\"><a class=\"btn btn-border btn-orange\" ng-click=\"editorView.modal.addBuilding()\">{{ 'sequences_add_building' | i18n:loc.ale:'builder_queue' }}</a></div></div><div ng-show=\"selectedTab === TAB_TYPES.LOGS\" class=\"rich-text\"><div class=\"page-wrap\" pagination=\"pagination.logs\"></div><p class=\"text-center\" ng-show=\"!logsView.logs.length\">{{ 'logs_no_builds' | i18n:loc.ale:'builder_queue' }}<table class=\"tbl-border-light tbl-striped header-center logs\" ng-show=\"logsView.logs.length\"><col width=\"40%\"><col width=\"30%\"><col width=\"5%\"><col width=\"25%\"><col><thead><tr><th>{{ 'village' | i18n:loc.ale:'common' }}<th>{{ 'building' | i18n:loc.ale:'common' }}<th>{{ 'level' | i18n:loc.ale:'common' }}<th>{{ 'started_at' | i18n:loc.ale:'common' }}<tbody><tr ng-repeat=\"log in logsView.logs track by $index\"><td><a class=\"link\" ng-click=\"openVillageInfo(log.villageId)\"><span class=\"icon-20x20-village\"></span> {{ villagesLabel[log.villageId] }}</a><td><span class=\"building-icon icon-20x20-building-{{ log.building }}\"></span> {{ log.building | i18n:loc.ale:'building_names' }}<br><small>{{ log.reason }}</small><td>{{ log.level }}<td>{{ log.time | readableDateFilter:loc.ale:GAME_TIMEZONE:GAME_TIME_OFFSET }}</table><div class=\"page-wrap\" pagination=\"pagination.logs\"></div></div></div></div></div><footer class=\"win-foot\"><ul class=\"list-btn list-center\"><li ng-show=\"selectedTab === TAB_TYPES.SETTINGS && settingsView.sequencesAvail\"><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"saveSettings()\">{{ 'save' | i18n:loc.ale:'common' }}</a><li ng-show=\"selectedTab === TAB_TYPES.SETTINGS && settingsView.sequencesAvail\"><a href=\"#\" ng-class=\"{false:'btn-orange', true:'btn-red'}[running]\" class=\"btn-border\" ng-click=\"switchBuilder()\"><span ng-show=\"running\">{{ 'pause' | i18n:loc.ale:'common' }}</span> <span ng-show=\"!running\">{{ 'start' | i18n:loc.ale:'common' }}</span></a><li ng-show=\"selectedTab === TAB_TYPES.LOGS\"><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"logsView.clearLogs()\">{{ 'logs_clear' | i18n:loc.ale:'builder_queue' }}</a><li ng-show=\"selectedTab === TAB_TYPES.SEQUENCES && editorView.sequencesAvail\"><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"editorView.moveUp()\">{{ 'sequences_move_up' | i18n:loc.ale:'builder_queue' }}</a><li ng-show=\"selectedTab === TAB_TYPES.SEQUENCES && editorView.sequencesAvail\"><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"editorView.moveDown()\">{{ 'sequences_move_down' | i18n:loc.ale:'builder_queue' }}</a><li ng-show=\"selectedTab === TAB_TYPES.SEQUENCES && editorView.sequencesAvail\"><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"editorView.modal.addBuilding()\">{{ 'sequences_add_building' | i18n:loc.ale:'builder_queue' }}</a><li ng-show=\"selectedTab === TAB_TYPES.SEQUENCES && editorView.sequencesAvail\"><a href=\"#\" class=\"btn-border btn-red\" ng-click=\"editorView.updateBuildingSequence()\">{{ 'save' | i18n:loc.ale:'common' }}</a></ul></footer></div>`);
         interfaceOverflow.addTemplate('twoverflow_builder_queue_add_building_modal', `<div id=\"add-building-modal\" class=\"win-content\"><header class=\"win-head\"><h3>{{ 'title' | i18n:loc.ale:'builder_queue_add_building_modal' }}</h3><ul class=\"list-btn sprite\"><li><a href=\"#\" class=\"btn-red icon-26x26-close\" ng-click=\"closeWindow()\"></a></ul></header><div class=\"win-main\" scrollbar=\"\"><div class=\"box-paper\"><div class=\"scroll-wrap unit-operate-slider\"><table class=\"tbl-border-light tbl-striped header-center\"><col width=\"15%\"><col><col width=\"15%\"><tr><td>{{ 'building' | i18n:loc.ale:'common' }}<td colspan=\"2\"><div select=\"\" list=\"buildings\" selected=\"selectedBuilding\" drop-down=\"true\"></div><tr><td>{{ 'position' | i18n:loc.ale:'builder_queue' }}<td><div range-slider=\"\" min=\"1\" max=\"indexLimit\" value=\"position\" enabled=\"true\"></div><td><input type=\"number\" class=\"input-border text-center\" ng-model=\"position\"><tr><td>{{ 'amount' | i18n:loc.ale:'builder_queue' }}<td><div range-slider=\"\" min=\"1\" max=\"buildingsData[selectedBuilding.value].max_level\" value=\"amount\" enabled=\"true\"></div><td><input type=\"number\" class=\"input-border text-center\" ng-model=\"amount\"></table></div></div></div><footer class=\"win-foot sprite-fill\"><ul class=\"list-btn list-center\"><li><a href=\"#\" class=\"btn-red btn-border btn-premium\" ng-click=\"closeWindow()\">{{ 'cancel' | i18n:loc.ale:'common' }}</a><li><a href=\"#\" class=\"btn-orange btn-border\" ng-click=\"add()\">{{ 'add' | i18n:loc.ale:'common' }}</a></ul></footer></div>`);
         interfaceOverflow.addTemplate('twoverflow_builder_queue_name_sequence_modal', `<div id=\"name-sequence-modal\" class=\"win-content\"><header class=\"win-head\"><h3>{{ 'title' | i18n:loc.ale:'builder_queue_name_sequence_modal' }}</h3><ul class=\"list-btn sprite\"><li><a href=\"#\" class=\"btn-red icon-26x26-close\" ng-click=\"closeWindow()\"></a></ul></header><div class=\"win-main\" scrollbar=\"\"><div class=\"box-paper\"><div class=\"scroll-wrap\"><div class=\"box-border-light input-wrapper name_preset\"><form ng-submit=\"submit()\"><input focus=\"true\" ng-model=\"name\" minlength=\"3\"></form></div></div></div></div><footer class=\"win-foot sprite-fill\"><ul class=\"list-btn list-center\"><li><a href=\"#\" class=\"btn-red btn-border btn-premium\" ng-click=\"closeWindow()\">{{ 'cancel' | i18n:loc.ale:'common' }}</a><li><a href=\"#\" class=\"btn-orange btn-border\" ng-click=\"submit()\">{{ 'add' | i18n:loc.ale:'common' }}</a></ul></footer></div>`);
         interfaceOverflow.addStyle('#two-builder-queue tr.reached td{background-color:#b9af7e}#two-builder-queue tr.progress td{background-color:#af9d57}#two-builder-queue .building-sequence,#two-builder-queue .building-sequence-final,#two-builder-queue .building-sequence-editor,#two-builder-queue .logs{margin-bottom:10px}#two-builder-queue .building-sequence td,#two-builder-queue .building-sequence-final td,#two-builder-queue .building-sequence-editor td,#two-builder-queue .logs td,#two-builder-queue .building-sequence th,#two-builder-queue .building-sequence-final th,#two-builder-queue .building-sequence-editor th,#two-builder-queue .logs th{text-align:center;line-height:20px}#two-builder-queue .building-sequence-editor .selected td{background-color:#b9af7e}#two-builder-queue .editor-select-sequence{margin-bottom:13px}#two-builder-queue a.btn{height:28px;line-height:28px;padding:0 10px}#two-builder-queue .select-sequence-editor{text-align:center;margin-top:1px}#two-builder-queue .create-sequence{padding:8px 20px 8px 20px}#two-builder-queue table.settings td{padding:1px 5px}#two-builder-queue table.settings td.text-right{text-align:right}#two-builder-queue table.settings div[switch-slider]{display:inline-block;margin-top:2px}#two-builder-queue .small-select a.select-handler{height:28px;line-height:28px}#two-builder-queue .small-select a.select-button{height:28px}#two-builder-queue input.preserve-resource{width:70px;height:32px}#two-builder-queue .icon-26x26-resource-wood,#two-builder-queue .icon-26x26-resource-clay,#two-builder-queue .icon-26x26-resource-iron,#two-builder-queue .icon-26x26-resource-food{transform:scale(.8);top:-1px}#add-building-modal td{text-align:center}#add-building-modal .select-wrapper{width:250px}#add-building-modal input[type="text"]{width:60px}');
     };
 
     const buildWindow = function () {
+        const profileVillage = String(modelDataService.getSelectedVillage().getId());
+        settings = builderQueue.getSettings(profileVillage);
         const activeSequence = settings.get(SETTINGS.ACTIVE_SEQUENCE);
 
         $scope = $rootScope.$new();
+        $scope.profileVillage = profileVillage;
+        $scope.profileVillages = [{value: '', name: 'Shared defaults'}].concat(
+            Object.values(modelDataService.getSelectedCharacter().getVillages()).map(village => ({
+                value: String(village.getId()), name: typeof village.getName === 'function' ? village.getName() : 'Village ' + village.getId()
+            }))
+        );
+        $scope.selectVillage = function () {
+            settings = builderQueue.getSettings($scope.profileVillage);
+            $scope.settings = settings.encode();
+            applyManualPolicy();
+            eventHandlers.updateSequences();
+            settingsView.generateSequences();
+        };
+        $scope.useDefaults = function () {
+            settings.resetProfile();
+            $scope.selectVillage();
+        };
         $scope.selectedTab = TAB_TYPES.SETTINGS;
         $scope.TAB_TYPES = TAB_TYPES;
         $scope.SETTINGS = SETTINGS;
@@ -10533,6 +10998,31 @@ define('two/builderQueue/ui', [
         $scope.openVillageInfo = windowDisplayService.openVillageInfo;
 
         settings.injectScope($scope);
+        applyManualPolicy();
+        $scope.labelGroups = Object.values(groupList.getGroups()).map(group => ({id: String(group.id), name: group.name}));
+        $scope.addLabelMapping = function () {
+            const group = $scope.labelGroups[0];
+            const sequence = $scope.sequences[0];
+            if (group && sequence) {
+                $scope.settings[SETTINGS.LABEL_MAPPINGS].push({group_id: group.id, sequence: sequence.value});
+            }
+        };
+        $scope.moveLabelMapping = function (index, direction) {
+            const mappings = $scope.settings[SETTINGS.LABEL_MAPPINGS];
+            const target = index + direction;
+            if (target >= 0 && target < mappings.length) {
+                [mappings[index], mappings[target]] = [mappings[target], mappings[index]];
+            }
+        };
+        $scope.chooseManualSequence = function () {
+            $scope.settings[SETTINGS.AUTO_SEQUENCE] = false;
+            $scope.settings[SETTINGS.MANUAL_OVERRIDE] = true;
+            settingsView.generateSequences();
+        };
+        $scope.followVillageLabels = function () {
+            $scope.settings[SETTINGS.MANUAL_OVERRIDE] = !$scope.settings[SETTINGS.AUTO_SEQUENCE];
+            settingsView.generateSequences();
+        };
         eventHandlers.updateGroups();
         eventHandlers.updateSequences();
 
@@ -10563,9 +11053,11 @@ define('two/builderQueue/ui', [
         editorView.generateBuildingSequence();
 
         const eventScope = new EventScope('twoverflow_builder_queue_window');
-        eventScope.register(eventTypeProvider.GROUPS_UPDATED, eventHandlers.updateGroups, true);
-        eventScope.register(eventTypeProvider.GROUPS_CREATED, eventHandlers.updateGroups, true);
-        eventScope.register(eventTypeProvider.GROUPS_DESTROYED, eventHandlers.updateGroups, true);
+        eventScope.register(eventTypeProvider.GROUPS_UPDATED, eventHandlers.groupsChanged, true);
+        eventScope.register(eventTypeProvider.GROUPS_CREATED, eventHandlers.groupsChanged, true);
+        eventScope.register(eventTypeProvider.GROUPS_DESTROYED, eventHandlers.groupsChanged, true);
+        eventScope.register(eventTypeProvider.GROUPS_VILLAGE_LINKED, eventHandlers.generateBuildingSequences, true);
+        eventScope.register(eventTypeProvider.GROUPS_VILLAGE_UNLINKED, eventHandlers.generateBuildingSequences, true);
         eventScope.register(eventTypeProvider.VILLAGE_SELECTED_CHANGED, eventHandlers.generateBuildingSequences, true);
         eventScope.register(eventTypeProvider.BUILDING_UPGRADING, eventHandlers.generateBuildingSequences, true);
         eventScope.register(eventTypeProvider.BUILDING_LEVEL_CHANGED, eventHandlers.generateBuildingSequences, true);
@@ -10586,10 +11078,15 @@ define('two/builderQueue/ui', [
         $scope.closeWindow = confirmCloseWindow;
 
         $scope.$watch('settings[SETTINGS.ACTIVE_SEQUENCE].value', function (newValue, oldValue) {
-            if (newValue !== oldValue) {
+            if (newValue !== oldValue && newValue !== settings.get(SETTINGS.ACTIVE_SEQUENCE)) {
+                $scope.settings[SETTINGS.MANUAL_OVERRIDE] = true;
+                $scope.settings[SETTINGS.AUTO_SEQUENCE] = false;
                 eventHandlers.generateBuildingSequences();
             }
         });
+        $scope.$watch('settings', function () {
+            settingsView.refreshPlanner();
+        }, true);
 
         $scope.$watch('editorView.selectedSequence.value', function (newValue, oldValue) {
             if (ignoreInputChange) {
@@ -10616,15 +11113,94 @@ define('two/builderQueue/ui', [
     return init;
 });
 
+define('two/builderQueue/labelPolicy', [], function () {
+    // Matching multiple role labels uses this stable order. Explicit group mappings
+    // are checked first, in the order saved in Builder settings.
+    const roles = ['Offensive', 'Defensive', 'Resource'];
+    const owns = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
+    const hasSequence = (sequences, name) => sequences && owns(sequences, name) && Array.isArray(sequences[name]);
+    const normalizeName = name => typeof name === 'string' ? name.trim().toLowerCase() : '';
+
+    const resolve = function (config, villageId, groupList, sequences) {
+        config = config || {};
+        const fallback = {sequence: config.building_sequence, source: 'fallback', groupId: null};
+        if (config.manual_sequence_override === true || config.follow_village_labels === false) {
+            return {sequence: config.building_sequence, source: 'manual', groupId: null};
+        }
+        if (!groupList || typeof groupList.getGroups !== 'function' || typeof groupList.getGroupVillageIds !== 'function') {
+            return fallback;
+        }
+
+        let groups;
+        try {
+            groups = groupList.getGroups();
+        } catch (error) {
+            return fallback;
+        }
+        if (!groups || typeof groups !== 'object') {
+            return fallback;
+        }
+        const linked = Object.keys(groups).map(key => groups[key]).filter(group => {
+            if (!group || group.id === undefined || group.id === null) {
+                return false;
+            }
+            try {
+                const villages = groupList.getGroupVillageIds(group.id);
+                return Array.isArray(villages) && villages.some(id => String(id) === String(villageId));
+            } catch (error) {
+                return false;
+            }
+        });
+
+        const mappings = Array.isArray(config.label_sequence_mappings) ? config.label_sequence_mappings : [];
+        for (const mapping of mappings) {
+            if (!mapping || !hasSequence(sequences, mapping.sequence)) {
+                continue;
+            }
+            const group = linked.find(item => String(item.id) === String(mapping.group_id));
+            if (group) {
+                return {sequence: mapping.sequence, source: 'mapping', groupId: group.id};
+            }
+        }
+        for (const role of roles) {
+            if (!hasSequence(sequences, role)) {
+                continue;
+            }
+            const matching = linked.filter(group => normalizeName(group.name) === normalizeName(role));
+            // Duplicate role labels also resolve consistently across group-list order.
+            matching.sort((a, b) => String(a.id).localeCompare(String(b.id), 'en', {numeric: true}));
+            if (matching.length) {
+                return {sequence: role, source: 'label', groupId: matching[0].id};
+            }
+        }
+        return fallback;
+    };
+
+    return {resolve};
+});
+
 define('two/builderQueue/settings', [], function () {
     return {
         GROUP_VILLAGES: 'group_villages',
+        VILLAGE_PROFILES: 'village_profiles',
+        ENABLED: 'enabled',
         ACTIVE_SEQUENCE: 'building_sequence',
         BUILDING_SEQUENCES: 'building_orders',
         PRESERVE_WOOD: 'preserve_wood',
         PRESERVE_CLAY: 'preserve_clay',
         PRESERVE_IRON: 'preserve_iron',
-        PRIORIZE_FARM: 'priorize_farm'
+        PRIORIZE_FARM: 'priorize_farm',
+        AUTO_SEQUENCE: 'follow_village_labels',
+        MANUAL_OVERRIDE: 'manual_sequence_override',
+        LABEL_MAPPINGS: 'label_sequence_mappings',
+        DYNAMIC: 'dynamic_building',
+        PRIORIZE_WAREHOUSE: 'priorize_warehouse',
+        WAIT_MINUTES: 'dynamic_wait_minutes',
+        MAX_DELAY_MINUTES: 'dynamic_max_delay_minutes',
+        WAREHOUSE_PERCENT: 'dynamic_warehouse_percent',
+        MINIMUM_FOOD: 'dynamic_minimum_food',
+        RESOURCE_LEVEL_LIMIT: 'dynamic_resource_level_limit',
+        RESOURCE_DETOUR_LIMIT: 'dynamic_resource_detour_limit'
     };
 });
 
@@ -10644,6 +11220,19 @@ define('two/builderQueue/settings/map', [
     UPDATES
 ) {
     return {
+        [SETTINGS.AUTO_SEQUENCE]: {default: true, inputType: 'checkbox', updates: [UPDATES.ANALYSE]},
+        [SETTINGS.MANUAL_OVERRIDE]: {default: false, inputType: 'checkbox', updates: [UPDATES.ANALYSE]},
+        [SETTINGS.LABEL_MAPPINGS]: {default: [], inputType: 'profiles', updates: [UPDATES.ANALYSE]},
+        [SETTINGS.DYNAMIC]: {default: false, inputType: 'checkbox', updates: [UPDATES.ANALYSE]},
+        [SETTINGS.PRIORIZE_WAREHOUSE]: {default: true, inputType: 'checkbox', updates: [UPDATES.ANALYSE]},
+        [SETTINGS.WAIT_MINUTES]: {default: 30, inputType: 'number', updates: [UPDATES.ANALYSE], min: 1, max: 1440},
+        [SETTINGS.MAX_DELAY_MINUTES]: {default: 15, inputType: 'number', updates: [UPDATES.ANALYSE], min: 0, max: 1440},
+        [SETTINGS.WAREHOUSE_PERCENT]: {default: 90, inputType: 'number', updates: [UPDATES.ANALYSE], min: 50, max: 100},
+        [SETTINGS.MINIMUM_FOOD]: {default: 50, inputType: 'number', updates: [UPDATES.ANALYSE], min: 0, max: 10000},
+        [SETTINGS.RESOURCE_LEVEL_LIMIT]: {default: 15, inputType: 'number', updates: [UPDATES.ANALYSE], min: 0, max: 30},
+        [SETTINGS.RESOURCE_DETOUR_LIMIT]: {default: 2, inputType: 'number', updates: [UPDATES.ANALYSE], min: 0, max: 10},
+        [SETTINGS.VILLAGE_PROFILES]: {default: {}, inputType: 'profiles', updates: [UPDATES.ANALYSE]},
+        [SETTINGS.ENABLED]: {default: true, inputType: 'checkbox', updates: [UPDATES.ANALYSE]},
         [SETTINGS.GROUP_VILLAGES]: {
             default: false,
             inputType: 'select',
@@ -12008,7 +12597,7 @@ define('two/depositPlanner', [
     'Lockr',
     'queues/EventQueue'
 ], function (Settings, map, policy, adapter, Lockr, events) {
-    const KEYS = {pending: 'deposit_planner_pending', samples: 'deposit_planner_samples', cycle: 'deposit_planner_cycle', revision: 'deposit_planner_board_revision'};
+    const KEYS = {pending: 'deposit_planner_pending', samples: 'deposit_planner_samples', cycle: 'deposit_planner_cycle', revision: 'deposit_planner_board_revision', timing: 'deposit_planner_timing'};
     let initialized = false;
     let running = false;
     let settings;
@@ -12017,6 +12606,9 @@ define('two/depositPlanner', [
     let lastInfoAt = 0;
     let pending;
     let samples = [];
+    let timings = [];
+    let activeTiming;
+    let ownedStart;
     let cycle;
     let boardRevision = 0;
     let wake;
@@ -12064,12 +12656,34 @@ define('two/depositPlanner', [
         const startConfirmed = pending.action === 'start' && (idMatches(state.current) || state.collectible.some(idMatches));
         const collectionConfirmed = pending.action === 'collect' && !all.some(idMatches)
             && (pending.ack || state.cycleId === pending.cycleId && state.progress > pending.progress);
-        const rerollConfirmed = pending.action === 'reroll' && (pending.rerollAck || adapter.boardKey(state) !== pending.boardKey)
+        const runningPreserved = pending.runningJobId === undefined || state.collectible.concat(state.current || []).some(job => String(job.id) === String(pending.runningJobId)
+            && Number.isFinite(job.completedAt) && Math.abs(job.completedAt - pending.runningCompletedAt) <= 1)
+            || state.cycleId === pending.cycleId && state.progress > pending.progress;
+        const rerollConfirmed = pending.action === 'reroll' && runningPreserved && (pending.rerollAck || adapter.boardKey(state) !== pending.boardKey)
             && (pending.itemDebited || state.itemCount < pending.itemCount);
+        if (startConfirmed && pending === ownedStart && pending.context === state.context && running && !config.preview_only) {
+            const job = idMatches(state.current) ? state.current : state.collectible.find(idMatches);
+            const delay = job.completedAt - job.duration - pending.sentAt;
+            activeTiming = Number.isFinite(delay) && delay >= -1 && delay <= 30
+                ? {jobId: pending.jobId, context: state.context, cycleId: state.cycleId, startDelay: Math.max(0, delay), completedAt: job.completedAt} : null;
+        }
+        if (collectionConfirmed && activeTiming && String(activeTiming.jobId) === String(pending.jobId)) {
+            const delay = activeTiming.startDelay + state.now - activeTiming.completedAt;
+            if (running && !config.preview_only && activeTiming.context === state.context && activeTiming.cycleId === state.cycleId
+                && Number.isFinite(delay) && delay >= 0 && delay <= 300) {
+                timings.push({context: state.context, at: state.now, delay});
+                timings = timings.filter(entry => entry.at >= state.now - 30 * 86400).slice(-60);
+                Lockr.set(KEYS.timing, timings);
+            }
+            activeTiming = null;
+        }
         if (startConfirmed || collectionConfirmed || rerollConfirmed) {
             pending = null;
             storePending();
             return true;
+        }
+        if (running && pending.action === 'reroll' && !runningPreserved) {
+            planner.stop('Running errand changed during an item reroll; check the game before resolving the guard');
         }
         if (running && state.now - pending.sentAt >= 30) {
             planner.stop('Pending ' + pending.action + ' needs a game check; automatic retry blocked');
@@ -12125,26 +12739,31 @@ define('two/depositPlanner', [
                 }
             }
             reconcile(state);
+            const timing = policy.timingEstimate(timings, state, config);
+            const effectiveConfig = {...config, action_delay: timing.effectiveDelay};
             const key = JSON.stringify([state.jobs,
                 state.current,
                 state.collectible,
                 state.progress,
                 state.target,
+                state.milestones,
+                state.runningRerollAllowed,
                 state.errandsReset,
                 state.milestonesReset,
                 state.itemCount,
                 state.rerollsUsed,
                 state.context,
                 Math.floor(state.now),
-                config,
+                effectiveConfig,
                 samples.length]);
-            plan = policy.plan(state, config, samples, function () {
+            plan = policy.plan(state, effectiveConfig, samples, function () {
                 if (key !== forecastKey) {
-                    forecastCache = policy.forecast(state, config, samples);
+                    forecastCache = policy.forecast(state, effectiveConfig, samples);
                     forecastKey = key;
                 }
                 return forecastCache;
             });
+            plan.timing = timing;
             armWake(state);
             if (pending) {
                 plan = {...plan, action: 'pending', reason: 'Waiting for game confirmation of ' + pending.action};
@@ -12164,7 +12783,7 @@ define('two/depositPlanner', [
         let route;
         let payload;
         if (action === 'reroll') {
-            if (!config.auto_reroll || policy.budgetFor(state, config) < 1 || !state.itemId || state.current || state.collectible.length) {
+            if (!config.auto_reroll || policy.budgetFor(state, config) < 1 || !state.itemId || state.current && !policy.canRerollRunning(state, config) || state.collectible.length) {
                 return;
             }
             // The premium reroll route spends Crowns. Only use the inventory item.
@@ -12182,7 +12801,8 @@ define('two/depositPlanner', [
             return;
         }
         pending = {action, jobId: job && job.id, itemId: state.itemId, itemCount: state.itemCount,
-            boardKey: adapter.boardKey(state), progress: state.progress, cycleId: state.cycleId, sentAt: Date.now() / 1000};
+            boardKey: adapter.boardKey(state), progress: state.progress, cycleId: state.cycleId, context: state.context, runningJobId: action === 'reroll' && state.current ? state.current.id : undefined,
+            runningCompletedAt: action === 'reroll' && state.current ? state.current.completedAt : undefined, sentAt: Date.now() / 1000};
         // Reserve the item budget before emitting, including uncertain responses.
         if (action === 'reroll') {
             cycle.spent++;
@@ -12191,6 +12811,9 @@ define('two/depositPlanner', [
         storePending();
         status = 'Awaiting ' + action + ' confirmation';
         const entry = pending;
+        if (action === 'start') {
+            ownedStart = entry;
+        }
         socketService.emit(route, payload, reply => {
             if (pending !== entry) {
                 return;
@@ -12253,6 +12876,8 @@ define('two/depositPlanner', [
                 return;
             }
             initialized = true;
+            timings = Lockr.get(KEYS.timing, []);
+            timings = Array.isArray(timings) ? timings.filter(entry => entry && typeof entry.context === 'string') : [];
             pending = Lockr.get(KEYS.pending, null);
             samples = Lockr.get(KEYS.samples, []);
             if (!Array.isArray(samples)) {
@@ -12354,6 +12979,8 @@ define('two/depositPlanner', [
         },
         stop: function (reason) {
             running = false;
+            activeTiming = null;
+            ownedStart = null;
             generation++;
             clearInterval(poll);
             clearTimeout(deferred);
@@ -12430,13 +13057,20 @@ define('two/depositPlanner/adapter', ['helper/time', 'conf/effectTypes', 'conf/t
             tribe ? tribe.isSkillActive(skills.loot_bonus) : false,
             tribe ? tribe.isSkillActive(skills.raid_speed) : false]);
         const current = model.getCurrentJob();
+        let runningRerollAllowed = false;
+        try {
+            const depositService = injector.get('resourceDepositService');
+            runningRerollAllowed = typeof depositService.enableRerollButton === 'function' && depositService.enableRerollButton() !== false;
+        } catch (error) {
+            // Unknown game capability must not permit an early item spend.
+        }
         const state = {now: Date.now() / 1000, progress: cap - left, target: config.target || cap, cap, milestones, context,
             jobs: (model.getReadyJobs() || []).map(normalizedJob),
             collectible: (model.getCollectibleJobs() || []).map(normalizedJob),
             current: current ? normalizedJob(current) : null,
             errandsReset: time.server2ClientTime(Number(info.time_next_reset)) / 1000,
             milestonesReset: time.server2ClientTime(Number(info.time_new_milestones)) / 1000,
-            cycleId: Number(info.time_new_milestones), itemCount, itemId: item && item.id, rerollsUsed};
+            cycleId: Number(info.time_new_milestones), runningRerollAllowed, itemCount, itemId: item && item.id, rerollsUsed};
         if (![state.errandsReset, state.milestonesReset].every(Number.isFinite)
             || state.current && !Number.isFinite(state.current.completedAt)) {
             throw new Error('Errand completion or reset time unavailable');
@@ -12452,6 +13086,10 @@ define('two/depositPlanner/ui', [
 ], function (ui, planner, policy, EventScope, utils, events) {
     const labels = {
         preview_only: 'Preview only (no game actions)', auto_reroll: 'Allow automatic item rerolls',
+        confidence_guard: 'Use cautious forecast bands for automatic rerolls',
+        learn_action_delay: 'Learn start/collection overhead from confirmed errands',
+        milestone_fallback: 'Plan a lower attainable milestone when the target is unlikely',
+        min_gain_per_item: 'Minimum extra expected progress per reroll item',
         target: 'Target progress (0 = final milestone)', max_rerolls: 'Maximum rerolls per milestone cycle',
         reserve_items: 'Reroll items to keep', free_refresh_wait: 'Prefer a free refresh within (seconds)',
         deadline_buffer: 'Buffer before reset deadlines (seconds)', action_delay: 'Estimated start/collection overhead per errand (seconds)',
@@ -12470,8 +13108,8 @@ define('two/depositPlanner/ui', [
         };
         events.register('two_deposit_planner_updated', updateButton);
         updateButton();
-        ui.addTemplate('two_deposit_planner_window', `<div id=\"two-deposit-planner\" class=\"win-content two-window\"><header class=\"win-head\"><h2>Deposit Planner</h2><ul class=\"list-btn\"><li><a href=\"#\" class=\"size-34x34 btn-red icon-26x26-close\" ng-click=\"closeWindow()\"></a></ul></header><div class=\"win-main\" scrollbar=\"\"><div class=\"box-paper footer\"><div class=\"scroll-wrap\"><h3>{{ status }}</h3><p>Running and paused state, settings, observed boards and pending actions persist across page reloads. Preview mode reads game data without starting, collecting or rerolling errands. Automatic mode uses inventory reroll items only.<div ng-if=\"state\" class=\"deposit-summary\"><p><strong>Progress:</strong> {{ state.progress | number:0 }} / {{ state.target | number:0 }} &mdash; {{ state.target - state.progress > 0 ? state.target - state.progress : 0 | number:0 }} needed<br><strong>Target reward:</strong> {{ reward.reward }} ({{ reward.amount }})<p><strong>Free errands:</strong> {{ until(state.errandsReset) }}<br><strong>Milestone reset:</strong> {{ until(state.milestonesReset) }}<br><strong>Reroll inventory:</strong> {{ state.itemCount }} items; {{ state.rerollsUsed }} reserved/used this milestone cycle</div><h3>Recommended action: {{ plan.action }}</h3><p>{{ plan.reason }}<p ng-if=\"plan.knownEta\">Visible target collection: {{ date(plan.knownEta) }} (in {{ until(plan.knownEta) }})<p ng-if=\"state.current\">Current errand completes: {{ date(state.current.completedAt) }} (in {{ until(state.current.completedAt) }})<p ng-if=\"pending\">Pending {{ pending.action }}: automatic retries are blocked until game confirmation. <a href=\"#\" ng-if=\"!running\" class=\"btn-border btn-orange\" ng-click=\"resolvePending()\">Resolve after checking game</a><table ng-if=\"jobs.length\" class=\"tbl-border-light tbl-content\"><tr><th>Planned errand<th>Resources<th>Duration<th>Collection estimate<tr ng-repeat=\"job in jobs\"><td>{{ job.resource }} #{{ job.id }}<td>{{ job.amount | number:0 }}<td>{{ seconds(job.duration) }}<td>{{ date(job.eta) }}</table><div ng-if=\"plan.forecast\"><h3>Reroll and waiting forecast</h3><p>{{ plan.forecast.sampleCount }} observed boards with matching village and bonuses. {{ plan.forecast.reason }}. Forecasts use the remaining item budget; they do not promise the maximum reward. ETAs below are conditional on reaching the target.<table ng-if=\"plan.forecast.ready\" class=\"tbl-border-light tbl-content\"><tr><th>First action<th>Item limit<th>Modeled chance<th>Median target ETA<th>90th percentile ETA<tr ng-repeat=\"option in plan.forecast.options\"><td>{{ option.action }}<td>{{ option.itemLimit }}<td>{{ percent(option.probability) }}<td>{{ date(option.eta) }}<td>{{ date(option.conservativeEta) }}</table></div><p>Dates use {{ localZone }}. Errands selected automatically must finish and be collected before both reset deadlines, including the configured buffer. After reaching the target, the module waits for the next milestone cycle.<h3>Settings</h3><p>Turn on item rerolls while keeping Preview only enabled to inspect the proposed item budget. Turn Preview only off to execute plans. Taking control pauses Collector's deposit actions; its Second Village helper stays separate.<table class=\"tbl-border-light tbl-content tbl-medium-height\"><tr ng-repeat=\"id in controls\" ng-switch=\"map[id].inputType\"><td>{{ labels[id] }}<td ng-switch-when=\"checkbox\"><div switch-slider=\"\" enabled=\"true\" border=\"true\" value=\"settings[id]\" vertical=\"false\" size=\"'56x28'\"></div><td ng-switch-when=\"number\"><input type=\"number\" class=\"fit textfield-border\" ng-model=\"settings[id]\" aria-label=\"{{ labels[id] }}\" ng-change=\"clearSettingError(id)\" ng-class=\"{'setting-invalid': settingErrors[id]}\" min=\"{{ map[id].min }}\" max=\"{{ map[id].max }}\" step=\"1\"><span class=\"setting-range\">{{ map[id].min }} &ndash; {{ map[id].max }}</span><span ng-if=\"settingErrors[id]\" class=\"setting-error\" role=\"alert\">{{ settingErrors[id] }}</span></table></div></div></div><footer class=\"win-foot\"><ul class=\"list-btn list-center\"><li><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"refresh()\">Refresh preview</a><li><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"save()\">Save</a><li><a href=\"#\" class=\"btn-border\" ng-class=\"running ? 'btn-red' : 'btn-green'\" ng-click=\"toggle()\">{{ running ? 'Pause' : 'Start' }}</a></ul></footer></div>`);
-        ui.addStyle('#two-deposit-planner .scroll-wrap{padding:12px}#two-deposit-planner p{margin:10px 0;line-height:1.5}#two-deposit-planner h3{margin-top:16px}#two-deposit-planner .deposit-summary{border-bottom:1px solid #bca475}#two-deposit-planner .setting-range{display:block;font-size:11px}#two-deposit-planner .setting-error{display:block;margin-top:4px;color:#8f2626}#two-deposit-planner .setting-invalid{border-color:#8f2626}#two-deposit-planner td{padding:5px}');
+        ui.addTemplate('two_deposit_planner_window', `<div id=\"two-deposit-planner\" class=\"win-content two-window\"><header class=\"win-head\"><h2>Deposit Planner</h2><ul class=\"list-btn\"><li><a href=\"#\" class=\"size-34x34 btn-red icon-26x26-close\" ng-click=\"closeWindow()\"></a></ul></header><div class=\"win-main\" scrollbar=\"\"><div class=\"box-paper footer\"><div class=\"scroll-wrap\"><h3>{{ status }}</h3><p>Running and paused state, settings, observed boards and pending actions persist across page reloads. Preview mode reads game data without starting, collecting or rerolling errands. Automatic mode uses inventory reroll items only.<div ng-if=\"state\" class=\"deposit-summary\"><p><strong>Progress:</strong> {{ state.progress | number:0 }} / {{ state.target | number:0 }} &mdash; {{ state.target - state.progress > 0 ? state.target - state.progress : 0 | number:0 }} needed<br><strong>Target reward:</strong> {{ reward.reward }} ({{ reward.amount }})<p><strong>Free errands:</strong> {{ until(state.errandsReset) }}<br><strong>Milestone reset:</strong> {{ until(state.milestonesReset) }}<br><strong>Reroll inventory:</strong> {{ state.itemCount }} items; {{ state.rerollsUsed }} reserved/used this milestone cycle</div><h3>Recommended action: {{ plan.action }}</h3><p>{{ plan.reason }}<p ng-if=\"plan.knownEta\">{{ plan.fallback ? 'Fallback milestone collection' : 'Visible target collection' }}: {{ date(plan.knownEta) }} (in {{ until(plan.knownEta) }})<p ng-if=\"plan.fallback\">Temporary milestone: {{ plan.goalTarget | number:0 }}. The saved target remains {{ state.target | number:0 }}; reaching this milestone does not activate target holding.<p ng-if=\"plan.runningPreview\"><strong>Last errand / Nothing to do preview:</strong> {{ plan.runningPreview.collectedTotal | number:0 }} collected + {{ plan.runningPreview.runningReward | number:0 }} running = {{ plan.runningPreview.projectedTotal | number:0 }} projected total after collection. {{ plan.runningPreview.remainingGap | number:0 }} still needed for the saved target. {{ plan.runningPreview.usableItems }} usable items within reserve/cycle limits.<br><strong>Item reroll now: {{ plan.runningPreview.canRerollNow ? 'Ready' : 'Wait' }}.</strong> {{ plan.runningPreview.reason }}. The projected reward is not collected progress.<p ng-if=\"plan.attainableMilestone\">Highest supported next milestone: <strong>{{ plan.attainableMilestone.target | number:0 }}</strong> ({{ plan.attainableMilestone.known ? 'current errand only' : 'modeled future errands' }}). Approximate chance: {{ percent(plan.attainableMilestone.best.lowerProbability) }} &ndash; {{ percent(plan.attainableMilestone.best.upperProbability) }}; expected items to reach it: {{ plan.attainableMilestone.best.meanItems | number:2 }}; collection estimate: {{ date(plan.attainableMilestone.best.eta) }}. Future boards remain unknown; rechecked after collection.<p ng-if=\"plan.timing\">Effective overhead per errand: {{ seconds(plan.timing.effectiveDelay) }}. {{ plan.timing.sampleCount }} matching confirmed errands; learned 90th percentile: {{ seconds(plan.timing.learnedDelay) }} (requires 3 samples).<p ng-if=\"state.current\">Current errand completes: {{ date(state.current.completedAt) }} (in {{ until(state.current.completedAt) }})<p ng-if=\"pending\">Pending {{ pending.action }}: automatic retries are blocked until game confirmation. <a href=\"#\" ng-if=\"!running\" class=\"btn-border btn-orange\" ng-click=\"resolvePending()\">Resolve after checking game</a><table ng-if=\"jobs.length\" class=\"tbl-border-light tbl-content\"><tr><th>Planned errand<th>Resources<th>Duration<th>Collection estimate<tr ng-repeat=\"job in jobs\"><td>{{ job.resource }} #{{ job.id }}<td>{{ job.amount | number:0 }}<td>{{ seconds(job.duration) }}<td>{{ date(job.eta) }}</table><div ng-if=\"plan.forecast\"><h3>Reroll and waiting forecast</h3><p>{{ plan.forecast.sampleCount }} observed boards with matching village and bonuses. {{ plan.forecast.reason }}. Forecasts use the remaining item budget; they do not promise the maximum reward. ETAs below are conditional on reaching the target.<div ng-if=\"plan.forecast.ready\" class=\"deposit-forecast-table\"><table class=\"tbl-border-light tbl-content\"><tr><th>First action<th>Item limit<th>Modeled chance<th>Approximate chance band<th>Expected items<th>Extra progress / item<th>Median target ETA<th>90th percentile ETA<tr ng-repeat=\"option in plan.forecast.options\"><td>{{ option.action }}<td>{{ option.itemLimit }}<td>{{ percent(option.probability) }}<td>{{ percent(option.lowerProbability) }} &ndash; {{ percent(option.upperProbability) }}<td>{{ option.meanItems | number:2 }}<td>{{ option.gainPerItem === null ? \"—\" : (option.gainPerItem | number:0) }}<td>{{ date(option.eta) }}<td>{{ date(option.conservativeEta) }}</table></div></div><p>Dates use {{ localZone }}. Errands selected automatically must finish and be collected before both reset deadlines, including the configured buffer. After reaching the target, the module waits for the next milestone cycle.<h3>Settings</h3><p>Turn on item rerolls while keeping Preview only enabled to inspect the proposed item budget. Turn Preview only off to execute plans. Taking control pauses Collector's deposit actions; its Second Village helper stays separate.<table class=\"tbl-border-light tbl-content tbl-medium-height\"><tr ng-repeat=\"id in controls\" ng-switch=\"map[id].inputType\"><td>{{ labels[id] }}<td ng-switch-when=\"checkbox\"><div switch-slider=\"\" enabled=\"true\" border=\"true\" value=\"settings[id]\" vertical=\"false\" size=\"'56x28'\"></div><td ng-switch-when=\"number\"><input type=\"number\" class=\"fit textfield-border\" ng-model=\"settings[id]\" aria-label=\"{{ labels[id] }}\" ng-change=\"clearSettingError(id)\" ng-class=\"{'setting-invalid': settingErrors[id]}\" min=\"{{ map[id].min }}\" max=\"{{ map[id].max }}\" step=\"1\"><span class=\"setting-range\">{{ map[id].min }} &ndash; {{ map[id].max }}</span><span ng-if=\"settingErrors[id]\" class=\"setting-error\" role=\"alert\">{{ settingErrors[id] }}</span></table></div></div></div><footer class=\"win-foot\"><ul class=\"list-btn list-center\"><li><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"refresh()\">Refresh preview</a><li><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"save()\">Save</a><li><a href=\"#\" class=\"btn-border\" ng-class=\"running ? 'btn-red' : 'btn-green'\" ng-click=\"toggle()\">{{ running ? 'Pause' : 'Start' }}</a></ul></footer></div>`);
+        ui.addStyle('#two-deposit-planner .scroll-wrap{padding:12px}#two-deposit-planner p{margin:10px 0;line-height:1.5}#two-deposit-planner h3{margin-top:16px}#two-deposit-planner .deposit-summary{border-bottom:1px solid #bca475}#two-deposit-planner .setting-range{display:block;font-size:11px}#two-deposit-planner .setting-error{display:block;margin-top:4px;color:#8f2626}#two-deposit-planner .setting-invalid{border-color:#8f2626}#two-deposit-planner .deposit-forecast-table{overflow-x:auto}#two-deposit-planner .deposit-forecast-table table{min-width:850px}#two-deposit-planner td{padding:5px}');
         button.addEventListener('click', function () {
             const scope = $rootScope.$new();
             const settings = planner.getSettings();
@@ -12501,7 +13139,7 @@ define('two/depositPlanner/ui', [
                 scope.reward = state && state.milestones.find(item => item.target >= state.target);
                 let eta = state ? state.now : Date.now() / 1000;
                 scope.jobs = scope.plan.jobs.map(job => {
-                    eta += job.duration + settings.get('action_delay');
+                    eta += job.duration + (scope.plan.timing ? scope.plan.timing.effectiveDelay : settings.get('action_delay'));
                     return {...job, eta};
                 });
             };
@@ -12567,6 +13205,7 @@ define('two/depositPlanner/ui', [
 define('two/depositPlanner/policy', [], function () {
     const REFRESH_SECONDS = 8 * 60 * 60;
     const FORECAST_RUNS = 128;
+    const BOOTSTRAP_RUNS = 16;
     const invalidSettings = function (config, map) {
         return Object.entries(map).filter(([key, field]) => field.inputType === 'checkbox'
             ? typeof config[key] !== 'boolean'
@@ -12576,25 +13215,42 @@ define('two/depositPlanner/policy', [], function () {
     const validSettings = (config, map) => invalidSettings(config, map).length === 0;
     const validJob = job => job && job.id !== undefined && Number.isFinite(job.duration) && job.duration > 0
         && Number.isFinite(job.amount) && job.amount > 0;
-    const ordered = jobs => jobs.slice().sort((a, b) => b.amount / b.duration - a.amount / a.duration
-        || a.duration - b.duration || String(a.id).localeCompare(String(b.id)));
-
-    // Exact for a fixed board: collect every selected job before both deadlines.
-    // Deliberately do not assume that starting a job protects it from an errand reset.
+    // Reuse subset totals across simulations, keeping deadline/target decisions exact.
+    // Store indices rather than game objects so current metadata is never stale.
+    const subsetCache = new Map();
     const optimize = function (jobs, gap, budget, delay) {
         if (!Array.isArray(jobs) || jobs.length > 12 || !jobs.every(validJob)) {
             throw new Error('Errand rewards or durations unavailable');
         }
-        let best = {jobs: [], reward: 0, seconds: 0};
-        for (let mask = 1; gap > 0 && mask < 2 ** jobs.length; mask++) {
-            const selected = jobs.filter((job, index) => mask & (1 << index));
-            const seconds = selected.reduce((sum, job) => sum + job.duration + delay, 0);
-            const reward = Math.min(gap, selected.reduce((sum, job) => sum + job.amount, 0));
-            if (seconds <= budget && (reward > best.reward || reward === best.reward && seconds < best.seconds)) {
-                best = {jobs: ordered(selected), reward, seconds};
+        if (gap <= 0 || budget <= 0 || !jobs.length) {
+            return {jobs: [], reward: 0, seconds: 0};
+        }
+        const key = JSON.stringify([delay, jobs.map(job => [job.id, job.duration, job.amount])]);
+        let subsets = subsetCache.get(key);
+        if (!subsets) {
+            const order = jobs.map((job, index) => index).sort((a, b) => jobs[b].amount / jobs[b].duration - jobs[a].amount / jobs[a].duration
+                || jobs[a].duration - jobs[b].duration || String(jobs[a].id).localeCompare(String(jobs[b].id)));
+            subsets = [];
+            for (let mask = 1; mask < 2 ** jobs.length; mask++) {
+                const indices = order.filter(index => mask & (1 << index));
+                subsets.push({indices, seconds: indices.reduce((sum, index) => sum + jobs[index].duration + delay, 0),
+                    amount: indices.reduce((sum, index) => sum + jobs[index].amount, 0)});
+            }
+            if (subsetCache.size >= 512) {
+                subsetCache.delete(subsetCache.keys().next().value);
+            }
+            subsetCache.set(key, subsets);
+        }
+        let best;
+        let reward = 0;
+        for (const subset of subsets) {
+            const value = Math.min(gap, subset.amount);
+            if (subset.seconds <= budget && (value > reward || value === reward && best && subset.seconds < best.seconds)) {
+                best = subset;
+                reward = value;
             }
         }
-        return best;
+        return best ? {jobs: best.indices.map(index => jobs[index]), reward, seconds: best.seconds} : {jobs: [], reward: 0, seconds: 0};
     };
     const quantile = function (values, fraction) {
         if (!values.length) {
@@ -12602,6 +13258,22 @@ define('two/depositPlanner/policy', [], function () {
         }
         const sorted = values.slice().sort((a, b) => a - b);
         return sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * fraction) - 1)];
+    };
+    // This interval describes simulation sampling error, not unknown game odds.
+    const probabilityBand = function (successes, count) {
+        const z = 1.96;
+        const p = successes / count;
+        const scale = 1 + z * z / count;
+        const center = (p + z * z / (2 * count)) / scale;
+        const margin = z * Math.sqrt(p * (1 - p) / count + z * z / (4 * count * count)) / scale;
+        return {lower: Math.max(0, center - margin), upper: Math.min(1, center + margin)};
+    };
+    const timingEstimate = function (entries, state, config) {
+        const matching = entries.filter(entry => entry.context === state.context && Number.isFinite(entry.delay)
+            && entry.delay >= 0 && entry.delay <= 300 && entry.at <= state.now && entry.at >= state.now - 30 * 86400);
+        const learnedDelay = matching.length >= 3 ? Math.ceil(quantile(matching.map(entry => entry.delay), 0.9)) : null;
+        return {sampleCount: matching.length, learnedDelay,
+            effectiveDelay: config.learn_action_delay && learnedDelay !== null ? Math.max(config.action_delay, learnedDelay) : config.action_delay};
     };
     const random = function (seed) {
         return function () {
@@ -12619,6 +13291,11 @@ define('two/depositPlanner/policy', [], function () {
     const budgetFor = (state, config) => Math.max(0, Math.min(config.max_rerolls - state.rerollsUsed,
         state.itemCount - config.reserve_items));
 
+    const canRerollRunning = (state, config) => !!(state.runningRerollAllowed && state.current && validJob(state.current)
+        && state.current.completedAt > state.now && !state.jobs.length && !state.collectible.length
+        && state.current.completedAt + config.action_delay <= Math.min(state.errandsReset, state.milestonesReset) - config.deadline_buffer
+        && state.progress + state.current.amount < state.target && config.auto_reroll && budgetFor(state, config) > 0 && state.itemId);
+
     const simulate = function (state, config, samples, first, limit, seed) {
         const rng = random(seed);
         let time = state.now;
@@ -12627,6 +13304,16 @@ define('two/depositPlanner/policy', [], function () {
         let jobs = state.jobs.map(job => ({...job}));
         let spent = 0;
         const deadline = state.milestonesReset - config.deadline_buffer;
+        const hits = {};
+        const milestones = (state.milestones || []).filter(item => !item.achieved && Number.isFinite(item.target)
+            && item.target > state.progress && item.target <= state.target);
+        const record = function () {
+            for (const milestone of milestones) {
+                if (!hits[milestone.target] && progress >= milestone.target) {
+                    hits[milestone.target] = {time, spent};
+                }
+            }
+        };
         const board = () => samples[Math.floor(rng() * samples.length)].jobs.map((job, id) => ({...job, id}));
         const wait = function () {
             time = Math.max(time, free) + config.action_delay;
@@ -12638,14 +13325,18 @@ define('two/depositPlanner/policy', [], function () {
             time += config.action_delay;
             jobs = board();
         };
+        if (first === 'reroll_now') {
+            reroll();
+        }
         if (state.current) {
             time = Math.max(time, state.current.completedAt) + config.action_delay;
-            progress += state.current.amount;
-            if (progress >= state.target || time >= deadline) {
-                return {success: progress >= state.target && time <= deadline, time, spent};
+            // A running errand contributes only when collected before both resets.
+            if (time <= Math.min(free, state.milestonesReset) - config.deadline_buffer) {
+                progress += state.current.amount;
+                record();
             }
-            if (time >= free) {
-                wait();
+            if (progress >= state.target || time >= deadline) {
+                return {success: progress >= state.target && time <= deadline, time, spent, progress: Math.min(progress, state.target), hits};
             }
         }
         if (first === 'wait') {
@@ -12662,10 +13353,15 @@ define('two/depositPlanner/policy', [], function () {
             }
             const selection = optimize(jobs, state.target - progress, Math.min(free - config.deadline_buffer, deadline) - time, config.action_delay);
             if (selection.jobs.length) {
-                const job = selection.jobs[0];
-                time += job.duration + config.action_delay;
-                progress += job.amount;
-                jobs = jobs.filter(candidate => candidate.id !== job.id);
+                // A simulated board is fixed: execute the exact chosen subset in
+                // one step. Real automation still confirms and replans each job.
+                for (const job of selection.jobs) {
+                    time += job.duration + config.action_delay;
+                    progress += job.amount;
+                    record();
+                }
+                const selected = new Set(selection.jobs.map(job => job.id));
+                jobs = jobs.filter(candidate => !selected.has(candidate.id));
             } else if (free < deadline && (free - time <= config.free_refresh_wait || spent >= limit)) {
                 wait();
             } else if (spent < limit) {
@@ -12674,12 +13370,35 @@ define('two/depositPlanner/policy', [], function () {
                 break;
             }
         }
-        return {success: progress >= state.target && time <= deadline, time, spent};
+        return {success: progress >= state.target && time <= deadline, time, spent, progress: Math.min(progress, state.target), hits};
+    };
+
+    const choose = function (options, config) {
+        const score = option => config.confidence_guard ? option.lowerProbability : option.probability;
+        const rank = option => option.action === 'continue' ? 0 : option.action === 'wait' ? 1 : 2;
+        const withoutItems = options.filter(option => option.itemLimit === 0)
+            .sort((a, b) => b.probability - a.probability || b.expectedGain - a.expectedGain || rank(a) - rank(b))[0];
+        for (const option of options) {
+            option.gainPerItem = option.meanItems > 0 ? (option.expectedGain - (withoutItems ? withoutItems.expectedGain : 0)) / option.meanItems : null;
+        }
+        const eligible = options.filter(option => option.meanItems === 0
+            || option.gainPerItem > 0 && option.gainPerItem >= config.min_gain_per_item);
+        const reliable = eligible.filter(option => score(option) * 100 >= config.success_percent);
+        const contenders = (reliable.length ? reliable : eligible).slice().sort((a, b) => (reliable.length ? a.itemLimit - b.itemLimit : score(b) - score(a))
+            || a.meanItems - b.meanItems || rank(a) - rank(b) || (a.eta || Infinity) - (b.eta || Infinity));
+        let best = contenders[0];
+        const withoutReroll = eligible.filter(option => !option.action.startsWith('reroll'))
+            .sort((a, b) => score(b) - score(a) || a.itemLimit - b.itemLimit || rank(a) - rank(b))[0];
+        if (best && best.action.startsWith('reroll') && (config.confidence_guard && score(best) * 100 < config.success_percent
+            || withoutReroll && (score(best) - (config.confidence_guard ? withoutReroll.upperProbability : withoutReroll.probability)) * 100 < config.min_improvement)) {
+            best = withoutReroll || withoutItems;
+        }
+        return best;
     };
 
     const forecast = function (state, config, history) {
-        const samples = history.filter(sample => sample.context === state.context && sample.jobs.length === 6
-            && sample.jobs.every(validJob) && sample.at >= state.now - 30 * 86400);
+        const samples = history.filter(sample => sample && sample.context === state.context && Array.isArray(sample.jobs) && sample.jobs.length === 6
+            && sample.jobs.every(validJob) && sample.at <= state.now && sample.at >= state.now - 30 * 86400);
         if (samples.length < config.min_samples) {
             return {ready: false, sampleCount: samples.length, options: [], reason: 'Learning complete boards before estimating rerolls'};
         }
@@ -12687,33 +13406,56 @@ define('two/depositPlanner/policy', [], function () {
         const maximum = config.auto_reroll ? budgetFor(state, config) : 0;
         // Common random numbers make candidate comparisons repeatable and fair.
         const baseSeed = hash(JSON.stringify([state.jobs, state.progress, Math.floor(state.now / 30), state.context]));
-        for (const action of ['continue', 'wait', 'reroll']) {
+        // Resample whole observed boards to expose sensitivity to a small history.
+        // The resulting band is approximate and cannot include unseen board types.
+        const bootstrap = Array.from({length: BOOTSTRAP_RUNS}, (unused, index) => {
+            const rng = random(baseSeed + index * 104729);
+            return Array.from({length: samples.length}, () => samples[Math.floor(rng() * samples.length)]);
+        });
+        for (const action of ['continue', 'wait', 'reroll', ...(canRerollRunning(state, config) ? ['reroll_now'] : [])]) {
             if (action === 'continue' && !state.current && !optimize(state.jobs, state.target - state.progress, Math.min(state.errandsReset, state.milestonesReset) - config.deadline_buffer - state.now, config.action_delay).jobs.length) {
                 continue;
             }
-            for (let limit = action === 'reroll' ? 1 : 0; limit <= maximum; limit++) {
+            for (let limit = action.startsWith('reroll') ? 1 : 0; limit <= maximum; limit++) {
                 const results = Array.from({length: FORECAST_RUNS}, (unused, index) => simulate(state, config, samples, action, limit, baseSeed + index * 7919));
                 const successes = results.filter(result => result.success);
                 const times = successes.map(result => result.time);
-                options.push({action, itemLimit: limit, probability: successes.length / results.length,
+                const band = probabilityBand(successes.length, results.length);
+                const resampled = bootstrap.map((boards, block) => Array.from({length: 16}, (unused, run) => simulate(state, config, boards, action, limit, baseSeed + (block * 16 + run) * 7919)));
+                const sensitivity = resampled.map(block => block.filter(result => result.success).length / block.length);
+                const milestones = (state.milestones || []).filter(item => !item.achieved && Number.isFinite(item.target)
+                    && item.target > state.progress && item.target <= state.target).map(milestone => {
+                    const hits = results.filter(result => result.hits[milestone.target]);
+                    const band = probabilityBand(hits.length, results.length);
+                    const sensitivity = resampled.map(block => block.filter(result => result.hits[milestone.target]).length / block.length);
+                    const times = hits.map(result => result.hits[milestone.target].time);
+                    return {target: milestone.target, probability: hits.length / results.length,
+                        lowerProbability: Math.min(band.lower, quantile(sensitivity, 0.05)),
+                        upperProbability: Math.max(band.upper, quantile(sensitivity, 0.95)),
+                        eta: quantile(times, 0.5), conservativeEta: quantile(times, 0.9),
+                        meanItems: results.reduce((sum, result) => sum + (result.hits[milestone.target] ? result.hits[milestone.target].spent : result.spent), 0) / results.length,
+                        expectedGain: results.reduce((sum, result) => sum + Math.min(result.progress, milestone.target) - state.progress, 0) / results.length};
+                });
+                options.push({action, itemLimit: limit, milestones, probability: successes.length / results.length,
+                    lowerProbability: Math.min(band.lower, quantile(sensitivity, 0.05)),
+                    upperProbability: Math.max(band.upper, quantile(sensitivity, 0.95)),
+                    expectedGain: results.reduce((sum, result) => sum + result.progress - state.progress, 0) / results.length,
                     eta: quantile(times, 0.5), conservativeEta: quantile(times, 0.9),
                     meanItems: results.reduce((sum, result) => sum + result.spent, 0) / results.length});
             }
         }
-        const reliable = options.filter(option => option.probability * 100 >= config.success_percent);
-        const rank = option => option.action === 'continue' ? 0 : option.action === 'wait' ? 1 : 2;
-        const contenders = reliable.length ? reliable : options;
-        contenders.sort((a, b) => (reliable.length ? a.itemLimit - b.itemLimit : b.probability - a.probability)
-            || a.meanItems - b.meanItems || rank(a) - rank(b) || (a.eta || Infinity) - (b.eta || Infinity));
-        let best = contenders[0];
-        const withoutReroll = options.filter(option => option.action !== 'reroll')
-            .sort((a, b) => b.probability - a.probability || a.itemLimit - b.itemLimit || rank(a) - rank(b))[0];
-        if (best && best.action === 'reroll' && withoutReroll
-            && (best.probability - withoutReroll.probability) * 100 < config.min_improvement) {
-            best = withoutReroll;
-        }
-        return {ready: true, sampleCount: samples.length, best, options,
-            reason: 'Empirical simulation; ETAs describe successful runs and are not guarantees'};
+        const best = choose(options, config);
+        const milestones = (state.milestones || []).filter(item => !item.achieved && Number.isFinite(item.target)
+            && item.target > state.progress && item.target <= state.target).map(milestone => {
+            const choices = options.map(option => ({action: option.action, itemLimit: option.itemLimit,
+                ...option.milestones.find(item => item.target === milestone.target)}));
+            const best = choose(choices, config);
+            const supported = best && (config.confidence_guard ? best.lowerProbability : best.probability) * 100 >= config.success_percent;
+            return {target: milestone.target, best, supported, options: choices};
+        }).sort((a, b) => b.target - a.target);
+        const bestMilestone = milestones.find(milestone => milestone.supported);
+        return {ready: true, sampleCount: samples.length, best, options, milestones, bestMilestone,
+            reason: 'Approximate history bootstrap and simulation bands; unseen boards remain unknown. ETAs cover successful runs only'};
     };
 
     const plan = function (state, config, history = [], predict = () => forecast(state, config, history)) {
@@ -12734,7 +13476,40 @@ define('two/depositPlanner/policy', [], function () {
             return {...base, action: 'collect', job: state.collectible[0], reason: 'Collect completed resources, then recalculate'};
         }
         if (state.current) {
-            return {...base, reason: 'An errand is running; wait for completion', forecast: predict()};
+            const prediction = predict();
+            const milestone = prediction.bestMilestone;
+            const supported = prediction.best && (config.confidence_guard ? prediction.best.lowerProbability : prediction.best.probability) * 100 >= config.success_percent;
+            const completion = state.current.completedAt + config.action_delay;
+            const known = completion <= Math.min(state.errandsReset, state.milestonesReset) - config.deadline_buffer
+                ? (state.milestones || []).filter(item => !item.achieved && item.target > state.progress && item.target <= Math.min(state.target, state.progress + state.current.amount))
+                    .sort((a, b) => b.target - a.target)[0] : null;
+            const attainableMilestone = known && (!milestone || known.target >= milestone.target)
+                ? {target: known.target, known: true, best: {eta: completion, meanItems: 0, probability: 1, lowerProbability: 1, upperProbability: 1}}
+                : milestone;
+            const fallback = config.milestone_fallback && !supported && attainableMilestone && attainableMilestone.target < state.target;
+            const projectedTotal = state.progress + state.current.amount;
+            const validCompletion = completion <= Math.min(state.errandsReset, state.milestonesReset) - config.deadline_buffer;
+            const earlyOptions = fallback && milestone && milestone.target === attainableMilestone.target ? milestone.options : prediction.options;
+            const early = prediction.ready && choose(earlyOptions.filter(option => option.itemLimit === 0 || option.action === 'reroll_now'), config);
+            const recommended = canRerollRunning(state, config) && early && early.action === 'reroll_now';
+            const lastErrand = !state.jobs.length && !state.collectible.length && state.current.completedAt > state.now;
+            const runningPreview = lastErrand ? {collectedTotal: state.progress, runningReward: state.current.amount,
+                projectedTotal, remainingGap: Math.max(0, state.target - projectedTotal), collectableBeforeReset: validCompletion,
+                usableItems: budgetFor(state, config), canRerollNow: !!recommended,
+                reason: !validCompletion ? 'The running reward cannot be safely collected before both reset buffers'
+                    : projectedTotal >= state.target ? 'The running errand covers the target; keep items'
+                        : !config.auto_reroll ? 'Automatic item rerolls are disabled'
+                            : budgetFor(state, config) < 1 ? 'No items available within the reserve and cycle limit'
+                                : !state.runningRerollAllowed ? 'The game reroll capability is unavailable or disabled'
+                                    : !prediction.ready ? prediction.reason
+                                        : recommended ? 'An item can prepare the next board now; the current errand remains running'
+                                            : 'An early reroll does not meet the forecast confidence, improvement or item-value checks'} : null;
+            return {...base, action: recommended ? 'reroll' : 'wait', forecast: prediction, attainableMilestone,
+                runningPreview, earlyReroll: !!recommended, fallback: !!fallback,
+                goalTarget: fallback ? attainableMilestone.target : undefined,
+                reason: recommended ? 'Nothing to do: prepare the next board with an item while the last errand runs'
+                    : fallback ? 'An errand is running; plan the highest supported lower milestone after collection'
+                        : 'An errand is running; wait for completion'};
         }
         const selection = optimize(state.jobs, state.target - state.progress, Math.min(state.errandsReset, state.milestonesReset) - config.deadline_buffer - state.now, config.action_delay);
         const result = {...base, jobs: selection.jobs, reachableProgress: state.progress + selection.reward,
@@ -12744,7 +13519,27 @@ define('two/depositPlanner/policy', [], function () {
         }
         const prediction = predict();
         result.forecast = prediction;
+        result.attainableMilestone = prediction.bestMilestone;
         const best = prediction.best;
+        const supported = best && (config.confidence_guard ? best.lowerProbability : best.probability) * 100 >= config.success_percent;
+        if (config.milestone_fallback && !supported) {
+            const goal = (state.milestones || []).filter(item => !item.achieved && Number.isFinite(item.target)
+                && item.target > state.progress && item.target < state.target && item.target <= result.reachableProgress)
+                .sort((a, b) => b.target - a.target)[0];
+            const projected = prediction.bestMilestone;
+            if (projected && projected.target < state.target && (!goal || projected.target > goal.target)) {
+                const next = plan({...state, target: projected.target}, {...config, milestone_fallback: false}, history, () => ({ready: true, best: projected.best, options: projected.options}));
+                return {...next, state, forecast: prediction, attainableMilestone: projected,
+                    goalTarget: projected.target, fallback: true,
+                    reason: 'Plan toward the highest supported lower milestone: ' + next.reason};
+            }
+            if (goal) {
+                const fallback = optimize(state.jobs, goal.target - state.progress, Math.min(state.errandsReset, state.milestonesReset) - config.deadline_buffer - state.now, config.action_delay);
+                return {...result, action: 'start', jobs: fallback.jobs, job: fallback.jobs[0], goalTarget: goal.target,
+                    fallback: true, knownEta: state.now + fallback.seconds,
+                    reason: 'Secure the highest visible attainable milestone; the configured target stays unchanged'};
+            }
+        }
         if (best && best.action === 'reroll') {
             return {...result, action: 'reroll', reason: 'An item reroll materially improves the forecast before the deadline'};
         }
@@ -12756,7 +13551,7 @@ define('two/depositPlanner/policy', [], function () {
             ? 'Wait for free errands and keep reroll items'
             : prediction.ready ? 'No useful reroll within the item budget; wait for the next reset' : prediction.reason};
     };
-    return {validSettings, invalidSettings, validJob, optimize, forecast, plan, budgetFor};
+    return {validSettings, invalidSettings, validJob, optimize, forecast, plan, budgetFor, timingEstimate, canRerollRunning};
 });
 
 define('two/depositPlanner/settings/map', [], function () {
@@ -12765,6 +13560,10 @@ define('two/depositPlanner/settings/map', [], function () {
     return {
         preview_only: checkbox(true),
         auto_reroll: checkbox(false),
+        confidence_guard: checkbox(true),
+        learn_action_delay: checkbox(true),
+        milestone_fallback: checkbox(false),
+        min_gain_per_item: number(0, 0, 1000000),
         target: number(0, 0, 1000000),
         max_rerolls: number(3, 0, 20),
         reserve_items: number(1, 0, 10000),
@@ -17307,6 +18106,7 @@ require([
 
 define('two/recruiter', [
     'two/Settings',
+    'two/villageSettings',
     'two/recruiter/settings/map',
     'two/recruiter/policy',
     'two/resourceBudget',
@@ -17314,7 +18114,7 @@ define('two/recruiter', [
     'queues/EventQueue',
     'Lockr',
     'helper/time'
-], function (Settings, settingsMap, policy, resourceBudget, ready, eventQueue, Lockr, time) {
+], function (Settings, villageSettings, settingsMap, policy, resourceBudget, ready, eventQueue, Lockr, time) {
     let initialized = false;
     let running = false;
     let settings;
@@ -17341,7 +18141,9 @@ define('two/recruiter', [
         return ids.map(id => player.getVillage(id)).filter(Boolean);
     };
 
-    const snapshot = function (village) {
+    const villageConfig = villageId => villageSettings(settings, villageId, ['preview_only', 'check_interval', 'enabled_groups']).getAll();
+
+    const snapshot = function (village, config = villageConfig(village.getId())) {
         buildingService.compute(village);
         const resourceModel = village.getResources();
         const computed = resourceModel.getComputed();
@@ -17440,7 +18242,16 @@ define('two/recruiter', [
                 break;
             }
             try {
-                const state = snapshot(village);
+                const config = villageConfig(village.getId());
+                if (!policy.validSettings(config, settingsMap, unitData(), buildingData())) {
+                    plans.push({villageId: village.getId(), reason: 'Invalid village recruitment settings', orders: []});
+                    continue;
+                }
+                if (!config.enabled) {
+                    plans.push({villageId: village.getId(), reason: 'Recruitment disabled for this village', orders: []});
+                    continue;
+                }
+                const state = snapshot(village, config);
                 const plan = policy.plan(state, config, unitData());
                 plan.villageId = village.getId();
                 plans.push(plan);
@@ -17585,7 +18396,7 @@ define('two/recruiter', [
         },
         isRunning: () => running,
         isInitialized: () => initialized,
-        getSettings: () => settings,
+        getSettings: villageId => villageSettings(settings, villageId, ['preview_only', 'check_interval', 'enabled_groups']),
         resolvePending: function (villageId) {
             if (running) {
                 return false;
@@ -17610,7 +18421,7 @@ define('two/recruiter/ui', [
     'two/ui', 'two/recruiter', 'two/recruiter/policy', 'two/Settings', 'two/EventScope', 'two/utils', 'humanInterval', 'queues/EventQueue'
 ], function (ui, recruiter, policy, Settings, EventScope, utils, humanInterval, eventQueue) {
     const labels = {
-        preview_only: 'Preview only', check_interval: 'Check interval', spend_percent: 'Maximum share of spendable resources per cycle (%)',
+        enabled: 'Recruit for this village', preview_only: 'Preview only (shared)', check_interval: 'Check interval (shared)', spend_percent: 'Maximum share of spendable resources per cycle (%)',
         max_batch: 'Maximum soldiers per batch', max_queue_jobs: 'Maximum barracks queue jobs',
         preserve_wood: 'Wood savings', preserve_clay: 'Clay savings', preserve_iron: 'Iron savings', preserve_food: 'Free population to preserve',
         building_wood: 'Additional wood budget for buildings', building_clay: 'Additional clay budget for buildings',
@@ -17624,22 +18435,38 @@ define('two/recruiter/ui', [
         };
         eventQueue.register('two_recruiter_updated', updateButton);
         updateButton();
-        ui.addTemplate('two_recruiter_window', `<div id=\"two-recruiter\" class=\"win-content two-window\"><header class=\"win-head\"><h2>Recruiter</h2><ul class=\"list-btn\"><li><a href=\"#\" class=\"size-34x34 btn-red icon-26x26-close\" ng-click=\"closeWindow()\"></a></ul></header><div class=\"win-main\" scrollbar=\"\"><div class=\"box-paper footer\"><div class=\"scroll-wrap\"><p>Maintain troop targets per village. Targets include owned troops away from home and soldiers still in training. Zero disables a unit type. Each cycle sends at most one batch per village; types are considered in the order shown.<p>Spendable budget = current stock − savings − additional building budget − selected upcoming upgrade costs. Queued buildings and troops are already paid and are not charged twice. Food means free population.<table class=\"tbl-border-light tbl-content tbl-medium-height\"><tr><td>Village groups (empty = all owned villages)<td><div select=\"\" list=\"groups\" selected=\"settings.enabled_groups\" drop-down=\"true\"></div><tr ng-repeat=\"id in controls\" ng-switch=\"map[id].inputType\"><td>{{ labels[id] }}<td ng-switch-when=\"checkbox\"><div switch-slider=\"\" enabled=\"true\" border=\"true\" value=\"settings[id]\" vertical=\"false\" size=\"'56x28'\"></div><td ng-switch-when=\"number\"><input type=\"number\" class=\"fit textfield-border\" ng-model=\"settings[id]\" min=\"{{ map[id].min }}\" max=\"{{ map[id].max }}\" step=\"1\"><td ng-switch-when=\"readable_time\"><input class=\"fit textfield-border\" ng-model=\"settings[id]\"><tr><th>Unit kind<th>Target soldiers per village<tr ng-repeat=\"unit in units\"><td>{{ unit.name }}<td><input type=\"number\" class=\"fit textfield-border\" min=\"0\" max=\"1000000\" step=\"1\" ng-model=\"unit.target\"></table><h3>Save for upcoming building upgrades</h3><p>Reserve the next level cost of each selected building. A building with an upgrade already in the queue is skipped until that upgrade finishes. Use additional building budgets above to save for further levels or other spending.<div class=\"building-choices\"><label ng-repeat=\"building in buildings\"><input type=\"checkbox\" ng-model=\"building.enabled\"> {{ building.name }}</label></div><h3>{{ status }}</h3><div ng-repeat=\"(villageId, entry) in pending\"><p>Village {{ villageId }}: pending {{ entry.amount }} {{ entry.unit }}.</p><a href=\"#\" ng-show=\"!running\" class=\"btn-border btn-orange\" ng-click=\"resolvePending(villageId)\">Resolve guard after checking game</a></div><div ng-repeat=\"plan in plans\" class=\"recruit-plan\"><h3>Village {{ plan.villageId }} — {{ plan.reason }}</h3><p>Protected: {{ plan.protected }}<br>Upcoming buildings: {{ plan.buildingCosts }}<br>Cycle budget: {{ plan.budget }}<table class=\"tbl-border-light tbl-content\"><tr><th>Unit<th>Owned<th>In training<th>Target<th>Missing<tr ng-repeat=\"item in plan.deficits\"><td>{{ item.name }}<td>{{ item.owned }}<td>{{ item.queued }}<td>{{ item.target }}<td>{{ item.deficit }}</table><p ng-repeat=\"order in plan.orders\">{{ $first ? 'Next batch' : 'Later priority' }}: {{ order.amount }} {{ order.unit_type }} — cost {{ order.cost }}</div></div></div></div><footer class=\"win-foot\"><ul class=\"list-btn list-center\"><li><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"save()\">Save</a><li><a href=\"#\" class=\"btn-border\" ng-class=\"running ? 'btn-red' : 'btn-green'\" ng-click=\"toggle()\">{{ running ? 'Pause' : 'Start' }}</a></ul></footer></div>`);
+        ui.addTemplate('two_recruiter_window', `<div id=\"two-recruiter\" class=\"win-content two-window\"><header class=\"win-head\"><h2>Recruiter</h2><ul class=\"list-btn\"><li><a href=\"#\" class=\"size-34x34 btn-red icon-26x26-close\" ng-click=\"closeWindow()\"></a></ul></header><div class=\"win-main\" scrollbar=\"\"><div class=\"box-paper footer\"><div class=\"scroll-wrap\"><label>Configure <select class=\"textfield-border\" ng-model=\"profileVillage\" ng-options=\"village.value as village.name for village in profileVillages\" ng-change=\"selectVillage()\"></select></label> <a href=\"#\" class=\"btn-border btn-orange\" ng-show=\"profileVillage\" ng-click=\"useDefaults()\">Use shared defaults for this village</a><p>Save before switching villages. Villages without a saved profile use shared defaults. Preview mode, check interval and group filter are shared.<p>Maintain troop targets per village. Targets include owned troops away from home and soldiers still in training. Zero disables a unit type. Each cycle sends at most one batch per village; types are considered in the order shown.<p>Spendable budget = current stock − savings − additional building budget − selected upcoming upgrade costs. Queued buildings and troops are already paid and are not charged twice. Food means free population.<table class=\"tbl-border-light tbl-content tbl-medium-height\"><tr><td>Village groups (empty = all owned villages)<td><div select=\"\" list=\"groups\" selected=\"settings.enabled_groups\" drop-down=\"true\"></div><tr ng-repeat=\"id in controls\" ng-switch=\"map[id].inputType\"><td>{{ labels[id] }}<td ng-switch-when=\"checkbox\"><div switch-slider=\"\" enabled=\"true\" border=\"true\" value=\"settings[id]\" vertical=\"false\" size=\"'56x28'\"></div><td ng-switch-when=\"number\"><input type=\"number\" class=\"fit textfield-border\" ng-model=\"settings[id]\" min=\"{{ map[id].min }}\" max=\"{{ map[id].max }}\" step=\"1\"><td ng-switch-when=\"readable_time\"><input class=\"fit textfield-border\" ng-model=\"settings[id]\"><tr><th>Unit kind<th>Target soldiers per village<tr ng-repeat=\"unit in units\"><td>{{ unit.name }}<td><input type=\"number\" class=\"fit textfield-border\" min=\"0\" max=\"1000000\" step=\"1\" ng-model=\"unit.target\"></table><h3>Save for upcoming building upgrades</h3><p>Reserve the next level cost of each selected building. A building with an upgrade already in the queue is skipped until that upgrade finishes. Use additional building budgets above to save for further levels or other spending.<div class=\"building-choices\"><label ng-repeat=\"building in buildings\"><input type=\"checkbox\" ng-model=\"building.enabled\"> {{ building.name }}</label></div><h3>{{ status }}</h3><div ng-repeat=\"(villageId, entry) in pending\"><p>Village {{ villageId }}: pending {{ entry.amount }} {{ entry.unit }}.</p><a href=\"#\" ng-show=\"!running\" class=\"btn-border btn-orange\" ng-click=\"resolvePending(villageId)\">Resolve guard after checking game</a></div><div ng-repeat=\"plan in plans\" class=\"recruit-plan\"><h3>Village {{ plan.villageId }} — {{ plan.reason }}</h3><p>Protected: {{ plan.protected }}<br>Upcoming buildings: {{ plan.buildingCosts }}<br>Cycle budget: {{ plan.budget }}<table class=\"tbl-border-light tbl-content\"><tr><th>Unit<th>Owned<th>In training<th>Target<th>Missing<tr ng-repeat=\"item in plan.deficits\"><td>{{ item.name }}<td>{{ item.owned }}<td>{{ item.queued }}<td>{{ item.target }}<td>{{ item.deficit }}</table><p ng-repeat=\"order in plan.orders\">{{ $first ? 'Next batch' : 'Later priority' }}: {{ order.amount }} {{ order.unit_type }} — cost {{ order.cost }}</div></div></div></div><footer class=\"win-foot\"><ul class=\"list-btn list-center\"><li><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"save()\">Save</a><li><a href=\"#\" class=\"btn-border\" ng-class=\"running ? 'btn-red' : 'btn-green'\" ng-click=\"toggle()\">{{ running ? 'Pause' : 'Start' }}</a></ul></footer></div>`);
         ui.addStyle('#two-recruiter .scroll-wrap{padding:12px}#two-recruiter p{margin:10px 0}#two-recruiter h3{margin-top:16px}#two-recruiter .building-choices label{display:inline-block;width:180px;padding:5px}#two-recruiter .recruit-plan{border-top:1px solid #bca475;margin-top:16px}');
         button.addEventListener('click', function () {
             const scope = $rootScope.$new();
-            const settings = recruiter.getSettings();
+            let settings = recruiter.getSettings();
             const map = settings.settingsMap;
             const units = modelDataService.getGameData().getUnitsObject();
             const buildings = modelDataService.getGameData().getBuildings();
+            scope.profileVillage = String(modelDataService.getSelectedVillage().getId());
+            scope.profileVillages = [{value: '', name: 'Shared defaults'}].concat(
+                Object.values(modelDataService.getSelectedCharacter().getVillages()).map(village => ({
+                    value: String(village.getId()), name: typeof village.getName === 'function' ? village.getName() : 'Village ' + village.getId()
+                }))
+            );
+            settings = recruiter.getSettings(scope.profileVillage);
             settings.injectScope(scope);
             scope.labels = labels;
             scope.map = map;
             scope.controls = Object.keys(labels);
             scope.groups = Settings.encodeList(modelDataService.getGroupList().getGroups(), {disabled: false, type: 'groups'});
-            scope.units = Object.entries(units).filter(([name, data]) => data.building === 'barracks')
-                .map(([name]) => ({name, target: settings.get('targets')[name] || 0}));
-            scope.buildings = Object.keys(buildings).map(name => ({name, enabled: settings.get('protect_buildings').includes(name)}));
+            scope.selectVillage = function () {
+                settings = recruiter.getSettings(scope.profileVillage);
+                scope.settings = settings.encode();
+                scope.units = Object.entries(units).filter(([name, data]) => data.building === 'barracks')
+                    .map(([name]) => ({name, target: settings.get('targets')[name] || 0}));
+                scope.buildings = Object.keys(buildings).map(name => ({name, enabled: settings.get('protect_buildings').includes(name)}));
+            };
+            scope.useDefaults = function () {
+                settings.resetProfile();
+                scope.selectVillage();
+            };
+            scope.selectVillage();
             const update = function () {
                 scope.running = recruiter.isRunning();
                 scope.status = recruiter.status;
@@ -17657,7 +18484,8 @@ define('two/recruiter/ui', [
                     return false;
                 }
                 settings.setAll(values);
-                utils.notif('success', 'Recruiter settings saved');
+                scope.settings = settings.encode();
+                utils.notif('success', scope.profileVillage ? 'Recruiter settings saved for this village' : 'Recruiter defaults saved');
                 return true;
             };
             scope.toggle = function () {
@@ -17798,6 +18626,8 @@ define('two/recruiter/policy', [], function () {
 define('two/recruiter/settings/map', [], function () {
     const number = (value, max) => ({default: value, updates: [], inputType: 'number', min: 0, max});
     return {
+        village_profiles: {default: {}, updates: [], inputType: 'profiles'},
+        enabled: {default: true, updates: [], inputType: 'checkbox'},
         preview_only: {default: true, updates: [], inputType: 'checkbox'},
         check_interval: {default: '1 minute', updates: [], inputType: 'readable_time'},
         enabled_groups: {default: [], updates: [], inputType: 'select', multiSelect: true, type: 'groups', disabledOption: true},

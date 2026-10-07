@@ -76,13 +76,16 @@ define('two/builderQueue/ui', [
         });
     };
 
+    const previewVillage = () => $scope && $scope.profileVillage
+        ? modelDataService.getSelectedCharacter().getVillage($scope.profileVillage) : modelDataService.getSelectedVillage();
+
     const buildingLevelReached = function (building, level) {
-        const buildingData = modelDataService.getSelectedVillage().getBuildingData();
+        const buildingData = previewVillage().getBuildingData();
         return buildingData.getBuildingLevel(building) >= level;
     };
 
     const buildingLevelProgress = function (building, level) {
-        const queue = modelDataService.getSelectedVillage().getBuildingQueue().getQueue();
+        const queue = previewVillage().getBuildingQueue().getQueue();
         let progress = false;
 
         for (const job of queue) {
@@ -148,6 +151,31 @@ define('two/builderQueue/ui', [
         return false;
     };
 
+    const applyManualPolicy = function () {
+        if ($scope.profileVillage && builderQueue.preview($scope.profileVillage).sequenceSource === 'manual') {
+            $scope.settings[SETTINGS.MANUAL_OVERRIDE] = true;
+            $scope.settings[SETTINGS.AUTO_SEQUENCE] = false;
+        }
+        $scope.settings[SETTINGS.LABEL_MAPPINGS] = ($scope.settings[SETTINGS.LABEL_MAPPINGS] || []).map(mapping => ({
+            group_id: String(mapping.group_id), sequence: mapping.sequence
+        }));
+    };
+
+    settingsView.refreshPlanner = function () {
+        if (!$scope || !$scope.settings) {
+            return;
+        }
+        const village = previewVillage();
+        settingsView.plan = builderQueue.preview(village.getId(), settings.decode($scope.settings));
+        settingsView.plan.waitLabel = Number.isFinite(settingsView.plan.waitSeconds)
+            ? timeHelper.readableSeconds(Math.ceil(settingsView.plan.waitSeconds)) : 'Unknown / blocked';
+        settingsView.plan.delayLabel = Number.isFinite(settingsView.plan.extraDelaySeconds)
+            ? timeHelper.readableSeconds(Math.ceil(settingsView.plan.extraDelaySeconds)) : 'Required capacity repair';
+        const groups = groupList.getGroups();
+        const group = groups && Object.values(groups).find(item => String(item.id) === String(settingsView.plan.groupId));
+        settingsView.plan.groupName = group ? group.name : '';
+    };
+
     settingsView.generateSequences = function () {
         const sequences = settings.get(SETTINGS.BUILDING_SEQUENCES);
         const sequencesAvail = Object.keys(sequences).length;
@@ -164,7 +192,8 @@ define('two/builderQueue/ui', [
     };
 
     settingsView.generateBuildingSequence = function () {
-        const sequenceId = $scope.settings[SETTINGS.ACTIVE_SEQUENCE].value;
+        settingsView.refreshPlanner();
+        const sequenceId = settingsView.plan.sequence || $scope.settings[SETTINGS.ACTIVE_SEQUENCE].value;
         const buildingSequenceRaw = $scope.settings[SETTINGS.BUILDING_SEQUENCES][sequenceId];
         const buildingData = modelDataService.getGameData().getBuildings();
         const buildingLevels = {};
@@ -202,7 +231,7 @@ define('two/builderQueue/ui', [
     };
 
     settingsView.generateBuildingSequenceFinal = function (_sequenceId) {
-        const selectedSequence = $scope.settings[SETTINGS.ACTIVE_SEQUENCE].value;
+        const selectedSequence = settingsView.plan.sequence || $scope.settings[SETTINGS.ACTIVE_SEQUENCE].value;
         const sequenceBuildings = $scope.settings[SETTINGS.BUILDING_SEQUENCES][_sequenceId || selectedSequence];
         const sequenceObj = {};
         const sequence = [];
@@ -622,7 +651,9 @@ define('two/builderQueue/ui', [
 
     const saveSettings = function () {
         settings.setAll(settings.decode($scope.settings));
+        $scope.settings = settings.encode();
         unsavedChanges = false;
+        settingsView.generateSequences();
     };
 
     const switchBuilder = function () {
@@ -666,10 +697,15 @@ define('two/builderQueue/ui', [
 
     const eventHandlers = {
         updateGroups: function () {
+            $scope.labelGroups = Object.values(groupList.getGroups()).map(group => ({id: String(group.id), name: group.name}));
             $scope.groups = Settings.encodeList(groupList.getGroups(), {
                 type: 'groups',
                 disabled: true
             });
+        },
+        groupsChanged: function () {
+            eventHandlers.updateGroups();
+            settingsView.generateSequences();
         },
         updateSequences: function () {
             const sequences = settings.get(SETTINGS.BUILDING_SEQUENCES);
@@ -766,9 +802,28 @@ define('two/builderQueue/ui', [
     };
 
     const buildWindow = function () {
+        const profileVillage = String(modelDataService.getSelectedVillage().getId());
+        settings = builderQueue.getSettings(profileVillage);
         const activeSequence = settings.get(SETTINGS.ACTIVE_SEQUENCE);
 
         $scope = $rootScope.$new();
+        $scope.profileVillage = profileVillage;
+        $scope.profileVillages = [{value: '', name: 'Shared defaults'}].concat(
+            Object.values(modelDataService.getSelectedCharacter().getVillages()).map(village => ({
+                value: String(village.getId()), name: typeof village.getName === 'function' ? village.getName() : 'Village ' + village.getId()
+            }))
+        );
+        $scope.selectVillage = function () {
+            settings = builderQueue.getSettings($scope.profileVillage);
+            $scope.settings = settings.encode();
+            applyManualPolicy();
+            eventHandlers.updateSequences();
+            settingsView.generateSequences();
+        };
+        $scope.useDefaults = function () {
+            settings.resetProfile();
+            $scope.selectVillage();
+        };
         $scope.selectedTab = TAB_TYPES.SETTINGS;
         $scope.TAB_TYPES = TAB_TYPES;
         $scope.SETTINGS = SETTINGS;
@@ -802,6 +857,31 @@ define('two/builderQueue/ui', [
         $scope.openVillageInfo = windowDisplayService.openVillageInfo;
 
         settings.injectScope($scope);
+        applyManualPolicy();
+        $scope.labelGroups = Object.values(groupList.getGroups()).map(group => ({id: String(group.id), name: group.name}));
+        $scope.addLabelMapping = function () {
+            const group = $scope.labelGroups[0];
+            const sequence = $scope.sequences[0];
+            if (group && sequence) {
+                $scope.settings[SETTINGS.LABEL_MAPPINGS].push({group_id: group.id, sequence: sequence.value});
+            }
+        };
+        $scope.moveLabelMapping = function (index, direction) {
+            const mappings = $scope.settings[SETTINGS.LABEL_MAPPINGS];
+            const target = index + direction;
+            if (target >= 0 && target < mappings.length) {
+                [mappings[index], mappings[target]] = [mappings[target], mappings[index]];
+            }
+        };
+        $scope.chooseManualSequence = function () {
+            $scope.settings[SETTINGS.AUTO_SEQUENCE] = false;
+            $scope.settings[SETTINGS.MANUAL_OVERRIDE] = true;
+            settingsView.generateSequences();
+        };
+        $scope.followVillageLabels = function () {
+            $scope.settings[SETTINGS.MANUAL_OVERRIDE] = !$scope.settings[SETTINGS.AUTO_SEQUENCE];
+            settingsView.generateSequences();
+        };
         eventHandlers.updateGroups();
         eventHandlers.updateSequences();
 
@@ -832,9 +912,11 @@ define('two/builderQueue/ui', [
         editorView.generateBuildingSequence();
 
         const eventScope = new EventScope('twoverflow_builder_queue_window');
-        eventScope.register(eventTypeProvider.GROUPS_UPDATED, eventHandlers.updateGroups, true);
-        eventScope.register(eventTypeProvider.GROUPS_CREATED, eventHandlers.updateGroups, true);
-        eventScope.register(eventTypeProvider.GROUPS_DESTROYED, eventHandlers.updateGroups, true);
+        eventScope.register(eventTypeProvider.GROUPS_UPDATED, eventHandlers.groupsChanged, true);
+        eventScope.register(eventTypeProvider.GROUPS_CREATED, eventHandlers.groupsChanged, true);
+        eventScope.register(eventTypeProvider.GROUPS_DESTROYED, eventHandlers.groupsChanged, true);
+        eventScope.register(eventTypeProvider.GROUPS_VILLAGE_LINKED, eventHandlers.generateBuildingSequences, true);
+        eventScope.register(eventTypeProvider.GROUPS_VILLAGE_UNLINKED, eventHandlers.generateBuildingSequences, true);
         eventScope.register(eventTypeProvider.VILLAGE_SELECTED_CHANGED, eventHandlers.generateBuildingSequences, true);
         eventScope.register(eventTypeProvider.BUILDING_UPGRADING, eventHandlers.generateBuildingSequences, true);
         eventScope.register(eventTypeProvider.BUILDING_LEVEL_CHANGED, eventHandlers.generateBuildingSequences, true);
@@ -855,10 +937,15 @@ define('two/builderQueue/ui', [
         $scope.closeWindow = confirmCloseWindow;
 
         $scope.$watch('settings[SETTINGS.ACTIVE_SEQUENCE].value', function (newValue, oldValue) {
-            if (newValue !== oldValue) {
+            if (newValue !== oldValue && newValue !== settings.get(SETTINGS.ACTIVE_SEQUENCE)) {
+                $scope.settings[SETTINGS.MANUAL_OVERRIDE] = true;
+                $scope.settings[SETTINGS.AUTO_SEQUENCE] = false;
                 eventHandlers.generateBuildingSequences();
             }
         });
+        $scope.$watch('settings', function () {
+            settingsView.refreshPlanner();
+        }, true);
 
         $scope.$watch('editorView.selectedSequence.value', function (newValue, oldValue) {
             if (ignoreInputChange) {

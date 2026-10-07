@@ -2,7 +2,7 @@ define('two/recruiter/ui', [
     'two/ui', 'two/recruiter', 'two/recruiter/policy', 'two/Settings', 'two/EventScope', 'two/utils', 'humanInterval', 'queues/EventQueue'
 ], function (ui, recruiter, policy, Settings, EventScope, utils, humanInterval, eventQueue) {
     const labels = {
-        preview_only: 'Preview only', check_interval: 'Check interval', spend_percent: 'Maximum share of spendable resources per cycle (%)',
+        enabled: 'Recruit for this village', preview_only: 'Preview only (shared)', check_interval: 'Check interval (shared)', spend_percent: 'Maximum share of spendable resources per cycle (%)',
         max_batch: 'Maximum soldiers per batch', max_queue_jobs: 'Maximum barracks queue jobs',
         preserve_wood: 'Wood savings', preserve_clay: 'Clay savings', preserve_iron: 'Iron savings', preserve_food: 'Free population to preserve',
         building_wood: 'Additional wood budget for buildings', building_clay: 'Additional clay budget for buildings',
@@ -20,18 +20,34 @@ define('two/recruiter/ui', [
         ui.addStyle('___recruiter_css_style');
         button.addEventListener('click', function () {
             const scope = $rootScope.$new();
-            const settings = recruiter.getSettings();
+            let settings = recruiter.getSettings();
             const map = settings.settingsMap;
             const units = modelDataService.getGameData().getUnitsObject();
             const buildings = modelDataService.getGameData().getBuildings();
+            scope.profileVillage = String(modelDataService.getSelectedVillage().getId());
+            scope.profileVillages = [{value: '', name: 'Shared defaults'}].concat(
+                Object.values(modelDataService.getSelectedCharacter().getVillages()).map(village => ({
+                    value: String(village.getId()), name: typeof village.getName === 'function' ? village.getName() : 'Village ' + village.getId()
+                }))
+            );
+            settings = recruiter.getSettings(scope.profileVillage);
             settings.injectScope(scope);
             scope.labels = labels;
             scope.map = map;
             scope.controls = Object.keys(labels);
             scope.groups = Settings.encodeList(modelDataService.getGroupList().getGroups(), {disabled: false, type: 'groups'});
-            scope.units = Object.entries(units).filter(([name, data]) => data.building === 'barracks')
-                .map(([name]) => ({name, target: settings.get('targets')[name] || 0}));
-            scope.buildings = Object.keys(buildings).map(name => ({name, enabled: settings.get('protect_buildings').includes(name)}));
+            scope.selectVillage = function () {
+                settings = recruiter.getSettings(scope.profileVillage);
+                scope.settings = settings.encode();
+                scope.units = Object.entries(units).filter(([name, data]) => data.building === 'barracks')
+                    .map(([name]) => ({name, target: settings.get('targets')[name] || 0}));
+                scope.buildings = Object.keys(buildings).map(name => ({name, enabled: settings.get('protect_buildings').includes(name)}));
+            };
+            scope.useDefaults = function () {
+                settings.resetProfile();
+                scope.selectVillage();
+            };
+            scope.selectVillage();
             const update = function () {
                 scope.running = recruiter.isRunning();
                 scope.status = recruiter.status;
@@ -49,7 +65,8 @@ define('two/recruiter/ui', [
                     return false;
                 }
                 settings.setAll(values);
-                utils.notif('success', 'Recruiter settings saved');
+                scope.settings = settings.encode();
+                utils.notif('success', scope.profileVillage ? 'Recruiter settings saved for this village' : 'Recruiter defaults saved');
                 return true;
             };
             scope.toggle = function () {

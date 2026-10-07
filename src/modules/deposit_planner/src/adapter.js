@@ -42,13 +42,20 @@ define('two/depositPlanner/adapter', ['helper/time', 'conf/effectTypes', 'conf/t
             tribe ? tribe.isSkillActive(skills.loot_bonus) : false,
             tribe ? tribe.isSkillActive(skills.raid_speed) : false]);
         const current = model.getCurrentJob();
+        let runningRerollAllowed = false;
+        try {
+            const depositService = injector.get('resourceDepositService');
+            runningRerollAllowed = typeof depositService.enableRerollButton === 'function' && depositService.enableRerollButton() !== false;
+        } catch (error) {
+            // Unknown game capability must not permit an early item spend.
+        }
         const state = {now: Date.now() / 1000, progress: cap - left, target: config.target || cap, cap, milestones, context,
             jobs: (model.getReadyJobs() || []).map(normalizedJob),
             collectible: (model.getCollectibleJobs() || []).map(normalizedJob),
             current: current ? normalizedJob(current) : null,
             errandsReset: time.server2ClientTime(Number(info.time_next_reset)) / 1000,
             milestonesReset: time.server2ClientTime(Number(info.time_new_milestones)) / 1000,
-            cycleId: Number(info.time_new_milestones), itemCount, itemId: item && item.id, rerollsUsed};
+            cycleId: Number(info.time_new_milestones), runningRerollAllowed, itemCount, itemId: item && item.id, rerollsUsed};
         if (![state.errandsReset, state.milestonesReset].every(Number.isFinite)
             || state.current && !Number.isFinite(state.current.completedAt)) {
             throw new Error('Errand completion or reset time unavailable');

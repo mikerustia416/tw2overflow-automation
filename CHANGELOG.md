@@ -1,5 +1,14 @@
 # TWOverflow Changelog
 
+## Unreleased — 2026-10-07 (userscript 2.1.500.8)
+
+- **Village profiles:** Save Recruiter targets, resource budgets, protections, spending limits and enablement per village. Save Builder sequence choice, reserves, farm priority and enablement per village. Keep existing settings as shared defaults; remove a profile to inherit them again.
+- **Builder roles:** Add editable Offensive, Defensive and Resource sequences, automatic village-label selection, ordered custom label mappings and manual overrides. Preserve saved sequence edits and migrate role presets once.
+- **Dynamic Builder:** Add optional capacity/population priorities and affordable later-sequence detours during long waits, with a main-step delay budget, resource level/cycle limits and draft preview. Read live game fields for production, duration, population and storage.
+- **Builder:** Preserve per-village reserves on fallback farm upgrades and apply village/group selection to building-change callbacks. Persist shared sequence-library edits through copied settings.
+- **Deposit Planner:** Add approximate chance bands from whole-board history resampling and simulation uncertainty, cautious automatic reroll thresholds, incremental expected progress per item and a configurable item-value minimum. Learn confirmed automatic start/collection overhead without reducing the configured floor. Add advance lower-milestone projections while the last errand runs, with per-milestone ETA and item cost, plus an opt-in highest supported attainable milestone fallback that preserves the saved target and target holding. Show collected-plus-running totals and permit a guarded early item reroll only for Nothing-to-do with the last errand running; retain the pending guard if the running job disappears. Verify the native enabled button and official client reroll capability without submitting orders. Cache exact subset totals to keep larger reroll budgets responsive. Exclude running errands that cannot be collected before either reset buffer from forecasts.
+- **Validation:** All 167 offline tests, source lint, userscript syntax, startup dependency and generated/tracked artifact checks pass. Controller harnesses verify profile switching, save/reopen, label changes, manual overrides and dynamic draft previews without orders. Live read-only inspection confirms production rates, upgrade durations, storage and population fields; no live recruitment, building or deposit orders submitted.
+
 ## Unreleased — 2026-10-07 (userscript 2.1.500.7)
 
 - **Deposit Planner:** Replace generic settings errors with the specific invalid setting and its permitted range, show inline errors, and clear them when edited. Expand Desired forecast success to 10–100% while retaining its 95% default. Reject invalid settings in both preview and automatic modes without saving or starting.

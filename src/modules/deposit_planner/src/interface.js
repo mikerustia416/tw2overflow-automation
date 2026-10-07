@@ -3,6 +3,10 @@ define('two/depositPlanner/ui', [
 ], function (ui, planner, policy, EventScope, utils, events) {
     const labels = {
         preview_only: 'Preview only (no game actions)', auto_reroll: 'Allow automatic item rerolls',
+        confidence_guard: 'Use cautious forecast bands for automatic rerolls',
+        learn_action_delay: 'Learn start/collection overhead from confirmed errands',
+        milestone_fallback: 'Plan a lower attainable milestone when the target is unlikely',
+        min_gain_per_item: 'Minimum extra expected progress per reroll item',
         target: 'Target progress (0 = final milestone)', max_rerolls: 'Maximum rerolls per milestone cycle',
         reserve_items: 'Reroll items to keep', free_refresh_wait: 'Prefer a free refresh within (seconds)',
         deadline_buffer: 'Buffer before reset deadlines (seconds)', action_delay: 'Estimated start/collection overhead per errand (seconds)',
@@ -52,7 +56,7 @@ define('two/depositPlanner/ui', [
                 scope.reward = state && state.milestones.find(item => item.target >= state.target);
                 let eta = state ? state.now : Date.now() / 1000;
                 scope.jobs = scope.plan.jobs.map(job => {
-                    eta += job.duration + settings.get('action_delay');
+                    eta += job.duration + (scope.plan.timing ? scope.plan.timing.effectiveDelay : settings.get('action_delay'));
                     return {...job, eta};
                 });
             };

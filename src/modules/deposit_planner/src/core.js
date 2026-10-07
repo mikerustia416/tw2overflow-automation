@@ -6,7 +6,7 @@ define('two/depositPlanner', [
     'Lockr',
     'queues/EventQueue'
 ], function (Settings, map, policy, adapter, Lockr, events) {
-    const KEYS = {pending: 'deposit_planner_pending', samples: 'deposit_planner_samples', cycle: 'deposit_planner_cycle', revision: 'deposit_planner_board_revision'};
+    const KEYS = {pending: 'deposit_planner_pending', samples: 'deposit_planner_samples', cycle: 'deposit_planner_cycle', revision: 'deposit_planner_board_revision', timing: 'deposit_planner_timing'};
     let initialized = false;
     let running = false;
     let settings;
@@ -15,6 +15,9 @@ define('two/depositPlanner', [
     let lastInfoAt = 0;
     let pending;
     let samples = [];
+    let timings = [];
+    let activeTiming;
+    let ownedStart;
     let cycle;
     let boardRevision = 0;
     let wake;
@@ -62,12 +65,34 @@ define('two/depositPlanner', [
         const startConfirmed = pending.action === 'start' && (idMatches(state.current) || state.collectible.some(idMatches));
         const collectionConfirmed = pending.action === 'collect' && !all.some(idMatches)
             && (pending.ack || state.cycleId === pending.cycleId && state.progress > pending.progress);
-        const rerollConfirmed = pending.action === 'reroll' && (pending.rerollAck || adapter.boardKey(state) !== pending.boardKey)
+        const runningPreserved = pending.runningJobId === undefined || state.collectible.concat(state.current || []).some(job => String(job.id) === String(pending.runningJobId)
+            && Number.isFinite(job.completedAt) && Math.abs(job.completedAt - pending.runningCompletedAt) <= 1)
+            || state.cycleId === pending.cycleId && state.progress > pending.progress;
+        const rerollConfirmed = pending.action === 'reroll' && runningPreserved && (pending.rerollAck || adapter.boardKey(state) !== pending.boardKey)
             && (pending.itemDebited || state.itemCount < pending.itemCount);
+        if (startConfirmed && pending === ownedStart && pending.context === state.context && running && !config.preview_only) {
+            const job = idMatches(state.current) ? state.current : state.collectible.find(idMatches);
+            const delay = job.completedAt - job.duration - pending.sentAt;
+            activeTiming = Number.isFinite(delay) && delay >= -1 && delay <= 30
+                ? {jobId: pending.jobId, context: state.context, cycleId: state.cycleId, startDelay: Math.max(0, delay), completedAt: job.completedAt} : null;
+        }
+        if (collectionConfirmed && activeTiming && String(activeTiming.jobId) === String(pending.jobId)) {
+            const delay = activeTiming.startDelay + state.now - activeTiming.completedAt;
+            if (running && !config.preview_only && activeTiming.context === state.context && activeTiming.cycleId === state.cycleId
+                && Number.isFinite(delay) && delay >= 0 && delay <= 300) {
+                timings.push({context: state.context, at: state.now, delay});
+                timings = timings.filter(entry => entry.at >= state.now - 30 * 86400).slice(-60);
+                Lockr.set(KEYS.timing, timings);
+            }
+            activeTiming = null;
+        }
         if (startConfirmed || collectionConfirmed || rerollConfirmed) {
             pending = null;
             storePending();
             return true;
+        }
+        if (running && pending.action === 'reroll' && !runningPreserved) {
+            planner.stop('Running errand changed during an item reroll; check the game before resolving the guard');
         }
         if (running && state.now - pending.sentAt >= 30) {
             planner.stop('Pending ' + pending.action + ' needs a game check; automatic retry blocked');
@@ -123,26 +148,31 @@ define('two/depositPlanner', [
                 }
             }
             reconcile(state);
+            const timing = policy.timingEstimate(timings, state, config);
+            const effectiveConfig = {...config, action_delay: timing.effectiveDelay};
             const key = JSON.stringify([state.jobs,
                 state.current,
                 state.collectible,
                 state.progress,
                 state.target,
+                state.milestones,
+                state.runningRerollAllowed,
                 state.errandsReset,
                 state.milestonesReset,
                 state.itemCount,
                 state.rerollsUsed,
                 state.context,
                 Math.floor(state.now),
-                config,
+                effectiveConfig,
                 samples.length]);
-            plan = policy.plan(state, config, samples, function () {
+            plan = policy.plan(state, effectiveConfig, samples, function () {
                 if (key !== forecastKey) {
-                    forecastCache = policy.forecast(state, config, samples);
+                    forecastCache = policy.forecast(state, effectiveConfig, samples);
                     forecastKey = key;
                 }
                 return forecastCache;
             });
+            plan.timing = timing;
             armWake(state);
             if (pending) {
                 plan = {...plan, action: 'pending', reason: 'Waiting for game confirmation of ' + pending.action};
@@ -162,7 +192,7 @@ define('two/depositPlanner', [
         let route;
         let payload;
         if (action === 'reroll') {
-            if (!config.auto_reroll || policy.budgetFor(state, config) < 1 || !state.itemId || state.current || state.collectible.length) {
+            if (!config.auto_reroll || policy.budgetFor(state, config) < 1 || !state.itemId || state.current && !policy.canRerollRunning(state, config) || state.collectible.length) {
                 return;
             }
             // The premium reroll route spends Crowns. Only use the inventory item.
@@ -180,7 +210,8 @@ define('two/depositPlanner', [
             return;
         }
         pending = {action, jobId: job && job.id, itemId: state.itemId, itemCount: state.itemCount,
-            boardKey: adapter.boardKey(state), progress: state.progress, cycleId: state.cycleId, sentAt: Date.now() / 1000};
+            boardKey: adapter.boardKey(state), progress: state.progress, cycleId: state.cycleId, context: state.context, runningJobId: action === 'reroll' && state.current ? state.current.id : undefined,
+            runningCompletedAt: action === 'reroll' && state.current ? state.current.completedAt : undefined, sentAt: Date.now() / 1000};
         // Reserve the item budget before emitting, including uncertain responses.
         if (action === 'reroll') {
             cycle.spent++;
@@ -189,6 +220,9 @@ define('two/depositPlanner', [
         storePending();
         status = 'Awaiting ' + action + ' confirmation';
         const entry = pending;
+        if (action === 'start') {
+            ownedStart = entry;
+        }
         socketService.emit(route, payload, reply => {
             if (pending !== entry) {
                 return;
@@ -251,6 +285,8 @@ define('two/depositPlanner', [
                 return;
             }
             initialized = true;
+            timings = Lockr.get(KEYS.timing, []);
+            timings = Array.isArray(timings) ? timings.filter(entry => entry && typeof entry.context === 'string') : [];
             pending = Lockr.get(KEYS.pending, null);
             samples = Lockr.get(KEYS.samples, []);
             if (!Array.isArray(samples)) {
@@ -352,6 +388,8 @@ define('two/depositPlanner', [
         },
         stop: function (reason) {
             running = false;
+            activeTiming = null;
+            ownedStart = null;
             generation++;
             clearInterval(poll);
             clearTimeout(deferred);

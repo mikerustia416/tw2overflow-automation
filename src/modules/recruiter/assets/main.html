@@ -1,6 +1,9 @@
 <div id="two-recruiter" class="win-content two-window">
     <header class="win-head"><h2>Recruiter</h2><ul class="list-btn"><li><a href="#" class="size-34x34 btn-red icon-26x26-close" ng-click="closeWindow()"></a></li></ul></header>
     <div class="win-main" scrollbar=""><div class="box-paper footer"><div class="scroll-wrap">
+        <label>Configure <select class="textfield-border" ng-model="profileVillage" ng-options="village.value as village.name for village in profileVillages" ng-change="selectVillage()"></select></label>
+        <a href="#" class="btn-border btn-orange" ng-show="profileVillage" ng-click="useDefaults()">Use shared defaults for this village</a>
+        <p>Save before switching villages. Villages without a saved profile use shared defaults. Preview mode, check interval and group filter are shared.</p>
         <p>Maintain troop targets per village. Targets include owned troops away from home and soldiers still in training. Zero disables a unit type. Each cycle sends at most one batch per village; types are considered in the order shown.</p>
         <p>Spendable budget = current stock − savings − additional building budget − selected upcoming upgrade costs. Queued buildings and troops are already paid and are not charged twice. Food means free population.</p>
         <table class="tbl-border-light tbl-content tbl-medium-height">

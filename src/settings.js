@@ -460,3 +460,59 @@ define('two/Settings', [
 
     return Settings;
 });
+
+// Village profiles share the existing world/character-namespaced Settings storage.
+define('two/villageSettings', ['two/Settings'], function (Settings) {
+    return function (base, villageId, sharedKeys) {
+        if (!villageId) {
+            return base;
+        }
+        const view = Object.create(Settings.prototype);
+        view.settingsMap = Object.fromEntries(Object.entries(base.settingsMap).filter(([key]) => key !== 'village_profiles'));
+        view.defaults = base.defaults;
+        view.storageKey = base.storageKey;
+        view.events = {settingsChange: noop};
+        view.injected = false;
+        const refresh = function () {
+            const profiles = base.getRaw('village_profiles');
+            const profile = profiles && profiles[villageId] || {};
+            view.settings = Object.fromEntries(Object.keys(view.settingsMap).map(key => [key,
+                !sharedKeys.includes(key) && hasOwn.call(profile, key) ? angular.copy(profile[key]) : base.getRaw(key)]));
+        };
+        refresh();
+        // Read through to the base so sequence-library edits and other windows stay current.
+        for (const method of ['get', 'getRaw', 'getAll', 'encode', 'set', 'setAll']) {
+            view[method] = function (...args) {
+                refresh();
+                const changed = Settings.prototype[method].apply(view, args);
+                if (method === 'setAll' && !changed && !hasOwn.call(base.getRaw('village_profiles') || {}, villageId)) {
+                    view.store();
+                    view.updateScope();
+                    return true;
+                }
+                return changed;
+            };
+        }
+        view.store = function () {
+            const profiles = base.getRaw('village_profiles') || {};
+            const values = {};
+            profiles[villageId] = {};
+            for (const key of Object.keys(view.settingsMap)) {
+                if (sharedKeys.includes(key)) {
+                    values[key] = angular.copy(view.settings[key]);
+                } else {
+                    profiles[villageId][key] = angular.copy(view.settings[key]);
+                }
+            }
+            base.setAll({...values, village_profiles: profiles});
+        };
+        view.resetProfile = function () {
+            const profiles = base.getRaw('village_profiles') || {};
+            delete profiles[villageId];
+            base.set('village_profiles', profiles);
+            refresh();
+            view.updateScope();
+        };
+        return view;
+    };
+});

@@ -81,3 +81,23 @@ test('all invalid fields are reported and automatic mode enforces the same limit
     assert.match(f.scope.settingErrors.poll_seconds, /Refresh interval.*5 and 300/);
     assert.equal(f.settings.get('preview_only'), true, 'Invalid Save cannot partially switch modes');
 });
+
+test('new depositor controls persist and minimum item value uses the same numeric validation', () => {
+    const f = uiFixture();
+    for (const id of ['confidence_guard', 'learn_action_delay', 'milestone_fallback', 'min_gain_per_item']) {
+        assert.ok(f.scope.controls.includes(id));
+        assert.ok(f.scope.labels[id]);
+    }
+    assert.equal(f.scope.settings.confidence_guard, true);
+    assert.equal(f.scope.settings.learn_action_delay, true);
+    assert.equal(f.scope.settings.milestone_fallback, false);
+    f.scope.settings.milestone_fallback = true;
+    f.scope.settings.min_gain_per_item = 500;
+    f.scope.save();
+    assert.equal(f.settings.get('milestone_fallback'), true);
+    assert.equal(f.settings.get('min_gain_per_item'), 500);
+    f.scope.settings.min_gain_per_item = -1;
+    assert.equal(f.scope.save(), false);
+    assert.match(f.scope.settingErrors.min_gain_per_item, /whole number between 0 and 1000000/);
+    assert.equal(f.settings.get('min_gain_per_item'), 500);
+});

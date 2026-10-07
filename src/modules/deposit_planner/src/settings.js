@@ -4,6 +4,10 @@ define('two/depositPlanner/settings/map', [], function () {
     return {
         preview_only: checkbox(true),
         auto_reroll: checkbox(false),
+        confidence_guard: checkbox(true),
+        learn_action_delay: checkbox(true),
+        milestone_fallback: checkbox(false),
+        min_gain_per_item: number(0, 0, 1000000),
         target: number(0, 0, 1000000),
         max_rerolls: number(3, 0, 20),
         reserve_items: number(1, 0, 10000),

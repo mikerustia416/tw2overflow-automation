@@ -33,7 +33,10 @@ function setup (entry, options = {}) {
         f.setModule('conf/spyTypes', {});
     }
     if (entry.id !== 'farm_overflow') {
-        if (entry.id === 'builder_queue') f.setModule('two/builderQueue/defaultOrders', {Essential: ['barracks']});
+        if (entry.id === 'builder_queue') {
+            f.setModule('two/builderQueue/defaultOrders', {Essential: ['barracks']});
+            f.loadSource('src/modules/builder_queue/src/label-policy.js');
+        }
         for (const file of ['settings', 'policy', 'types', 'events', 'core']) {
             const source = 'src/modules/' + entry.id + '/src/' + file + '.js';
             if (require('node:fs').existsSync(require('node:path').join(__dirname, '..', source))) f.loadSource(source);
@@ -128,7 +131,7 @@ test('Builder settings restart discards old readiness callbacks and rejects miss
     g.setModule('conf/locationTypes', {});
     g.setModule('conf/upgradeabilityStates', {});
     g.setModule('two/builderQueue/defaultOrders', {Essential: ['barracks']});
-    for (const name of ['settings', 'types', 'events', 'core']) g.loadSource('src/modules/builder_queue/src/' + name + '.js');
+    for (const name of ['settings', 'types', 'events', 'label-policy', 'core']) g.loadSource('src/modules/builder_queue/src/' + name + '.js');
     g.loadSource('src/resource-budget.js');
     const builder = g.get('two/builderQueue');
     let reads = 0;

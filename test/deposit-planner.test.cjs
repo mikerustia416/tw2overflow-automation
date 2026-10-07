@@ -25,7 +25,7 @@ function setup(options = {}) {
         getTribeSkills: () => null
     });
     f.context.modelDataService.getSelectedCharacter().getResourceDeposit = () => model;
-    f.context.injector = {get: () => ({getStackedEffect: () => effect, getEffectValue: e => e.value})};
+    f.context.injector = {get: name => name === 'resourceDepositService' ? {enableRerollButton: () => options.runningRerollAllowed === true} : {getStackedEffect: () => effect, getEffectValue: e => e.value}};
     f.setModule('helper/time', {...clock, server2ClientTime: seconds => seconds * 1000 + (options.skew || 0)});
     f.setModule('conf/effectTypes', {INCREASED_CARRYING_CAPACITY: 'loot', RESOURCE_DEPOSIT_JOB_DURATION: 'speed'});
     f.setModule('conf/tribeSkillNames', {loot_bonus: 'loot', raid_speed: 'speed'});
@@ -251,4 +251,374 @@ test('reaching the target holds completed rewards and disabled-world restoration
     const disabled = setup({enabled: false, storageEntries: [['deposit_planner_active', true]]});
     assert.equal(disabled.planner.isRunning(), false);
     assert.equal(disabled.storage.get('deposit_planner_active'), false);
+});
+
+test('cautious forecast bands block unsupported automatic rerolls and distinguish certain visible plans', () => {
+    const f = setup();
+    const state = {...f.sampleState(), target: 500, errandsReset: 10000, milestonesReset: 2000};
+    const config = {...f.planner.getSettings().getAll(), auto_reroll: true, success_percent: 100};
+    const prediction = f.policy.forecast(state, config, history(state));
+    const option = prediction.options.find(item => item.action === 'reroll' && item.itemLimit === 1);
+    assert.equal(option.probability, 1);
+    assert.ok(option.lowerProbability < 1 && option.lowerProbability > 0.95);
+    assert.equal(option.upperProbability, 1);
+    assert.equal(prediction.best.action, 'wait', 'Simulation certainty cannot satisfy a 100% cautious threshold');
+    assert.equal(f.policy.plan(state, config, history(state)).action, 'wait');
+    assert.equal(f.policy.plan(state, {...config, confidence_guard: false}, history(state)).action, 'reroll');
+    assert.equal(f.policy.plan({...state, jobs: [job(1, 20, 500)]}, config, history(state)).action, 'start');
+});
+
+test('whole-board resampling exposes sensitivity to mixed historical boards', () => {
+    const f = setup();
+    const state = {...f.sampleState(), target: 500, errandsReset: 10000, milestonesReset: 1140};
+    const config = {...f.planner.getSettings().getAll(), auto_reroll: true, max_rerolls: 1, success_percent: 50};
+    const samples = history(state);
+    samples[0].jobs = samples[1].jobs = board().map(item => ({...item, duration: 1000}));
+    const prediction = f.policy.forecast(state, config, samples);
+    const option = prediction.options.find(item => item.action === 'reroll');
+    assert.ok(option.probability > 0 && option.probability < 1);
+    assert.ok(option.lowerProbability < option.probability && option.upperProbability > option.probability);
+    assert.equal(prediction.best.action, 'wait');
+    assert.match(prediction.reason, /unseen boards remain unknown/);
+});
+
+test('item efficiency uses incremental expected progress including failed target runs', () => {
+    const f = setup();
+    const state = {...f.sampleState(), target: 700, errandsReset: 10000, milestonesReset: 1140};
+    const config = {...f.planner.getSettings().getAll(), auto_reroll: true, max_rerolls: 1};
+    const prediction = f.policy.forecast(state, config, history(state));
+    const option = prediction.options.find(item => item.action === 'reroll');
+    assert.equal(option.probability, 0);
+    assert.equal(option.expectedGain, 600);
+    assert.equal(option.meanItems, 1);
+    assert.equal(option.gainPerItem, 600);
+    assert.equal(prediction.options.find(item => item.itemLimit === 0).gainPerItem, null);
+    const reachable = {...state, target: 500, milestonesReset: 2000};
+    assert.equal(f.policy.plan(reachable, config, history(state)).action, 'reroll');
+    assert.equal(f.policy.plan(reachable, {...config, min_gain_per_item: 501}, history(state)).action, 'wait');
+});
+
+test('item gain is measured against the best no-item strategy rather than total reward', () => {
+    const f = setup();
+    const state = {...f.sampleState(), target: 500, jobs: [job('visible', 10, 200)], errandsReset: 10000, milestonesReset: 2000};
+    const config = {...f.planner.getSettings().getAll(), auto_reroll: true, max_rerolls: 1};
+    const prediction = f.policy.forecast(state, config, history(state));
+    const option = prediction.options.find(item => item.action === 'reroll');
+    assert.equal(option.expectedGain, 500);
+    assert.equal(option.gainPerItem, 300);
+    assert.equal(prediction.options.find(item => item.action === 'continue' && item.itemLimit === 0).expectedGain, 200);
+});
+
+test('opt-in fallback chooses the highest visible reachable milestone without changing target holding', () => {
+    const f = setup({data: {jobs: [job(1, 10, 300), job(2, 10, 600)]}});
+    const state = f.sampleState();
+    const config = f.planner.getSettings().getAll();
+    const predict = () => ({ready: true, options: [], best: {action: 'wait', probability: 0, lowerProbability: 0}});
+    assert.equal(f.policy.plan(state, config, [], predict).action, 'wait');
+    const result = f.policy.plan(state, {...config, milestone_fallback: true}, [], predict);
+    assert.equal(result.action, 'start');
+    assert.equal(result.goalTarget, 750);
+    assert.equal(result.knownEta, state.now + 24);
+    assert.equal(result.state.target, 10000);
+    assert.equal(config.target, 0);
+    assert.notEqual(f.policy.plan({...state, progress: 900, jobs: []}, {...config, milestone_fallback: true}, [], predict).action, 'target');
+    assert.equal(f.policy.plan({...state, progress: 10000}, {...config, milestone_fallback: true}).action, 'target');
+});
+
+test('fallback obeys both reset buffers and needs no historical forecast to secure a visible milestone', () => {
+    const f = setup({data: {jobs: [job(1, 20, 300)]}});
+    const state = f.sampleState();
+    const config = {...f.planner.getSettings().getAll(), milestone_fallback: true};
+    assert.equal(f.policy.plan(state, config).goalTarget, 250);
+    for (const field of ['errandsReset', 'milestonesReset']) {
+        const result = f.policy.plan({...state, [field]: state.now + 80}, config);
+        assert.equal(result.action, 'wait');
+        assert.equal(result.fallback, undefined);
+    }
+    assert.equal(f.policy.plan({...state, progress: 300, jobs: [job(1, 20, 300)]}, config).fallback, undefined);
+});
+
+test('forecasts do not credit a running errand that crosses either reset buffer', () => {
+    const f = setup();
+    const state = {...f.sampleState(), target: 500, jobs: [], current: {...job(1, 100, 500), completedAt: 1100}, milestonesReset: 1120};
+    const config = {...f.planner.getSettings().getAll(), auto_reroll: false};
+    let prediction = f.policy.forecast(state, config, history(state));
+    assert.ok(prediction.options.every(option => option.probability === 0 && option.expectedGain === 0 && option.eta === null));
+    prediction = f.policy.forecast({...state, errandsReset: 1110, milestonesReset: 1170}, config, history(state));
+    assert.ok(prediction.options.every(option => option.probability === 0 && option.expectedGain === 0));
+});
+
+test('learned timing uses matching recent observations, the 90th percentile and the configured floor', () => {
+    const f = setup();
+    const state = f.sampleState(), config = f.planner.getSettings().getAll();
+    const entries = [3, 5, 15].map(delay => ({context: state.context, at: state.now, delay}));
+    entries.push({context: 'another village', at: state.now, delay: 200}, {context: state.context, at: state.now - 31 * 86400, delay: 200},
+        {context: state.context, at: state.now + 10, delay: 200}, {context: state.context, at: state.now, delay: 400});
+    assert.deepEqual(plain(f.policy.timingEstimate(entries, state, config)), {sampleCount: 3, learnedDelay: 15, effectiveDelay: 15});
+    assert.equal(f.policy.timingEstimate(entries.slice(0, 2), state, config).effectiveDelay, 2);
+    assert.equal(f.policy.timingEstimate(entries, state, {...config, action_delay: 30}).effectiveDelay, 30);
+    assert.equal(f.policy.timingEstimate(entries, state, {...config, learn_action_delay: false}).effectiveDelay, 2);
+});
+
+test('persisted timing changes exact deadline feasibility and survives reload', () => {
+    const f = setup();
+    const state = f.sampleState();
+    const timings = [10, 20, 30].map(delay => ({context: state.context, at: state.now, delay}));
+    const g = setup({storageEntries: [['deposit_planner_timing', timings]], data: {jobs: [job(1, 30, 500)], milestones: 1120}});
+    g.planner.getSettings().set('target', 500);
+    assert.equal(g.planner.getPlan().timing.effectiveDelay, 30);
+    assert.equal(g.planner.getPlan().knownEta, 1060);
+    g.data.milestones = 1110;
+    g.receiveInfo();
+    assert.equal(g.planner.getPlan().action, 'wait');
+    g.planner.getSettings().set('learn_action_delay', false);
+    assert.equal(g.planner.getPlan().action, 'start');
+    assert.equal(g.planner.getSettings().get('action_delay'), 2, 'Learning does not overwrite the configured floor');
+});
+
+test('timing learns only after owned start and collection are confirmed, never from preview or callback alone', async () => {
+    const f = setup({data: {jobs: [job(1, 20, 500)]}});
+    f.planner.getSettings().setAll({preview_only: false, target: 500});
+    f.planner.start();
+    await f.tick(4000);
+    const start = f.planner.getPending();
+    assert.equal(start.action, 'start');
+    f.data.jobs[0].state = 0;
+    f.data.jobs[0].time_completed = start.sentAt + 27;
+    f.receiveInfo();
+    assert.equal(f.storage.has('deposit_planner_timing'), false);
+    await f.tick(30000);
+    f.data.jobs[0].state = 1;
+    f.rootScope.$broadcast(f.events.RESOURCE_DEPOSIT_JOB_COLLECTIBLE);
+    await f.tick(1000);
+    assert.equal(f.planner.getPending().action, 'collect');
+    f.sends()[1].callback({});
+    assert.equal(f.storage.has('deposit_planner_timing'), false);
+    f.data.progress = 500;
+    f.data.jobs = [];
+    f.receiveInfo();
+    const observations = f.storage.get('deposit_planner_timing');
+    assert.equal(observations.length, 1);
+    assert.ok(Math.abs(observations[0].delay - (7 + 1035 - (start.sentAt + 27))) < 0.001);
+    const preview = setup({data: {jobs: [job(1, 10, 500)]}});
+    preview.planner.start();
+    await preview.tick(60000);
+    assert.equal(preview.storage.has('deposit_planner_timing'), false);
+});
+
+test('cached visible selection returns current game objects when rewards and durations repeat', () => {
+    const f = setup();
+    const original = [job(1, 10, 100, {resource: 'wood'})];
+    const updated = [job(1, 10, 100, {resource: 'iron', quality: 4})];
+    f.policy.optimize(original, 100, 20, 2);
+    const result = f.policy.optimize(updated, 100, 20, 2);
+    assert.equal(result.jobs[0], updated[0]);
+    assert.equal(result.jobs[0].resource, 'iron');
+    assert.equal(result.jobs[0].quality, 4);
+    assert.equal(f.policy.optimize(updated, 100, 11, 2).jobs.length, 0);
+});
+
+test('last running errand looks ahead to the highest supported lower milestone with abundant items', () => {
+    const f = setup();
+    const state = {...f.sampleState(), progress: 300, target: 10000, jobs: [],
+        current: {...job('last', 20, 200), completedAt: 1020}, errandsReset: 10000, milestonesReset: 1190, itemCount: 50};
+    const config = {...f.planner.getSettings().getAll(), auto_reroll: true, max_rerolls: 20, milestone_fallback: true};
+    const result = f.policy.plan(state, config, history(state));
+    assert.equal(result.action, 'wait');
+    assert.equal(result.state.target, 10000);
+    assert.equal(result.forecast.options.some(option => option.probability > 0), false);
+    assert.equal(result.forecast.bestMilestone.target, 750);
+    assert.equal(result.attainableMilestone.target, 750);
+    assert.equal(result.goalTarget, 750);
+    assert.equal(result.fallback, true);
+    assert.equal(result.attainableMilestone.best.meanItems, 1);
+    assert.equal(result.attainableMilestone.best.eta, 1060, 'ETA follows individual collections, not the whole sampled board');
+    assert.ok(result.attainableMilestone.best.lowerProbability >= 0.95);
+    assert.equal(result.forecast.milestones.find(item => item.target === 1500).supported, false);
+    const disabled = f.policy.plan(state, {...config, milestone_fallback: false}, history(state));
+    assert.equal(disabled.attainableMilestone.target, 750, 'Look-ahead remains visible with automatic fallback off');
+    assert.equal(disabled.fallback, false);
+});
+
+test('after last collection, fallback can reroll toward a supported lower milestone while retaining the saved target', () => {
+    const f = setup();
+    const state = {...f.sampleState(), now: 1022, progress: 500, target: 10000, jobs: [],
+        current: null, errandsReset: 10000, milestonesReset: 1190, itemCount: 50};
+    const config = {...f.planner.getSettings().getAll(), auto_reroll: true, max_rerolls: 20, milestone_fallback: true};
+    const result = f.policy.plan(state, config, history(state));
+    assert.equal(result.action, 'reroll');
+    assert.equal(result.goalTarget, 750);
+    assert.equal(result.fallback, true);
+    assert.equal(result.state.target, 10000);
+    const noFallback = f.policy.plan(state, {...config, milestone_fallback: false}, history(state));
+    assert.equal(noFallback.action, 'wait');
+});
+
+test('milestone look-ahead respects inventory reserves, cycle usage, disabled rerolls and collection deadlines', () => {
+    const f = setup();
+    const state = {...f.sampleState(), progress: 300, jobs: [], current: {...job(1, 20, 200), completedAt: 1020},
+        errandsReset: 10000, milestonesReset: 1190, itemCount: 50};
+    const config = {...f.planner.getSettings().getAll(), auto_reroll: true, max_rerolls: 20, milestone_fallback: true};
+    for (const [snapshot, options] of [[{...state, itemCount: 1}, config],
+        [{...state, rerollsUsed: 20}, config], [state, {...config, auto_reroll: false}],
+        [state, {...config, min_gain_per_item: 1000}]]) {
+        const result = f.policy.plan(snapshot, options, history(state));
+        assert.equal(result.attainableMilestone, undefined);
+        assert.equal(result.action, 'wait');
+        assert.equal(result.fallback, false);
+    }
+    const expired = f.policy.plan({...state, current: {...state.current, completedAt: 1140}}, config, history(state));
+    assert.equal(expired.attainableMilestone, undefined);
+    assert.equal(expired.fallback, false);
+});
+
+test('a known current-errand milestone is shown while learning without inventing future rewards', () => {
+    const f = setup();
+    const state = {...f.sampleState(), current: {...job(1, 20, 800), completedAt: 1020}};
+    const config = {...f.planner.getSettings().getAll(), milestone_fallback: true, auto_reroll: true};
+    const result = f.policy.plan(state, config, history(state, 4));
+    assert.equal(result.forecast.ready, false);
+    assert.equal(result.attainableMilestone.target, 750);
+    assert.equal(result.attainableMilestone.known, true);
+    assert.equal(result.attainableMilestone.best.meanItems, 0);
+    assert.equal(result.action, 'wait');
+    assert.equal(result.goalTarget, 750);
+    const elapsed = f.policy.plan({...state, errandsReset: 1040}, config, history(state, 4));
+    assert.equal(elapsed.attainableMilestone, undefined);
+});
+
+test('automatic last-errand look-ahead emits no reroll until collection is confirmed', async () => {
+    const seed = setup();
+    const observations = history(seed.sampleState());
+    const f = setup({storageEntries: [['deposit_planner_samples', observations]],
+        data: {progress: 300, reset: 10000, milestones: 1190, jobs: [job('last', 20, 200, {state: 0, time_completed: 1020})]}});
+    f.planner.getSettings().setAll({preview_only: false, auto_reroll: true, milestone_fallback: true, max_rerolls: 20});
+    f.planner.start();
+    await f.tick(10000);
+    assert.equal(f.planner.getPlan().goalTarget, 750);
+    assert.equal(f.sends().length, 0);
+    await f.tick(11000);
+    f.data.jobs[0].state = 1;
+    f.rootScope.$broadcast(f.events.RESOURCE_DEPOSIT_JOB_COLLECTIBLE);
+    await f.tick(1000);
+    assert.equal(f.sends().length, 1);
+    assert.equal(f.sends()[0].route, 'RESOURCE_DEPOSIT_COLLECT');
+    f.sends()[0].callback({});
+    await f.tick(1000);
+    assert.equal(f.sends().length, 1, 'Callback alone cannot unlock a reroll');
+    f.data.jobs = [];
+    f.data.progress = 500;
+    f.receiveInfo();
+    await f.tick(1000);
+    assert.equal(f.sends().length, 2);
+    assert.equal(f.sends()[1].route, 'PREMIUM_USE_ITEM');
+    assert.equal(f.storage.get('deposit_planner_cycle').spent, 1);
+    assert.equal(f.planner.getPlan().state.target, 10000);
+});
+
+test('Nothing-to-do preview totals the last running reward and can recommend a verified early item reroll', () => {
+    const f = setup();
+    const state = {...f.sampleState(), progress: 300, target: 10000, jobs: [], runningRerollAllowed: true,
+        current: {...job('last', 20, 200), completedAt: 1020}, errandsReset: 10000, milestonesReset: 1190};
+    const config = {...f.planner.getSettings().getAll(), auto_reroll: true, milestone_fallback: true};
+    const result = f.policy.plan(state, config, history(state));
+    assert.equal(result.action, 'reroll');
+    assert.equal(result.earlyReroll, true);
+    assert.equal(result.goalTarget, 750);
+    assert.equal(result.runningPreview.collectedTotal, 300);
+    assert.equal(result.runningPreview.runningReward, 200);
+    assert.equal(result.runningPreview.projectedTotal, 500);
+    assert.equal(result.runningPreview.remainingGap, 9500);
+    assert.equal(result.runningPreview.canRerollNow, true);
+    assert.equal(result.state.progress, 300, 'Preview must not credit the uncollected reward');
+    assert.equal(result.state.current.id, 'last');
+});
+
+test('proactive preview and early reroll are limited to an empty errand list and one still-running last job', () => {
+    const f = setup();
+    const state = {...f.sampleState(), progress: 300, jobs: [], runningRerollAllowed: true,
+        current: {...job('last', 20, 200), completedAt: 1020}, errandsReset: 10000, milestonesReset: 1190};
+    const config = {...f.planner.getSettings().getAll(), auto_reroll: true, milestone_fallback: true};
+    const ready = {...state, jobs: [job('ready', 10, 100)]};
+    assert.equal(f.policy.canRerollRunning(ready, config), false);
+    assert.equal(f.policy.plan(ready, config, history(state)).runningPreview, null);
+    const completed = {...state, collectible: [job('completed', 10, 100)]};
+    assert.equal(f.policy.canRerollRunning(completed, config), false);
+    assert.equal(f.policy.plan(completed, config, history(state)).action, 'collect');
+    assert.equal(f.policy.canRerollRunning({...state, current: {...state.current, completedAt: state.now}}, config), false);
+    assert.equal(f.policy.canRerollRunning({...state, current: null}, config), false);
+    assert.equal(f.policy.plan({...state, current: {...state.current, completedAt: state.now}}, config, history(state)).runningPreview, null);
+});
+
+test('last-errand preview explains target coverage, item limits, missing capability, learning and deadline failures', () => {
+    const f = setup();
+    const state = {...f.sampleState(), progress: 300, jobs: [], runningRerollAllowed: true,
+        current: {...job('last', 20, 200), completedAt: 1020}, errandsReset: 10000, milestonesReset: 1190};
+    const config = {...f.planner.getSettings().getAll(), auto_reroll: true, milestone_fallback: true};
+    for (const [snapshot, options, reason] of [[{...state, target: 500}, config, /covers the target/],
+        [{...state, itemCount: 1}, config, /No items available/], [{...state, rerollsUsed: 3}, config, /No items available/],
+        [{...state, runningRerollAllowed: false}, config, /capability/], [state, {...config, auto_reroll: false}, /disabled/],
+        [{...state, milestonesReset: 1070}, config, /cannot be safely collected/]]) {
+        const result = f.policy.plan(snapshot, options, history(state));
+        assert.equal(result.action, 'wait');
+        assert.equal(result.runningPreview.canRerollNow, false);
+        assert.match(result.runningPreview.reason, reason);
+    }
+    const learning = f.policy.plan(state, config, history(state, 4));
+    assert.equal(learning.runningPreview.canRerollNow, false);
+    assert.match(learning.runningPreview.reason, /Learning complete boards/);
+    const over = f.policy.plan({...state, progress: 9900, current: {...state.current, amount: 200}}, config, history(state));
+    assert.equal(over.runningPreview.projectedTotal, 10100, 'Total includes reward overshoot');
+    assert.equal(over.runningPreview.remainingGap, 0);
+});
+
+test('early automatic reroll preserves the active errand and waits for inventory and board confirmation', async () => {
+    const seed = setup();
+    const f = setup({runningRerollAllowed: true, storageEntries: [['deposit_planner_samples', history(seed.sampleState())]],
+        data: {progress: 300, reset: 10000, milestones: 1190, jobs: [job('last', 20, 200, {state: 0, time_completed: 1020})]}});
+    f.planner.getSettings().setAll({preview_only: false, auto_reroll: true, milestone_fallback: true});
+    f.planner.start();
+    await f.tick(5000);
+    assert.equal(f.sends().length, 1);
+    assert.equal(f.sends()[0].route, 'PREMIUM_USE_ITEM');
+    assert.equal(f.planner.getPending().runningJobId, 'last');
+    assert.equal(f.data.jobs[0].state, 0);
+    assert.equal(f.storage.get('deposit_planner_cycle').spent, 1);
+    f.data.jobs.push(...board());
+    f.receiveInfo();
+    assert.ok(f.planner.getPending(), 'Changed board alone cannot acknowledge item use');
+    f.setItem({id: 42, type: 'resource_deposit_reroll', amount: 8});
+    f.receiveInfo();
+    assert.equal(f.planner.getPending(), null);
+    await f.tick(1000);
+    assert.equal(f.sends().length, 1, 'New ready jobs prevent another proactive reroll, and no second errand can start');
+});
+
+test('an early reroll that loses the running job retains the guard and stops automation', async () => {
+    const seed = setup();
+    const f = setup({runningRerollAllowed: true, storageEntries: [['deposit_planner_samples', history(seed.sampleState())]],
+        data: {progress: 300, reset: 10000, milestones: 1190, jobs: [job('last', 20, 200, {state: 0, time_completed: 1020})]}});
+    f.planner.getSettings().setAll({preview_only: false, auto_reroll: true, milestone_fallback: true});
+    f.planner.start();
+    await f.tick(5000);
+    f.data.jobs = board();
+    f.setItem({id: 42, type: 'resource_deposit_reroll', amount: 8});
+    f.receiveInfo();
+    assert.equal(f.planner.isRunning(), false);
+    assert.ok(f.planner.getPending());
+    assert.match(f.planner.getStatus(), /Running errand changed/);
+    await f.tick(60000);
+    assert.equal(f.sends().length, 1);
+});
+
+test('Nothing-to-do early reroll recommendation remains read-only in preview mode', async () => {
+    const seed = setup();
+    const f = setup({runningRerollAllowed: true, storageEntries: [['deposit_planner_samples', history(seed.sampleState())]],
+        data: {progress: 300, reset: 10000, milestones: 1190, jobs: [job('last', 20, 200, {state: 0, time_completed: 1020})]}});
+    f.planner.getSettings().setAll({auto_reroll: true, milestone_fallback: true});
+    f.planner.start();
+    await f.tick(5000);
+    assert.equal(f.planner.getPlan().runningPreview.canRerollNow, true);
+    assert.equal(f.sends().length, 0);
+    assert.equal(f.storage.get('deposit_planner_cycle').spent, 0);
 });

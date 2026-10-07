@@ -37,6 +37,9 @@
             <div class="scroll-wrap">
                 <div ng-show="selectedTab === TAB_TYPES.SETTINGS">
                     <h5 class="twx-section">{{ 'settings' | i18n:loc.ale:'builder_queue' }}</h5>
+                    <label>Configure <select class="textfield-border" ng-model="profileVillage" ng-options="village.value as village.name for village in profileVillages" ng-change="selectVillage()"></select></label>
+                    <a href="#" class="btn-border btn-orange" ng-show="profileVillage" ng-click="useDefaults()">Use shared defaults for this village</a>
+                    <p>Save before switching villages. Villages without a saved profile use shared defaults. Group filter and sequence library are shared.</p>
                     <table class="settings tbl-border-light tbl-striped">
                         <colgroup>
                             <col width="40%">
@@ -44,10 +47,12 @@
                             <col width="60px">
                         </colgroup>
                         <tbody>
+                            <tr><td colspan="2">Build in this village</td><td class="text-center"><div switch-slider="" enabled="true" border="true" value="settings[SETTINGS.ENABLED]" vertical="false" size="'56x28'"></div></td></tr>
                             <tr>
                                 <td><span class="ff-cell-fix">{{ 'settings_village_groups' | i18n:loc.ale:'builder_queue' }}</span></td>
                                 <td colspan="2" class="text-right"><div select="" list="groups" selected="settings[SETTINGS.GROUP_VILLAGES]" drop-down="true"></div></td>
                             </tr>
+                            <tr><td colspan="2">Follow village role label</td><td class="text-center"><input type="checkbox" ng-model="settings[SETTINGS.AUTO_SEQUENCE]" ng-change="followVillageLabels()"></td></tr>
                             <tr ng-show="settingsView.sequencesAvail">
                                 <td><span class="ff-cell-fix">{{ 'settings_building_sequence' | i18n:loc.ale:'builder_queue' }}</span></td>
                                 <td colspan="2" class="text-right"><div select="" list="sequences" selected="settings[SETTINGS.ACTIVE_SEQUENCE]" drop-down="true"></div></td>
@@ -71,8 +76,36 @@
                                 <td colspan="2"><span class="ff-cell-fix">{{ 'settings_priorize_farm' | i18n:loc.ale:'builder_queue' }}</span></td>
                                 <td class="text-center"><div switch-slider="" enabled="true" border="true" value="settings[SETTINGS.PRIORIZE_FARM]" vertical="false" size="'56x28'"></div></td>
                             </tr>
+                            <tr><td colspan="2">Use dynamic building priorities</td><td class="text-center"><input type="checkbox" ng-model="settings[SETTINGS.DYNAMIC]"></td></tr>
+                            <tr ng-show="settings[SETTINGS.DYNAMIC]"><td colspan="2">Prioritize warehouse capacity</td><td class="text-center"><input type="checkbox" ng-model="settings[SETTINGS.PRIORIZE_WAREHOUSE]"></td></tr>
+                            <tr ng-show="settings[SETTINGS.DYNAMIC]"><td colspan="2">Try another upgrade after waiting (minutes)</td><td><input type="number" min="1" max="1440" class="textfield-border" ng-model="settings[SETTINGS.WAIT_MINUTES]"></td></tr>
+                            <tr ng-show="settings[SETTINGS.DYNAMIC]"><td colspan="2">Maximum extra delay to sequence step (minutes)</td><td><input type="number" min="0" max="1440" class="textfield-border" ng-model="settings[SETTINGS.MAX_DELAY_MINUTES]"></td></tr>
+                            <tr ng-show="settings[SETTINGS.DYNAMIC]"><td colspan="2">Upgrade warehouse when any resource reaches (%)</td><td><input type="number" min="50" max="100" class="textfield-border" ng-model="settings[SETTINGS.WAREHOUSE_PERCENT]"></td></tr>
+                            <tr ng-show="settings[SETTINGS.DYNAMIC]"><td colspan="2">Keep free population above</td><td><input type="number" min="0" max="10000" class="textfield-border" ng-model="settings[SETTINGS.MINIMUM_FOOD]"></td></tr>
+                            <tr ng-show="settings[SETTINGS.DYNAMIC]"><td colspan="2">Maximum resource-building level for detours</td><td><input type="number" min="0" max="30" class="textfield-border" ng-model="settings[SETTINGS.RESOURCE_LEVEL_LIMIT]"></td></tr>
+                            <tr ng-show="settings[SETTINGS.DYNAMIC]"><td colspan="2">Resource detours per blocked sequence step</td><td><input type="number" min="0" max="10" class="textfield-border" ng-model="settings[SETTINGS.RESOURCE_DETOUR_LIMIT]"></td></tr>
                         </tbody>
                     </table>
+                    <p>Dynamic upgrades stay within sequence targets. Necessary farm or storage repairs may exceed the delay limit. Other detours require known production and queue timing; resource upgrades never assume an unconfirmed production gain.</p>
+
+                    <h5 class="twx-section">Village role labels</h5>
+                    <p>Offensive, Defensive and Resource labels select their matching presets. When labels overlap, the first matching mapping below wins; otherwise Offensive, Defensive, then Resource. Choosing a sequence manually turns label selection off for this village.</p>
+                    <table class="tbl-border-light tbl-striped">
+                        <tr ng-repeat="mapping in settings[SETTINGS.LABEL_MAPPINGS] track by $index">
+                            <td><select class="textfield-border" ng-model="mapping.group_id" ng-options="group.id as group.name for group in labelGroups"></select></td>
+                            <td><select class="textfield-border" ng-model="mapping.sequence" ng-options="sequence.value as sequence.name for sequence in sequences"></select></td>
+                            <td><a href="#" ng-click="moveLabelMapping($index, -1)">Up</a> <a href="#" ng-click="moveLabelMapping($index, 1)">Down</a> <a href="#" ng-click="settings[SETTINGS.LABEL_MAPPINGS].splice($index, 1)">Remove</a></td>
+                        </tr>
+                    </table>
+                    <a href="#" class="btn-border btn-orange" ng-click="addLabelMapping()">Add shared label mapping</a>
+                    <a href="#" class="btn-border btn-orange" ng-click="chooseManualSequence()">Use selected sequence manually</a>
+                    <h5 class="twx-section">Next upgrade preview</h5>
+                    <a href="#" class="btn-border btn-orange" ng-click="settingsView.generateSequences()">Refresh preview</a>
+                    <p>Effective sequence: <strong>{{ settingsView.plan.sequence }}</strong> ({{ settingsView.plan.sequenceSource }}<span ng-if="settingsView.plan.groupName">: {{ settingsView.plan.groupName }}</span>).</p>
+                    <p ng-if="settingsView.plan.building"><span class="building-icon icon-20x20-building-{{ settingsView.plan.building }}"></span> {{ settingsView.plan.building | i18n:loc.ale:'building_names' }}<span ng-if="settingsView.plan.detour"> — brought forward from this sequence</span>.</p>
+                    <p>{{ settingsView.plan.reason }}</p>
+                    <p ng-if="settingsView.plan.main">Sequence step: {{ settingsView.plan.main | i18n:loc.ale:'building_names' }} {{ settingsView.plan.mainLevel }}. Estimated resource wait: {{ settingsView.plan.waitLabel }}.<span ng-if="settingsView.plan.detour"> Extra delay: {{ settingsView.plan.delayLabel }}.</span></p>
+                    <p>Preview uses these draft settings and the current village data. Save to apply the configuration.</p>
 
                     <h5 class="twx-section">{{ 'settings_building_sequence' | i18n:loc.ale:'builder_queue' }}</h5>
 
@@ -241,9 +274,9 @@
                             </tr>
                         </thead>
                         <tbody>
-                            <tr ng-repeat="log in logsView.logs">
+                            <tr ng-repeat="log in logsView.logs track by $index">
                                 <td><a class="link" ng-click="openVillageInfo(log.villageId)"><span class="icon-20x20-village"></span> {{ villagesLabel[log.villageId] }}</a></td>
-                                <td><span class="building-icon icon-20x20-building-{{ log.building }}"></span> {{ log.building | i18n:loc.ale:'building_names' }}</td>
+                                <td><span class="building-icon icon-20x20-building-{{ log.building }}"></span> {{ log.building | i18n:loc.ale:'building_names' }}<br><small>{{ log.reason }}</small></td>
                                 <td>{{ log.level }}</td>
                                 <td>{{ log.time | readableDateFilter:loc.ale:GAME_TIMEZONE:GAME_TIME_OFFSET }}</td>
                             </tr>

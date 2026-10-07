@@ -295,6 +295,7 @@ test('BuilderQueue respects recruitment in-flight resources in a combined build'
     village.buildingQueue.getAmountJobs = () => 0;
     village.buildingQueue.getUnlockedSlots = () => 2;
     village.buildingData = {getBuildingLevels: () => ({barracks: 5, farm: 3})};
+    village.getBuildingData = () => ({getDataForBuilding: name => f.levels[name], getBuildingLevels: village.buildingData.getBuildingLevels});
     f.levels.barracks.upgradeability = 'possible';
     const originalEmit = f.context.socketService.emit;
     f.context.socketService.emit = (route, data, callback) => {
@@ -307,7 +308,7 @@ test('BuilderQueue respects recruitment in-flight resources in a combined build'
         premiumActionService: {}, buildingQueueService: {canBeFinishedForFree: () => false}
     }[name])};
     for (const file of ['src/modules/builder_queue/src/settings.js', 'src/modules/builder_queue/src/types.js',
-        'src/modules/builder_queue/src/core.js']) f.loadSource(file);
+        'src/modules/builder_queue/src/label-policy.js', 'src/modules/builder_queue/src/core.js']) f.loadSource(file);
     f.setModule('conf/buildingTypes', {BARRACKS: 'barracks', FARM: 'farm'});
     f.setModule('conf/locationTypes', {MASS_SCREEN: 'mass'});
     f.setModule('conf/upgradeabilityStates', {POSSIBLE: 'possible'});
@@ -422,4 +423,51 @@ test('an old actual-order timeout cannot stop a running preview', async () => {
     await f.tick(30000);
     assert.equal(f.recruiter.isRunning(), true);
     assert.equal(f.requests.length, 1);
+});
+
+test('Recruiter village profiles isolate targets, reserves, upcoming buildings and persist after reload', () => {
+    const f = recruitmentFixture({villageIds: [1, 2, 3]});
+    f.recruiter.getSettings(1).setAll({targets: {spear: 30}, preserve_wood: 7000, protect_buildings: ['farm']});
+    f.recruiter.getSettings(2).setAll({targets: {axe: 10}, preserve_wood: 1000, protect_buildings: []});
+    f.recruiter.start();
+    const [one, two, inherited] = f.recruiter.getPlans();
+    assert.deepEqual(plain(one.deficits).map(item => item.name), ['spear']);
+    assert.equal(one.orders[0].amount, 10);
+    assert.equal(one.protected.wood, 7500);
+    assert.equal(two.orders[0].unit_type, 'axe');
+    assert.equal(two.orders[0].amount, 10);
+    assert.equal(two.protected.wood, 1000);
+    assert.equal(inherited.deficits[0].target, 100);
+    assert.equal(f.requests.length, 0);
+    const restored = recruitmentFixture({villageIds: [1, 2, 3], storageEntries: [...f.storage.entries()]});
+    assert.deepEqual(plain(restored.recruiter.getSettings(1).get('targets')), {spear: 30});
+    assert.deepEqual(plain(restored.recruiter.getSettings(2).get('targets')), {axe: 10});
+    assert.equal(restored.recruiter.getSettings(3).get('preserve_wood'), 1000);
+});
+
+test('Recruiter village disablement and invalid profiles cannot submit orders in those villages', () => {
+    const f = recruitmentFixture({villageIds: [1, 2, 3], config: {preview_only: false}});
+    f.recruiter.getSettings(1).set('enabled', false);
+    f.recruiter.getSettings(2).set('targets', {spear: -1});
+    f.recruiter.start();
+    assert.deepEqual(f.requests.map(request => request.village_id), [3]);
+    assert.match(f.recruiter.getPlans()[0].reason, /disabled/);
+    assert.match(f.recruiter.getPlans()[1].reason, /Invalid village/);
+});
+
+test('saved profiles freeze local values, share timing/preview, and can return to defaults', () => {
+    const f = recruitmentFixture({villageIds: [1, 2]});
+    const profile = f.recruiter.getSettings(1);
+    profile.setAll(profile.getAll()); // Save an unchanged inherited configuration.
+    f.recruiter.getSettings().set('targets', {axe: 5});
+    f.recruiter.getSettings().set('preserve_wood', 8000);
+    assert.equal(profile.get('targets').spear, 100);
+    assert.equal(profile.get('preserve_wood'), 1000);
+    assert.equal(f.recruiter.getSettings(2).get('targets').axe, 5);
+    profile.set('check_interval', '10 seconds');
+    assert.equal(f.recruiter.getSettings(2).get('check_interval'), 10000);
+    assert.equal(f.recruiter.getSettings().get('check_interval'), 10000);
+    profile.resetProfile();
+    assert.deepEqual(plain(profile.get('targets')), {axe: 5});
+    assert.equal(profile.get('preserve_wood'), 8000);
 });

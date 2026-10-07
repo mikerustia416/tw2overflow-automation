@@ -1,5 +1,6 @@
 define('two/recruiter', [
     'two/Settings',
+    'two/villageSettings',
     'two/recruiter/settings/map',
     'two/recruiter/policy',
     'two/resourceBudget',
@@ -7,7 +8,7 @@ define('two/recruiter', [
     'queues/EventQueue',
     'Lockr',
     'helper/time'
-], function (Settings, settingsMap, policy, resourceBudget, ready, eventQueue, Lockr, time) {
+], function (Settings, villageSettings, settingsMap, policy, resourceBudget, ready, eventQueue, Lockr, time) {
     let initialized = false;
     let running = false;
     let settings;
@@ -34,7 +35,9 @@ define('two/recruiter', [
         return ids.map(id => player.getVillage(id)).filter(Boolean);
     };
 
-    const snapshot = function (village) {
+    const villageConfig = villageId => villageSettings(settings, villageId, ['preview_only', 'check_interval', 'enabled_groups']).getAll();
+
+    const snapshot = function (village, config = villageConfig(village.getId())) {
         buildingService.compute(village);
         const resourceModel = village.getResources();
         const computed = resourceModel.getComputed();
@@ -133,7 +136,16 @@ define('two/recruiter', [
                 break;
             }
             try {
-                const state = snapshot(village);
+                const config = villageConfig(village.getId());
+                if (!policy.validSettings(config, settingsMap, unitData(), buildingData())) {
+                    plans.push({villageId: village.getId(), reason: 'Invalid village recruitment settings', orders: []});
+                    continue;
+                }
+                if (!config.enabled) {
+                    plans.push({villageId: village.getId(), reason: 'Recruitment disabled for this village', orders: []});
+                    continue;
+                }
+                const state = snapshot(village, config);
                 const plan = policy.plan(state, config, unitData());
                 plan.villageId = village.getId();
                 plans.push(plan);
@@ -278,7 +290,7 @@ define('two/recruiter', [
         },
         isRunning: () => running,
         isInitialized: () => initialized,
-        getSettings: () => settings,
+        getSettings: villageId => villageSettings(settings, villageId, ['preview_only', 'check_interval', 'enabled_groups']),
         resolvePending: function (villageId) {
             if (running) {
                 return false;

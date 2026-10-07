@@ -1,6 +1,8 @@
 define('two/recruiter/settings/map', [], function () {
     const number = (value, max) => ({default: value, updates: [], inputType: 'number', min: 0, max});
     return {
+        village_profiles: {default: {}, updates: [], inputType: 'profiles'},
+        enabled: {default: true, updates: [], inputType: 'checkbox'},
         preview_only: {default: true, updates: [], inputType: 'checkbox'},
         check_interval: {default: '1 minute', updates: [], inputType: 'readable_time'},
         enabled_groups: {default: [], updates: [], inputType: 'select', multiSelect: true, type: 'groups', disabledOption: true},

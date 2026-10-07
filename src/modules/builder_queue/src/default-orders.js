@@ -571,5 +571,65 @@ define('two/builderQueue/defaultOrders', [
         BUILDING_TYPES.FARM // 30
     ];
 
+    // Editable city plans: each phase is an ordered list of [building, target level].
+    // Targets are cumulative from level 0; a phase alternates one level per building
+    // until its targets are reached. Put prerequisite HQ phases before unlocks.
+    // HQ gates and maximum targets follow the verified game building data;
+    // live game max levels and upgradeability remain authoritative in the planner.
+    const B = BUILDING_TYPES;
+    const foundation = [
+        [[B.HEADQUARTER, 1]],
+        [[B.FARM, 1], [B.WAREHOUSE, 1], [B.RALLY_POINT, 1]],
+        [[B.HEADQUARTER, 2]],
+        [[B.BARRACKS, 1]],
+        [[B.WAREHOUSE, 5], [B.FARM, 3], [B.TIMBER_CAMP, 6], [B.CLAY_PIT, 6], [B.IRON_MINE, 6]],
+        [[B.HEADQUARTER, 5], [B.WAREHOUSE, 8], [B.FARM, 8], [B.TIMBER_CAMP, 10], [B.CLAY_PIT, 10], [B.IRON_MINE, 10]],
+        [[B.WALL, 1]],
+        [[B.HEADQUARTER, 6]],
+        [[B.MARKET, 1], [B.HOSPITAL, 1]]
+    ];
+    const roleTargets = {
+        Offensive: [
+            [[B.WAREHOUSE, 14], [B.FARM, 16], [B.BARRACKS, 12], [B.TIMBER_CAMP, 16], [B.CLAY_PIT, 16], [B.IRON_MINE, 18]],
+            [[B.HEADQUARTER, 20], [B.WAREHOUSE, 22], [B.FARM, 25], [B.BARRACKS, 20]],
+            [[B.ACADEMY, 1], [B.RALLY_POINT, 5], [B.MARKET, 10], [B.WALL, 10]],
+            [[B.WAREHOUSE, 30], [B.FARM, 30], [B.BARRACKS, 25], [B.TIMBER_CAMP, 24], [B.CLAY_PIT, 24], [B.IRON_MINE, 26]],
+            [[B.HEADQUARTER, 25], [B.HOSPITAL, 5]]
+        ],
+        Defensive: [
+            [[B.WAREHOUSE, 14], [B.FARM, 16], [B.WALL, 10], [B.BARRACKS, 10], [B.TIMBER_CAMP, 16], [B.CLAY_PIT, 16], [B.IRON_MINE, 16]],
+            [[B.HEADQUARTER, 15], [B.WAREHOUSE, 22], [B.FARM, 25], [B.WALL, 20], [B.BARRACKS, 20], [B.HOSPITAL, 5]],
+            [[B.WAREHOUSE, 30], [B.FARM, 30], [B.BARRACKS, 25], [B.TIMBER_CAMP, 24], [B.CLAY_PIT, 24], [B.IRON_MINE, 24]],
+            [[B.HEADQUARTER, 25], [B.HOSPITAL, 10], [B.MARKET, 15], [B.RALLY_POINT, 5]]
+        ],
+        Resource: [
+            [[B.WAREHOUSE, 15], [B.FARM, 12], [B.TIMBER_CAMP, 18], [B.CLAY_PIT, 18], [B.IRON_MINE, 18]],
+            [[B.HEADQUARTER, 15], [B.WAREHOUSE, 24], [B.FARM, 18], [B.TIMBER_CAMP, 24], [B.CLAY_PIT, 24], [B.IRON_MINE, 24], [B.MARKET, 10]],
+            [[B.WAREHOUSE, 30], [B.FARM, 25], [B.TIMBER_CAMP, 30], [B.CLAY_PIT, 30], [B.IRON_MINE, 30]],
+            [[B.HEADQUARTER, 20], [B.MARKET, 25], [B.WALL, 10], [B.BARRACKS, 5]]
+        ]
+    };
+    const compileTargets = function (phases) {
+        const levels = {};
+        const sequence = [];
+        for (const phase of phases) {
+            let pending = true;
+            while (pending) {
+                pending = false;
+                for (const [building, target] of phase) {
+                    if (building && (levels[building] || 0) < target) {
+                        sequence.push(building);
+                        levels[building] = (levels[building] || 0) + 1;
+                        pending = true;
+                    }
+                }
+            }
+        }
+        return sequence;
+    };
+    for (const role in roleTargets) {
+        defaultSequences[role] = compileTargets(foundation.concat(roleTargets[role]));
+    }
+
     return parseSequences(defaultSequences);
 });
