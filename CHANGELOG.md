@@ -1,5 +1,10 @@
 # TWOverflow Changelog
 
+## Unreleased — 2026-10-07 (userscript 2.1.500.7)
+
+- **Deposit Planner:** Replace generic settings errors with the specific invalid setting and its permitted range, show inline errors, and clear them when edited. Expand Desired forecast success to 10–100% while retaining its 95% default. Reject invalid settings in both preview and automatic modes without saving or starting.
+- **Validation:** Add UI-controller regression coverage for preview Start, boundary values, invalid numeric models and recovery after correcting a field. All 105 offline tests, source lint, userscript syntax and artifact checks pass. Verify 20% and the 10% boundary start successfully, and 9% reports the allowed range in an offline Angular UI harness. No live game orders were submitted.
+
 ## Unreleased — 2026-10-07 (userscript 2.1.500.6)
 
 - **Deposit Planner:** Add a separate configurable module with reset countdowns, exact visible-board scheduling, empirical item-reroll/waiting forecasts, completion estimates, target holding, item reserves and Collector coordination. Preview is enabled and item rerolls disabled by default; automatic rerolls use inventory items only.

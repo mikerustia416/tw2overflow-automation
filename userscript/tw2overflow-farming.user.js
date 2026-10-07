@@ -2,7 +2,7 @@
 // @name        TW2Overflow Farmer, Recruiter, Builder, Quest and Deposit Planner
 // @description Automating the boring stuff on Tribal Wars 2 with tools like auto farming, auto builder, command scheduler, minimap and more.
 // @namespace   local/tw2overflow-farming
-// @version     2.1.500.6
+// @version     2.1.500.7
 // @grant       unsafeWindow
 // @run-at      document-start
 // @include     https://*.tribalwars2.com/game.php*
@@ -11,7 +11,7 @@
 
 /*!
  * tw2overflow v2.1.500
- * Wed, 07 Oct 2026 01:42:30 GMT
+ * Wed, 07 Oct 2026 01:57:48 GMT
  * Developed by Relaxeaza <relaxeaza@outlook.com>
  *
  * This work is free. You can redistribute it and/or modify it under the
@@ -12470,8 +12470,8 @@ define('two/depositPlanner/ui', [
         };
         events.register('two_deposit_planner_updated', updateButton);
         updateButton();
-        ui.addTemplate('two_deposit_planner_window', `<div id=\"two-deposit-planner\" class=\"win-content two-window\"><header class=\"win-head\"><h2>Deposit Planner</h2><ul class=\"list-btn\"><li><a href=\"#\" class=\"size-34x34 btn-red icon-26x26-close\" ng-click=\"closeWindow()\"></a></ul></header><div class=\"win-main\" scrollbar=\"\"><div class=\"box-paper footer\"><div class=\"scroll-wrap\"><h3>{{ status }}</h3><p>Running and paused state, settings, observed boards and pending actions persist across page reloads. Preview mode reads game data without starting, collecting or rerolling errands. Automatic mode uses inventory reroll items only.<div ng-if=\"state\" class=\"deposit-summary\"><p><strong>Progress:</strong> {{ state.progress | number:0 }} / {{ state.target | number:0 }} &mdash; {{ state.target - state.progress > 0 ? state.target - state.progress : 0 | number:0 }} needed<br><strong>Target reward:</strong> {{ reward.reward }} ({{ reward.amount }})<p><strong>Free errands:</strong> {{ until(state.errandsReset) }}<br><strong>Milestone reset:</strong> {{ until(state.milestonesReset) }}<br><strong>Reroll inventory:</strong> {{ state.itemCount }} items; {{ state.rerollsUsed }} reserved/used this milestone cycle</div><h3>Recommended action: {{ plan.action }}</h3><p>{{ plan.reason }}<p ng-if=\"plan.knownEta\">Visible target collection: {{ date(plan.knownEta) }} (in {{ until(plan.knownEta) }})<p ng-if=\"state.current\">Current errand completes: {{ date(state.current.completedAt) }} (in {{ until(state.current.completedAt) }})<p ng-if=\"pending\">Pending {{ pending.action }}: automatic retries are blocked until game confirmation. <a href=\"#\" ng-if=\"!running\" class=\"btn-border btn-orange\" ng-click=\"resolvePending()\">Resolve after checking game</a><table ng-if=\"jobs.length\" class=\"tbl-border-light tbl-content\"><tr><th>Planned errand<th>Resources<th>Duration<th>Collection estimate<tr ng-repeat=\"job in jobs\"><td>{{ job.resource }} #{{ job.id }}<td>{{ job.amount | number:0 }}<td>{{ seconds(job.duration) }}<td>{{ date(job.eta) }}</table><div ng-if=\"plan.forecast\"><h3>Reroll and waiting forecast</h3><p>{{ plan.forecast.sampleCount }} observed boards with matching village and bonuses. {{ plan.forecast.reason }}. Forecasts use the remaining item budget; they do not promise the maximum reward. ETAs below are conditional on reaching the target.<table ng-if=\"plan.forecast.ready\" class=\"tbl-border-light tbl-content\"><tr><th>First action<th>Item limit<th>Modeled chance<th>Median target ETA<th>90th percentile ETA<tr ng-repeat=\"option in plan.forecast.options\"><td>{{ option.action }}<td>{{ option.itemLimit }}<td>{{ percent(option.probability) }}<td>{{ date(option.eta) }}<td>{{ date(option.conservativeEta) }}</table></div><p>Dates use {{ localZone }}. Errands selected automatically must finish and be collected before both reset deadlines, including the configured buffer. After reaching the target, the module waits for the next milestone cycle.<h3>Settings</h3><p>Turn on item rerolls while keeping Preview only enabled to inspect the proposed item budget. Turn Preview only off to execute plans. Taking control pauses Collector's deposit actions; its Second Village helper stays separate.<table class=\"tbl-border-light tbl-content tbl-medium-height\"><tr ng-repeat=\"id in controls\" ng-switch=\"map[id].inputType\"><td>{{ labels[id] }}<td ng-switch-when=\"checkbox\"><div switch-slider=\"\" enabled=\"true\" border=\"true\" value=\"settings[id]\" vertical=\"false\" size=\"'56x28'\"></div><td ng-switch-when=\"number\"><input type=\"number\" class=\"fit textfield-border\" ng-model=\"settings[id]\" min=\"{{ map[id].min }}\" max=\"{{ map[id].max }}\" step=\"1\"><span class=\"setting-range\">{{ map[id].min }} &ndash; {{ map[id].max }}</span></table></div></div></div><footer class=\"win-foot\"><ul class=\"list-btn list-center\"><li><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"refresh()\">Refresh preview</a><li><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"save()\">Save</a><li><a href=\"#\" class=\"btn-border\" ng-class=\"running ? 'btn-red' : 'btn-green'\" ng-click=\"toggle()\">{{ running ? 'Pause' : 'Start' }}</a></ul></footer></div>`);
-        ui.addStyle('#two-deposit-planner .scroll-wrap{padding:12px}#two-deposit-planner p{margin:10px 0;line-height:1.5}#two-deposit-planner h3{margin-top:16px}#two-deposit-planner .deposit-summary{border-bottom:1px solid #bca475}#two-deposit-planner .setting-range{display:block;font-size:11px}#two-deposit-planner td{padding:5px}');
+        ui.addTemplate('two_deposit_planner_window', `<div id=\"two-deposit-planner\" class=\"win-content two-window\"><header class=\"win-head\"><h2>Deposit Planner</h2><ul class=\"list-btn\"><li><a href=\"#\" class=\"size-34x34 btn-red icon-26x26-close\" ng-click=\"closeWindow()\"></a></ul></header><div class=\"win-main\" scrollbar=\"\"><div class=\"box-paper footer\"><div class=\"scroll-wrap\"><h3>{{ status }}</h3><p>Running and paused state, settings, observed boards and pending actions persist across page reloads. Preview mode reads game data without starting, collecting or rerolling errands. Automatic mode uses inventory reroll items only.<div ng-if=\"state\" class=\"deposit-summary\"><p><strong>Progress:</strong> {{ state.progress | number:0 }} / {{ state.target | number:0 }} &mdash; {{ state.target - state.progress > 0 ? state.target - state.progress : 0 | number:0 }} needed<br><strong>Target reward:</strong> {{ reward.reward }} ({{ reward.amount }})<p><strong>Free errands:</strong> {{ until(state.errandsReset) }}<br><strong>Milestone reset:</strong> {{ until(state.milestonesReset) }}<br><strong>Reroll inventory:</strong> {{ state.itemCount }} items; {{ state.rerollsUsed }} reserved/used this milestone cycle</div><h3>Recommended action: {{ plan.action }}</h3><p>{{ plan.reason }}<p ng-if=\"plan.knownEta\">Visible target collection: {{ date(plan.knownEta) }} (in {{ until(plan.knownEta) }})<p ng-if=\"state.current\">Current errand completes: {{ date(state.current.completedAt) }} (in {{ until(state.current.completedAt) }})<p ng-if=\"pending\">Pending {{ pending.action }}: automatic retries are blocked until game confirmation. <a href=\"#\" ng-if=\"!running\" class=\"btn-border btn-orange\" ng-click=\"resolvePending()\">Resolve after checking game</a><table ng-if=\"jobs.length\" class=\"tbl-border-light tbl-content\"><tr><th>Planned errand<th>Resources<th>Duration<th>Collection estimate<tr ng-repeat=\"job in jobs\"><td>{{ job.resource }} #{{ job.id }}<td>{{ job.amount | number:0 }}<td>{{ seconds(job.duration) }}<td>{{ date(job.eta) }}</table><div ng-if=\"plan.forecast\"><h3>Reroll and waiting forecast</h3><p>{{ plan.forecast.sampleCount }} observed boards with matching village and bonuses. {{ plan.forecast.reason }}. Forecasts use the remaining item budget; they do not promise the maximum reward. ETAs below are conditional on reaching the target.<table ng-if=\"plan.forecast.ready\" class=\"tbl-border-light tbl-content\"><tr><th>First action<th>Item limit<th>Modeled chance<th>Median target ETA<th>90th percentile ETA<tr ng-repeat=\"option in plan.forecast.options\"><td>{{ option.action }}<td>{{ option.itemLimit }}<td>{{ percent(option.probability) }}<td>{{ date(option.eta) }}<td>{{ date(option.conservativeEta) }}</table></div><p>Dates use {{ localZone }}. Errands selected automatically must finish and be collected before both reset deadlines, including the configured buffer. After reaching the target, the module waits for the next milestone cycle.<h3>Settings</h3><p>Turn on item rerolls while keeping Preview only enabled to inspect the proposed item budget. Turn Preview only off to execute plans. Taking control pauses Collector's deposit actions; its Second Village helper stays separate.<table class=\"tbl-border-light tbl-content tbl-medium-height\"><tr ng-repeat=\"id in controls\" ng-switch=\"map[id].inputType\"><td>{{ labels[id] }}<td ng-switch-when=\"checkbox\"><div switch-slider=\"\" enabled=\"true\" border=\"true\" value=\"settings[id]\" vertical=\"false\" size=\"'56x28'\"></div><td ng-switch-when=\"number\"><input type=\"number\" class=\"fit textfield-border\" ng-model=\"settings[id]\" aria-label=\"{{ labels[id] }}\" ng-change=\"clearSettingError(id)\" ng-class=\"{'setting-invalid': settingErrors[id]}\" min=\"{{ map[id].min }}\" max=\"{{ map[id].max }}\" step=\"1\"><span class=\"setting-range\">{{ map[id].min }} &ndash; {{ map[id].max }}</span><span ng-if=\"settingErrors[id]\" class=\"setting-error\" role=\"alert\">{{ settingErrors[id] }}</span></table></div></div></div><footer class=\"win-foot\"><ul class=\"list-btn list-center\"><li><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"refresh()\">Refresh preview</a><li><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"save()\">Save</a><li><a href=\"#\" class=\"btn-border\" ng-class=\"running ? 'btn-red' : 'btn-green'\" ng-click=\"toggle()\">{{ running ? 'Pause' : 'Start' }}</a></ul></footer></div>`);
+        ui.addStyle('#two-deposit-planner .scroll-wrap{padding:12px}#two-deposit-planner p{margin:10px 0;line-height:1.5}#two-deposit-planner h3{margin-top:16px}#two-deposit-planner .deposit-summary{border-bottom:1px solid #bca475}#two-deposit-planner .setting-range{display:block;font-size:11px}#two-deposit-planner .setting-error{display:block;margin-top:4px;color:#8f2626}#two-deposit-planner .setting-invalid{border-color:#8f2626}#two-deposit-planner td{padding:5px}');
         button.addEventListener('click', function () {
             const scope = $rootScope.$new();
             const settings = planner.getSettings();
@@ -12505,10 +12505,18 @@ define('two/depositPlanner/ui', [
                     return {...job, eta};
                 });
             };
+            scope.settingErrors = {};
+            scope.clearSettingError = id => {
+                delete scope.settingErrors[id];
+            };
             scope.save = function () {
                 const values = settings.decode(scope.settings);
-                if (!policy.validSettings(values, map)) {
-                    utils.notif('error', 'Use whole numbers within the displayed setting limits');
+                const invalid = policy.invalidSettings(values, map);
+                scope.settingErrors = Object.fromEntries(invalid.map(id => [id, map[id].inputType === 'checkbox'
+                    ? labels[id] + ' must be on or off'
+                    : labels[id] + ' must be a whole number between ' + map[id].min + ' and ' + map[id].max]));
+                if (invalid.length) {
+                    utils.notif('error', scope.settingErrors[invalid[0]]);
                     return false;
                 }
                 settings.setAll(values);
@@ -12559,11 +12567,13 @@ define('two/depositPlanner/ui', [
 define('two/depositPlanner/policy', [], function () {
     const REFRESH_SECONDS = 8 * 60 * 60;
     const FORECAST_RUNS = 128;
-    const validSettings = function (config, map) {
-        return Object.entries(map).every(([key, field]) => field.inputType === 'checkbox'
-            ? typeof config[key] === 'boolean'
-            : Number.isInteger(config[key]) && config[key] >= field.min && config[key] <= field.max);
+    const invalidSettings = function (config, map) {
+        return Object.entries(map).filter(([key, field]) => field.inputType === 'checkbox'
+            ? typeof config[key] !== 'boolean'
+            : !Number.isInteger(config[key]) || config[key] < field.min || config[key] > field.max)
+            .map(([key]) => key);
     };
+    const validSettings = (config, map) => invalidSettings(config, map).length === 0;
     const validJob = job => job && job.id !== undefined && Number.isFinite(job.duration) && job.duration > 0
         && Number.isFinite(job.amount) && job.amount > 0;
     const ordered = jobs => jobs.slice().sort((a, b) => b.amount / b.duration - a.amount / a.duration
@@ -12746,7 +12756,7 @@ define('two/depositPlanner/policy', [], function () {
             ? 'Wait for free errands and keep reroll items'
             : prediction.ready ? 'No useful reroll within the item budget; wait for the next reset' : prediction.reason};
     };
-    return {validSettings, validJob, optimize, forecast, plan, budgetFor};
+    return {validSettings, invalidSettings, validJob, optimize, forecast, plan, budgetFor};
 });
 
 define('two/depositPlanner/settings/map', [], function () {
@@ -12761,7 +12771,7 @@ define('two/depositPlanner/settings/map', [], function () {
         free_refresh_wait: number(600, 0, 28800),
         deadline_buffer: number(60, 5, 3600),
         action_delay: number(2, 1, 60),
-        success_percent: number(95, 50, 100),
+        success_percent: number(95, 10, 100),
         min_improvement: number(5, 1, 100),
         min_samples: number(5, 1, 30),
         poll_seconds: number(30, 5, 300),

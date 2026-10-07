@@ -1,11 +1,13 @@
 define('two/depositPlanner/policy', [], function () {
     const REFRESH_SECONDS = 8 * 60 * 60;
     const FORECAST_RUNS = 128;
-    const validSettings = function (config, map) {
-        return Object.entries(map).every(([key, field]) => field.inputType === 'checkbox'
-            ? typeof config[key] === 'boolean'
-            : Number.isInteger(config[key]) && config[key] >= field.min && config[key] <= field.max);
+    const invalidSettings = function (config, map) {
+        return Object.entries(map).filter(([key, field]) => field.inputType === 'checkbox'
+            ? typeof config[key] !== 'boolean'
+            : !Number.isInteger(config[key]) || config[key] < field.min || config[key] > field.max)
+            .map(([key]) => key);
     };
+    const validSettings = (config, map) => invalidSettings(config, map).length === 0;
     const validJob = job => job && job.id !== undefined && Number.isFinite(job.duration) && job.duration > 0
         && Number.isFinite(job.amount) && job.amount > 0;
     const ordered = jobs => jobs.slice().sort((a, b) => b.amount / b.duration - a.amount / a.duration
@@ -188,5 +190,5 @@ define('two/depositPlanner/policy', [], function () {
             ? 'Wait for free errands and keep reroll items'
             : prediction.ready ? 'No useful reroll within the item budget; wait for the next reset' : prediction.reason};
     };
-    return {validSettings, validJob, optimize, forecast, plan, budgetFor};
+    return {validSettings, invalidSettings, validJob, optimize, forecast, plan, budgetFor};
 });

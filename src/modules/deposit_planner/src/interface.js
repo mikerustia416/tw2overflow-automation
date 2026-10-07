@@ -56,10 +56,18 @@ define('two/depositPlanner/ui', [
                     return {...job, eta};
                 });
             };
+            scope.settingErrors = {};
+            scope.clearSettingError = id => {
+                delete scope.settingErrors[id];
+            };
             scope.save = function () {
                 const values = settings.decode(scope.settings);
-                if (!policy.validSettings(values, map)) {
-                    utils.notif('error', 'Use whole numbers within the displayed setting limits');
+                const invalid = policy.invalidSettings(values, map);
+                scope.settingErrors = Object.fromEntries(invalid.map(id => [id, map[id].inputType === 'checkbox'
+                    ? labels[id] + ' must be on or off'
+                    : labels[id] + ' must be a whole number between ' + map[id].min + ' and ' + map[id].max]));
+                if (invalid.length) {
+                    utils.notif('error', scope.settingErrors[invalid[0]]);
                     return false;
                 }
                 settings.setAll(values);

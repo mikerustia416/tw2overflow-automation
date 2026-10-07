@@ -43,6 +43,8 @@ Future boards are unknown. The planner learns complete six-errand boards and run
 | Complete matching boards required / refresh interval | 5 / 30 seconds |
 | Hold completed errands after reaching the target | On |
 
+Invalid settings are named in the notification and beside the field. For example, **Desired forecast success (%)** accepts whole numbers from **10 to 100** (default **95**); 20 is valid, while a value of 9 prevents Save and Start in both preview and automatic modes. Correcting a value clears its field error. Preview mode uses the same settings validation as automatic mode.
+
 Enable **Allow automatic item rerolls** while keeping preview on to review forecasts. Pause, turn preview off, save and start to execute the plan. Rerolls use the inventory item route; the planner never purchases rerolls with Crowns. Samples are retained for up to 30 days, matched to village and bonuses, and capped at 60 boards. Repeated polling of one board does not add samples.
 
 Automatic deposit control pauses Collector's deposit helper; Second Village continues independently. Starting Collector pauses an active automatic planner. The planner persists settings, running state, observed boards, used/reserved reroll budget and pending requests. An uncertain response pauses automation and blocks retries across reloads. Use **Resolve after checking game** only after checking the errand, progress and inventory; clearing a guard keeps its reroll budget charged. After reaching the target, the planner waits for the next milestone cycle, holding completed rewards when configured.
