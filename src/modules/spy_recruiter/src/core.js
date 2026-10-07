@@ -181,6 +181,10 @@ define('two/___spy_recruiter_id', [
         settings.onChange(function (changes, updates) {
             debug(1, 'settings changes: %o updates: %o', changes, updates);
 
+            const restart = running;
+            if (restart) {
+                ___spy_recruiter_id.stop();
+            }
             localSettings = settings.getAll();
 
             if (updates[UPDATES.PRESERVE_RESOURSES]) {
@@ -191,9 +195,8 @@ define('two/___spy_recruiter_id', [
                 updateSelectedVillages();
             }
 
-            if (running && updates[UPDATES.UPDATE_INTERVAL]) {
-                stopRecruitCycle();
-                startRecruitCycle();
+            if (restart) {
+                ___spy_recruiter_id.start();
             }
         });
 

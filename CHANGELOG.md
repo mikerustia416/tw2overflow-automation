@@ -1,6 +1,10 @@
 # TWOverflow Changelog
 
-## Unreleased — 2026-10-06 (userscript 2.1.500.4)
+## Unreleased — 2026-10-07 (userscript 2.1.500.5)
+
+- **Running state:** Farmer, Recruiter, and custom-build BuilderQueue restore their saved running/stopped state after page refresh, after initialization and UI setup. Rejected restored starts clear stale active flags.
+- **Build:** Include BuilderQueue and retained upstream modules in the standard build, matching the expanded local build configuration, while excluding the legacy usage-report module. Rebuild the distributable userscript as version 2.1.500.5.
+- **Settings:** Saving changed settings restarts running Farmer, Recruiter, BuilderQueue, AutoQuest, AutoMinter, and AutoSpyRecruiter with their new configuration. Stopped modules stay stopped; recruitment pending-order guards survive restarts. BuilderQueue refreshes its active sequence limits and invalidates callbacks from previous runs.
 
 - **Startup:** Remove unconditional optional-module initialization so Farmer, Recruiter, and AutoQuest builds start without BuilderQueue.
 

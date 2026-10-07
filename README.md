@@ -1,11 +1,12 @@
-# TW2Overflow Farmer, Recruiter and Quest
+# TW2Overflow Automation
 
-Automate farming, maintain troop targets without spending protected resources, and collect completed quest rewards in Tribal Wars 2. This customized userscript includes three independent modules:
+Automate farming, maintain troop targets without spending protected resources, and collect completed quest rewards in Tribal Wars 2. This customized userscript provides four primary automation modules:
 
 | Module | Features |
 | --- | --- |
 | **Farmer / FarmOverflow** | Barbarian farming, automatic local troop presets, travel and target filters, troop reserves, cooldowns, attack limits, and preview logs. |
 | **Recruiter** | Barracks troop targets, queued-soldier accounting, savings, building budgets, population limits, spending caps, and recruitment previews. |
+| **Builder / BuilderQueue** | Building sequences, resource reserves, automatic upgrades, and build logs. |
 | **Quest / AutoQuest** | Open marked quest lines, select completed tasks to reveal rewards, collect them, and close the quest panel. |
 
 This README is the feature and setup guide. [CHANGELOG.md](CHANGELOG.md) tracks change history.
@@ -18,9 +19,13 @@ This README is the feature and setup guide. [CHANGELOG.md](CHANGELOG.md) tracks 
 4. Keep **Preview only** enabled in Farmer and Recruiter while reviewing their plans. Start each module separately when ready.
 5. For live farming or recruitment, pause, disable **Preview only**, save, and start again. Quest collects rewards directly after you press Start.
 
-The checked-in userscript includes Farmer, Recruiter, AutoQuest, and shared infrastructure. It excludes the upstream usage-report module and other automation modules, does not contact the old tracking endpoints, and disables upstream automatic updates. Its namespace remains `local/tw2overflow-farming` so installing a new version updates the same custom script.
+The checked-in userscript includes Farmer, Recruiter, BuilderQueue, AutoQuest, shared infrastructure, and the retained modules listed below. It excludes the upstream usage-report module, does not contact the old tracking endpoints, and disables upstream automatic updates. Its namespace remains `local/tw2overflow-farming` so installing a new version updates the same custom script.
 
-Farmer and Recruiter default to preview mode. AutoQuest starts stopped on first use, then restores its saved running or stopped state after reload. Other scripts, forks, and upstream downloads can have different behavior.
+Farmer and Recruiter default to preview mode. Farmer, Recruiter, Builder, and AutoQuest start stopped on first use and restore their saved running or stopped state after reload. Saving changed settings while a module is running restarts it with the new settings; saving while stopped leaves it stopped. AutoMinter and AutoSpyRecruiter also restart on settings changes when running. Other scripts, forks, and upstream downloads can have different behavior.
+
+## Builder
+
+Open **Builder**, choose an active building sequence and village group, configure resource reserves, then press Start. Builder follows the sequence while respecting available queue slots and the shared recruitment spending guard. It restores its running state after refresh. Saving changed settings cancels its old timers, refreshes the active sequence limits, and starts a new run if it was running. An unavailable active sequence leaves it stopped.
 
 ## Farmer
 
@@ -32,7 +37,7 @@ Farmer checks each village's available troops and eligible targets, selects an a
 2. Choose the farmer village groups, ignored and included target groups, distance and points ranges, target-count limit, and maximum travel time.
 3. Configure troop reserves, preserved command slots, storage checks, same-target arrival spacing, attack caps, and report cooldowns.
 4. Keep **Preview only** enabled, start Farmer, and review planned targets, selected presets, capacity, travel time, and hourly rate estimates in its logs.
-5. Adjust settings, then disable preview and restart when ready to send attacks. Saving changed settings pauses Farmer.
+5. Adjust settings, then disable preview and restart when ready to send attacks. Saving changed settings restarts Farmer if it is running.
 
 Preview reads game data and records planned attacks, but sends no attacks and assigns no game presets.
 
@@ -122,7 +127,7 @@ deficit = max(0, target - owned troops - queued soldiers)
 4. Select buildings whose next upgrade you want to fund. Add additional building budgets to save for further upgrades or other spending.
 5. Choose the spending share, batch-size cap, queue job cap, and check interval.
 6. Keep **Preview only** enabled and start. Review owned and queued troops, deficits, protected resources, building costs, cycle budgets, and proposed batches for each village.
-7. Pause, disable preview, save, and start to recruit. Saving changed settings pauses recruitment. Each village submits at most one batch per cycle and replans before the next batch.
+7. Pause, disable preview, save, and start to recruit. Saving changed settings restarts recruitment if it is running, retaining pending-order guards. Each village submits at most one batch per cycle and replans before the next batch.
 
 The first proposed batch is the one a live cycle would submit. Later proposals show the remaining priority order under the same budget.
 
@@ -154,7 +159,7 @@ For example, with 20,000 wood, 5,000 savings, a 2,000 additional building budget
 
 Selected upgrades use their computed next-level wood, clay, iron, and population costs from the game model. Already queued buildings and soldiers have been paid for, so their costs are not deducted from current stock again. A selected building with an upgrade in the queue is skipped until that job finishes; after completion, Recruiter reserves the following level. A building at maximum level adds no reserve. Use additional building budgets to save beyond the current queue.
 
-The source BuilderQueue shares an in-flight spending guard with Recruiter when both are included in the same build. A pending building or troop spend blocks another spend in that village until acknowledgement and the resource debit are visible. The standard userscript does not include BuilderQueue. Separate scripts and manual spending are outside the shared guard.
+BuilderQueue shares an in-flight spending guard with Recruiter. A pending building or troop spend blocks another spend in that village until acknowledgement and the resource debit are visible. Separate scripts and manual spending are outside the shared guard.
 
 ### Pending orders and limits
 
@@ -201,9 +206,9 @@ node --check dist/tw2overflow.user.js
 cp dist/tw2overflow.user.js userscript/tw2overflow-farming.user.js
 ```
 
-The build writes `dist/tw2overflow.user.js`. The default build runs lint and includes only Farmer, Recruiter, and AutoQuest. If your npm cache is not writable, configure a writable cache directory when installing dependencies.
+The build writes `dist/tw2overflow.user.js`. The default build runs lint and includes all source modules except the legacy usage-report module, including BuilderQueue. If your npm cache is not writable, configure a writable cache directory when installing dependencies.
 
-Tests load the actual AMD modules and settings class in a mocked environment. Coverage includes travel boundaries, preset scoring and generation, reserves, ownership changes, target deduplication, arrival spacing, cooldowns, cycle caps, recruitment deficits and budgets, protected upgrades, population, queue limits, persisted pending orders, stop/restart guards, and the quest open → select task → claim → close sequence. These tests do not establish live-game compatibility or detection resistance.
+Tests load the actual AMD modules and settings class in a mocked environment. Coverage includes travel boundaries, preset scoring and generation, reserves, ownership changes, target deduplication, arrival spacing, cooldowns, cycle caps, recruitment deficits and budgets, protected upgrades, population, queue limits, persisted pending orders, reload restoration, settings-save restarts, timer replacement, stale callback guards, and the quest open → select task → claim → close sequence. These tests do not establish live-game compatibility or detection resistance.
 
 ### Custom build flags
 
@@ -216,7 +221,7 @@ Tests load the actual AMD modules and settings class in a mocked environment. Co
 | `--userscript` | Generate a userscript. |
 | `--extension` | Generate a WebExtension package. |
 
-For example, to include the source BuilderQueue alongside the standard modules:
+For a smaller build containing only Farmer, Recruiter, Quest, and Builder:
 
 ```sh
 node make.js --only=farm_overflow,recruiter,auto_quest,builder_queue --userscript --lint
@@ -224,13 +229,12 @@ node make.js --only=farm_overflow,recruiter,auto_quest,builder_queue --userscrip
 
 For development, modules live in `src/modules/<id>` and declare their ID in `module.json`. Reuse a simple existing module as a starting point. English translation strings live in `src/i18n/en_us/<id>.json`; other locales use the same structure. The retained [developer API reference](share/docs/functions-and-classes.md) documents shared helpers.
 
-## Other modules retained in the source
+## Other bundled modules
 
-These upstream modules are available for development or explicit custom builds; they are not in the standard userscript:
+The standard userscript also includes these upstream modules:
 
 | Module | Purpose |
 | --- | --- |
-| BuilderQueue | Upgrade villages using configurable building sequences, resource reserves, and build logs. |
 | CommandQueue | Schedule commands by departure or arrival time. |
 | AutoCollector | Collect resource-deposit jobs and automate initial second-village jobs. |
 | Minimap | Improve world-map visibility, village colors, and navigation. |
@@ -238,7 +242,7 @@ These upstream modules are available for development or explicit custom builds; 
 | AutoMinter | Mint coins periodically. |
 | AutoSpyRecruiter | Recruit spies periodically while preserving resources. |
 
-Optional upstream modules have their own behavior and have not been fully revalidated for this variant. Avoid an unrestricted build if you want to keep the usage-report module excluded.
+Retained upstream modules have their own behavior and have not been fully revalidated for this variant. Use an explicit `--only` list for a smaller build, or keep `--ignore=usage_report` when building all other modules.
 
 ## Upstream attribution and history
 

@@ -149,10 +149,11 @@ function fixture (options = {}) {
         getTownAtAsync: (x, y, callback) => callback(freshTargets.find(t => t.x === x && t.y === y)),
         loadTownData: () => {}
     });
-    storage.set('farm_overflow_settings', {presets: Object.keys(presets).map(Number), target_order_variation: 0, ...options.settings});
+    storage.set('farm_overflow_settings', {presets: Object.keys(presets).map(Number), target_order_variation: 0,
+        ...storage.get('farm_overflow_settings'), ...options.settings});
     get('two/farmOverflow/events');
     const farm = get('two/farmOverflow');
-    farm.init();
+    if (!options.deferFarmInit) farm.init();
 
     const settle = async () => { for (let i = 0; i < 4; i++) await flush(); };
     const tick = async milliseconds => {

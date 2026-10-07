@@ -4,7 +4,6 @@ define('two/builderQueue', [
     'two/Settings',
     'two/builderQueue/settings',
     'two/builderQueue/settings/map',
-    'two/builderQueue/settings/updates',
     'two/builderQueue/sequenceStatus',
     'conf/upgradeabilityStates',
     'conf/buildingTypes',
@@ -19,7 +18,6 @@ define('two/builderQueue', [
     Settings,
     SETTINGS,
     SETTINGS_MAP,
-    UPDATES,
     SEQUENCE_STATUS,
     UPGRADEABILITY_STATES,
     BUILDING_TYPES,
@@ -34,6 +32,7 @@ define('two/builderQueue', [
     const buildingQueueService = injector.get('buildingQueueService');
     let initialized = false;
     let running = false;
+    let runVersion = 0;
     let intervalCheckId;
     let intervalInstantCheckId;
     let buildingSequenceLimit;
@@ -327,26 +326,34 @@ define('two/builderQueue', [
     const builderQueue = {};
 
     builderQueue.start = function () {
+        if (running) {
+            return false;
+        }
         if (!sequencesAvail) {
             eventQueue.trigger(eventTypeProvider.BUILDER_QUEUE_NO_SEQUENCES);
             return false;
         }
 
         running = true;
+        const token = ++runVersion;
         intervalCheckId = setInterval(analyseVillages, 60000 / ANALYSES_PER_MINUTE);
         intervalInstantCheckId = setInterval(analyseVillagesInstantFinish, 60000 / ANALYSES_PER_MINUTE_INSTANT_FINISH);
         
+        eventQueue.trigger(eventTypeProvider.BUILDER_QUEUE_START);
+
         ready(function () {
+            if (!running || token !== runVersion) {
+                return;
+            }
             initializeAllVillages();
             analyseVillages();
             analyseVillagesInstantFinish();
         }, ['all_villages_ready']);
-
-        eventQueue.trigger(eventTypeProvider.BUILDER_QUEUE_START);
     };
 
     builderQueue.stop = function () {
         running = false;
+        runVersion++;
         clearInterval(intervalCheckId);
         clearInterval(intervalInstantCheckId);
         eventQueue.trigger(eventTypeProvider.BUILDER_QUEUE_STOP);
@@ -440,12 +447,16 @@ define('two/builderQueue', [
         });
 
         settings.onChange(function (changes, updates, opt) {
+            const restart = running;
+            if (restart) {
+                builderQueue.stop();
+            }
             localSettings = settings.getAll();
+            sequencesAvail = Object.prototype.hasOwnProperty.call(localSettings[SETTINGS.BUILDING_SEQUENCES], localSettings[SETTINGS.ACTIVE_SEQUENCE]);
+            buildingSequenceLimit = sequencesAvail ? getSequenceLimit(localSettings[SETTINGS.ACTIVE_SEQUENCE]) : false;
 
-            if (running) {
-                if (updates[UPDATES.ANALYSE]) {
-                    analyseVillages();
-                }
+            if (restart) {
+                builderQueue.start();
             }
 
             if (!opt.quiet) {
@@ -459,7 +470,7 @@ define('two/builderQueue', [
             VILLAGE_BUILDINGS[BUILDING_TYPES[buildingName]] = 0;
         }
 
-        sequencesAvail = Object.keys(localSettings[SETTINGS.BUILDING_SEQUENCES]).length;
+        sequencesAvail = Object.prototype.hasOwnProperty.call(localSettings[SETTINGS.BUILDING_SEQUENCES], localSettings[SETTINGS.ACTIVE_SEQUENCE]);
         buildingSequenceLimit = sequencesAvail ? getSequenceLimit(localSettings[SETTINGS.ACTIVE_SEQUENCE]) : false;
 
         $rootScope.$on(eventTypeProvider.BUILDING_LEVEL_CHANGED, function (event, data) {
@@ -467,8 +478,9 @@ define('two/builderQueue', [
                 return false;
             }
 
+            const token = runVersion;
             setTimeout(function () {
-                if (!running) {
+                if (!running || token !== runVersion) {
                     return;
                 }
                 const village = $player.getVillage(data.village_id);

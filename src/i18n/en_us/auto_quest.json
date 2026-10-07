@@ -1,0 +1,8 @@
+{
+    "auto_quest": {
+        "enabled": "Automatically collect ready quest rewards",
+        "check_interval": "Check interval (5 seconds to 5 minutes)",
+        "invalid_interval": "Enter a check interval between 5 seconds and 5 minutes.",
+        "help": "Save settings, then press Start. AutoQuest opens unread or ready quest lines, selects completed tasks marked with an exclamation icon to reveal their rewards, collects them, and closes the game's quest panel when none remain. Settings and the last running or stopped state are restored after reloading the page."
+    }
+}

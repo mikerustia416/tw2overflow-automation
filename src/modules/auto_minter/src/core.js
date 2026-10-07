@@ -152,6 +152,10 @@ define('two/autoMinter', [
         settings.onChange(function (changes, updates) {
             debug(1, 'settings changes: %o updates: %o', changes, updates);
 
+            const restart = running;
+            if (restart) {
+                autoMinter.stop();
+            }
             localSettings = settings.getAll();
 
             if (updates[UPDATES.PRESERVE_RESOURSES]) {
@@ -162,9 +166,8 @@ define('two/autoMinter', [
                 updateSelectedVillages();
             }
 
-            if (running && updates[UPDATES.UPDATE_INTERVAL]) {
-                stopChecker();
-                startChecker();
+            if (restart) {
+                autoMinter.start();
             }
         });
 

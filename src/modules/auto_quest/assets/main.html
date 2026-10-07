@@ -1,0 +1,27 @@
+<div id="two-auto-quest" class="win-content two-window">
+    <header class="win-head">
+        <h2>AutoQuest</h2>
+        <ul class="list-btn">
+            <li><a href="#" class="size-34x34 btn-red icon-26x26-close" ng-click="closeWindow()"></a></li>
+        </ul>
+    </header>
+    <div class="win-main" scrollbar="">
+        <div class="box-paper footer">
+            <div class="scroll-wrap">
+                <table class="settings tbl-border-light tbl-striped tbl-medium-height">
+                    <colgroup><col><col width="270px"></colgroup>
+                    <tr><th colspan="2">{{ 'settings' | i18n:loc.ale:'common' }}</th></tr>
+                    <tr><td>{{ 'enabled' | i18n:loc.ale:'auto_quest' }}</td><td><div switch-slider="" enabled="true" border="true" value="enabled" vertical="false" size="'56x28'"></div></td></tr>
+                    <tr><td>{{ 'check_interval' | i18n:loc.ale:'auto_quest' }}</td><td><input type="text" class="fit textfield-border text-center" ng-model="checkInterval" tooltip="" tooltip-content="{{ 'readable_time_format' | i18n:loc.ale:'common' }}"></td></tr>
+                    <tr><td colspan="2">{{ 'help' | i18n:loc.ale:'auto_quest' }}</td></tr>
+                </table>
+            </div>
+        </div>
+    </div>
+    <footer class="win-foot">
+        <ul class="list-btn list-center">
+            <li><a href="#" class="btn-border btn-orange" ng-click="saveSettings()">{{ 'save' | i18n:loc.ale:'common' }}</a></li>
+            <li><a href="#" class="btn-border" ng-class="{'btn-red': running, 'btn-orange': !running}" ng-click="switchState()">{{ (running ? 'stop' : 'start') | i18n:loc.ale:'common' }}</a></li>
+        </ul>
+    </footer>
+</div>

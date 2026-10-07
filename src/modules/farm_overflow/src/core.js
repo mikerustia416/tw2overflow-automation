@@ -1527,7 +1527,8 @@ define('two/farmOverflow', [
                 return;
             }
 
-            if (running) {
+            const restart = running;
+            if (restart) {
                 farmOverflow.stop();
             }
 
@@ -1554,6 +1555,10 @@ define('two/farmOverflow', [
 
             if (updates[UPDATES.INTERVAL_TIMERS]) {
                 reloadTimers();
+            }
+
+            if (restart) {
+                farmOverflow.start();
             }
         });
 

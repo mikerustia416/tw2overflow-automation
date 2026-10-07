@@ -265,15 +265,18 @@ test('per-village cycle cap stops before issuing another attack', async () => {
     assert.equal(f.farm.getFarmer(1).getStatus(), 'cycle_attack_limit');
 });
 
-test('saving settings cancels an in-progress validation step', async () => {
+test('saving settings restarts and cancels the old in-progress validation step', async () => {
     const f = fixture({localReady: false, deferDetails: true, settings: {preview_only: false}});
     f.farm.start();
     await f.settle();
     f.farm.getSettings().set('unit_reserve_percent', 50);
     f.deferredDetails[0]();
     await f.settle();
-    assert.equal(f.farm.isRunning(), false);
+    assert.equal(f.farm.isRunning(), true);
     assert.equal(f.sends().length, 0);
+    f.deferredDetails[1]();
+    await f.settle();
+    assert.equal(f.sends().length, 1);
 });
 
 test('invalid persisted settings fail closed', () => {

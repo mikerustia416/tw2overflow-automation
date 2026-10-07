@@ -24,7 +24,7 @@
     "yargs": "^15.3.1"
   },
   "scripts": {
-    "make": "node make.js --only=farm_overflow,recruiter,auto_quest --userscript --lint",
+    "make": "node make.js --ignore=usage_report --userscript --lint",
     "test": "node --test --test-isolation=none test/*.test.cjs",
     "server": "http-server ./dist/ --ssl --cert=share/server/cert.pem --key=share/server/key.pem -p 2838"
   },
