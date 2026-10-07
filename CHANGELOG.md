@@ -1,5 +1,13 @@
 # TWOverflow Changelog
 
+## Unreleased — 2026-10-07 (userscript 2.1.500.6)
+
+- **Deposit Planner:** Add a separate configurable module with reset countdowns, exact visible-board scheduling, empirical item-reroll/waiting forecasts, completion estimates, target holding, item reserves and Collector coordination. Preview is enabled and item rerolls disabled by default; automatic rerolls use inventory items only.
+- **Persistence:** Restore Deposit Planner, AutoMinter, AutoSpyRecruiter and Commander running/paused state. Split Collector and Second Village persistence while preserving legacy preferences. Guard duplicate initialization and rejected restored starts.
+- **Recruiter:** Fix actual recruitment immediately pausing on confirmed orders: accept authoritative queue events or matching new queue jobs when callbacks omit the job, and accept fresh server resource snapshots when production replaces a debit. Recover matching dated legacy guards; preserve ambiguous pending orders. Old order timeouts cannot stop preview runs.
+- **Project workflow:** Add the reusable tw2-publish-changes skill for documentation, artifact verification, scoped commits and confirmed pushes, with project discovery instructions.
+- **Validation:** Add exact-selection oracle, forecasting, deadline, reroll-budget, guard, reload, migration and Recruiter transition tests. All 101 offline tests, source lint, userscript syntax and dependency checks pass. Verify the planner template and controls in an offline Angular UI harness. Build and ship the combined userscript as 2.1.500.6. No live automation orders were submitted during these checks.
+
 ## Unreleased — 2026-10-07 (userscript 2.1.500.5)
 
 - **Running state:** Farmer, Recruiter, and custom-build BuilderQueue restore their saved running/stopped state after page refresh, after initialization and UI setup. Rejected restored starts clear stale active flags.

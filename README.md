@@ -1,10 +1,11 @@
 # TW2Overflow Automation
 
-Automate farming, maintain troop targets without spending protected resources, and collect completed quest rewards in Tribal Wars 2. This customized userscript provides four primary automation modules:
+Automate farming, maintain troop targets without spending protected resources, and collect completed quest rewards in Tribal Wars 2. This customized userscript provides five primary automation modules:
 
 | Module | Features |
 | --- | --- |
 | **Farmer / FarmOverflow** | Barbarian farming, automatic local troop presets, travel and target filters, troop reserves, cooldowns, attack limits, and preview logs. |
+| **Deposit Planner** | Deposit countdowns, exact visible-errand selection, waiting/item-reroll forecasts, target ETAs, item reserves and configurable automation. |
 | **Recruiter** | Barracks troop targets, queued-soldier accounting, savings, building budgets, population limits, spending caps, and recruitment previews. |
 | **Builder / BuilderQueue** | Building sequences, resource reserves, automatic upgrades, and build logs. |
 | **Quest / AutoQuest** | Open marked quest lines, select completed tasks to reveal rewards, collect them, and close the quest panel. |
@@ -16,12 +17,35 @@ This README is the feature and setup guide. [CHANGELOG.md](CHANGELOG.md) tracks 
 1. Download [tw2overflow-farming.user.js](userscript/tw2overflow-farming.user.js) using GitHub's **Raw** or download button, then install it in your userscript manager.
 2. Disable other TW2Overflow copies and old `tw2tools` auto-start wrappers to avoid running multiple versions together.
 3. Open Tribal Wars 2 and use the TW2Overflow menu to configure each module.
-4. Keep **Preview only** enabled in Farmer and Recruiter while reviewing their plans. Start each module separately when ready.
+4. Keep **Preview only** enabled in Farmer, Recruiter and Deposit Planner while reviewing their plans. Start each module separately when ready.
 5. For live farming or recruitment, pause, disable **Preview only**, save, and start again. Quest collects rewards directly after you press Start.
 
-The checked-in userscript includes Farmer, Recruiter, BuilderQueue, AutoQuest, shared infrastructure, and the retained modules listed below. It excludes the upstream usage-report module, does not contact the old tracking endpoints, and disables upstream automatic updates. Its namespace remains `local/tw2overflow-farming` so installing a new version updates the same custom script.
+The checked-in userscript includes Farmer, Recruiter, BuilderQueue, AutoQuest, Deposit Planner, shared infrastructure, and the retained modules listed below. It excludes the upstream usage-report module, does not contact the old tracking endpoints, and disables upstream automatic updates. Its namespace remains `local/tw2overflow-farming` so installing a new version updates the same custom script.
 
-Farmer and Recruiter default to preview mode. Farmer, Recruiter, Builder, and AutoQuest start stopped on first use and restore their saved running or stopped state after reload. Saving changed settings while a module is running restarts it with the new settings; saving while stopped leaves it stopped. AutoMinter and AutoSpyRecruiter also restart on settings changes when running. Other scripts, forks, and upstream downloads can have different behavior.
+Farmer, Recruiter and Deposit Planner default to preview mode. Farmer, Recruiter, Builder, AutoQuest, Deposit Planner, AutoMinter and AutoSpyRecruiter start stopped on first use and restore their saved running or stopped state after reload. Collector and Second Village save their states independently; existing Collector users inherit the previous shared state once. Commander restores an explicit pause even when commands are queued; a legacy queue without a saved flag retains its previous automatic start behavior. Saving changed settings while a module is running restarts it with the new settings; saving while stopped leaves it stopped. AutoMinter and AutoSpyRecruiter also restart on settings changes when running. Other scripts, forks, and upstream downloads can have different behavior.
+
+## Deposit Planner
+
+Open **Deposit Planner** to inspect progress, the free errand reset, the milestone reset, current completion time, planned collection times and target reward. The default target of **0** selects the final milestone, including Bountiful Harvest when offered by the game. Keep preview enabled initially; it does not start, collect or reroll errands.
+
+The planner examines every subset of the visible errands. It chooses the greatest reward that can be collected before both resets, with the shortest completion time breaking ties. When the visible board reaches the target, the displayed ETA follows this exact selection. Durations and rewards come directly from the game, including active bonuses.
+
+Future boards are unknown. The planner learns complete six-errand boards and runs repeatable empirical simulations to compare continuing, waiting for a free reset and using inventory reroll items. It prefers fewer items when the desired modeled success rate is reached, and requires a configurable improvement before rerolling immediately. These forecasts are approximate; median and 90th-percentile ETAs describe successful simulated runs, not guarantees or a globally optimal future strategy. Until enough matching boards are observed, it collects useful visible errands and waits rather than spending reroll items.
+
+| Setting | Default |
+| --- | --- |
+| Preview only / automatic item rerolls | On / off |
+| Target progress | 0 (final milestone) |
+| Maximum item rerolls per milestone cycle / items to preserve | 3 / 1 |
+| Prefer free reset within | 10 minutes |
+| Buffer before each reset / estimated overhead per errand | 60 seconds / 2 seconds |
+| Desired modeled success / minimum gain to reroll now | 95% / 5 percentage points |
+| Complete matching boards required / refresh interval | 5 / 30 seconds |
+| Hold completed errands after reaching the target | On |
+
+Enable **Allow automatic item rerolls** while keeping preview on to review forecasts. Pause, turn preview off, save and start to execute the plan. Rerolls use the inventory item route; the planner never purchases rerolls with Crowns. Samples are retained for up to 30 days, matched to village and bonuses, and capped at 60 boards. Repeated polling of one board does not add samples.
+
+Automatic deposit control pauses Collector's deposit helper; Second Village continues independently. Starting Collector pauses an active automatic planner. The planner persists settings, running state, observed boards, used/reserved reroll budget and pending requests. An uncertain response pauses automation and blocks retries across reloads. Use **Resolve after checking game** only after checking the errand, progress and inventory; clearing a guard keeps its reroll budget charged. After reaching the target, the planner waits for the next milestone cycle, holding completed rewards when configured.
 
 ## Builder
 
@@ -210,6 +234,10 @@ The build writes `dist/tw2overflow.user.js`. The default build runs lint and inc
 
 Tests load the actual AMD modules and settings class in a mocked environment. Coverage includes travel boundaries, preset scoring and generation, reserves, ownership changes, target deduplication, arrival spacing, cooldowns, cycle caps, recruitment deficits and budgets, protected upgrades, population, queue limits, persisted pending orders, reload restoration, settings-save restarts, timer replacement, stale callback guards, and the quest open → select task → claim → close sequence. These tests do not establish live-game compatibility or detection resistance.
 
+### Project commit and push workflow
+
+Use the project skill [tw2-publish-changes](.agents/skills/tw2-publish-changes/SKILL.md), or invoke `$tw2-publish-changes`, when asking Codex to finish documentation, verify and sync the userscript, commit scoped changes and push them. It follows the existing commit style, preserves unrelated work, and confirms the remote commit. Implementing a change alone does not trigger publication.
+
 ### Custom build flags
 
 | Flag | Purpose |
@@ -242,7 +270,7 @@ The standard userscript also includes these upstream modules:
 | AutoMinter | Mint coins periodically. |
 | AutoSpyRecruiter | Recruit spies periodically while preserving resources. |
 
-Retained upstream modules have their own behavior and have not been fully revalidated for this variant. Use an explicit `--only` list for a smaller build, or keep `--ignore=usage_report` when building all other modules.
+The running-state audit covers all bundled automation controls; passive About, Minimap and AttackView views have no automation run state. Retained upstream modules have their own behavior and have not been fully revalidated for this variant. Use an explicit `--only` list for a smaller build, or keep `--ignore=usage_report` when building all other modules.
 
 ## Upstream attribution and history
 

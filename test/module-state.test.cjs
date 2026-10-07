@@ -6,7 +6,10 @@ const modules = [
     {id: 'farm_overflow', name: 'farmOverflow', key: 'farm_overflow_active', change: {unit_reserve_percent: 25}},
     {id: 'recruiter', name: 'recruiter', key: 'recruiter_active', change: {check_interval: '10 seconds'}},
     {id: 'builder_queue', name: 'builderQueue', key: 'builder_queue_active', change: {preserve_wood: 100}},
-    {id: 'auto_quest', name: 'autoQuest', key: 'auto_quest_active', change: {check_interval: '5 seconds'}}
+    {id: 'auto_quest', name: 'autoQuest', key: 'auto_quest_active', change: {check_interval: '5 seconds'}},
+    {id: 'auto_minter', name: 'autoMinter', key: 'auto_minter_active', change: {preserve_wood: 100}},
+    {id: 'spy_recruiter', name: '___spy_recruiter_id', key: 'spy_recruiter_active', change: {preserve_wood: 100},
+        lifecycle: ['___spy_recruiter_id_stop', '___spy_recruiter_id_start']}
 ];
 
 function setup (entry, options = {}) {
@@ -77,9 +80,9 @@ for (const entry of modules) {
         await f.settle();
         const oldIntervals = [...f.timers.entries()].filter(([, timer]) => timer.interval).map(([id]) => id);
         const transitions = [];
-        const events = entry.name === 'recruiter'
+        const events = entry.lifecycle || (entry.name === 'recruiter'
             ? ['two_recruiter_stop', 'two_recruiter_start']
-            : [entry.key.replace('_active', '_stop'), entry.key.replace('_active', '_start')];
+            : [entry.key.replace('_active', '_stop'), entry.key.replace('_active', '_start')]);
         for (const event of events) f.rootScope.$on(event, () => transitions.push(event));
         f.module.getSettings().setAll(entry.change);
         await f.settle();

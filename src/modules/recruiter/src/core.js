@@ -5,8 +5,9 @@ define('two/recruiter', [
     'two/resourceBudget',
     'two/ready',
     'queues/EventQueue',
-    'Lockr'
-], function (Settings, settingsMap, policy, resourceBudget, ready, eventQueue, Lockr) {
+    'Lockr',
+    'helper/time'
+], function (Settings, settingsMap, policy, resourceBudget, ready, eventQueue, Lockr, time) {
     let initialized = false;
     let running = false;
     let settings;
@@ -18,6 +19,7 @@ define('two/recruiter', [
     let plans = [];
     const resources = ['wood', 'clay', 'iron', 'food'];
     const timers = new Map();
+    const reservations = new Map();
     const publish = () => eventQueue.trigger('two_recruiter_updated');
     const unitData = () => modelDataService.getGameData().getUnitsObject();
     const buildingData = () => modelDataService.getGameData().getBuildings();
@@ -34,7 +36,10 @@ define('two/recruiter', [
 
     const snapshot = function (village) {
         buildingService.compute(village);
-        const computed = village.getResources().getComputed();
+        const resourceModel = village.getResources();
+        const computed = resourceModel.getComputed();
+        const updatedAt = typeof resourceModel.getLastUpdate === 'function'
+            ? time.server2ClientTime(resourceModel.getLastUpdate()) : NaN;
         const stock = Object.fromEntries(resources.map(type => [type, computed[type] && computed[type].currentStock]));
         const data = village.getBuildingData();
         const barracks = data.getDataForBuilding('barracks');
@@ -63,7 +68,7 @@ define('two/recruiter', [
                 buildingCosts[type] += Number(cost[type]);
             }
         }
-        return {stock, buildingCosts, barracksLevel: barracks && barracks.level,
+        return {stock, updatedAt, buildingCosts, barracksLevel: barracks && barracks.level,
             jobs: Array.isArray(jobs) ? jobs.map(job => job.data || job) : null,
             units: village.getUnitInfo().getUnits()};
     };
@@ -73,14 +78,42 @@ define('two/recruiter', [
         if (!entry) {
             return !resourceBudget.isBusy(village);
         }
-        // Wait for both the server job and resource debit before permitting another order.
-        const observed = entry.jobId && state.jobs && state.jobs.some(job => String(job.job_id || job.id) === String(entry.jobId));
-        if (observed && resources.every(type => !entry.cost[type]
-            || state.stock[type] <= entry.before[type] - entry.cost[type])) {
+        // Socket callbacks can omit the job; the authoritative queue/event also confirms it.
+        const matches = (state.jobs || []).filter(job => {
+            const id = job.job_id || job.id;
+            if (entry.jobId) {
+                return String(id) === String(entry.jobId);
+            }
+            if (job.unit_type !== entry.unit || Number(job.amount) !== Number(entry.amount)) {
+                return false;
+            }
+            if (Array.isArray(entry.beforeJobs)) {
+                return !entry.beforeJobs.includes(String(id));
+            }
+            // Older persisted guards have no queue baseline. Match their actual start time.
+            const startedAt = time.server2ClientTime(job.start_time);
+            return Number.isFinite(startedAt) && Math.abs(startedAt - entry.sentAt) <= 5000;
+        });
+        if (matches.length === 1) {
+            entry.jobId = matches[0].job_id || matches[0].id;
+            entry.queueObserved = true;
+            Lockr.set(pendingKey, pending);
+        }
+        // Production can replace a small debit before the next poll. A newer server
+        // resource snapshot is authoritative even when the computed stock grew again.
+        const fresh = Number.isFinite(state.updatedAt) && state.updatedAt > entry.sentAt;
+        const debited = resources.every(type => !entry.cost[type]
+            || state.stock[type] <= entry.before[type] - entry.cost[type]);
+        if (entry.queueObserved && (fresh || debited)) {
             delete pending[village.getId()];
             Lockr.set(pendingKey, pending);
             clearTimeout(timers.get(village.getId()));
             timers.delete(village.getId());
+            const reservation = reservations.get(village.getId());
+            if (reservation) {
+                resourceBudget.reject(village, reservation);
+                reservations.delete(village.getId());
+            }
             return !resourceBudget.isBusy(village);
         }
         return false;
@@ -132,12 +165,13 @@ define('two/recruiter', [
         if (!reservation) {
             return;
         }
-        const entry = {before: state.stock, cost: order.cost, sentAt: Date.now(), unit: order.unit_type, amount: order.amount};
+        reservations.set(village.getId(), reservation);
+        const entry = {beforeJobs: (state.jobs || []).map(job => String(job.job_id || job.id)), before: state.stock, cost: order.cost, sentAt: Date.now(), unit: order.unit_type, amount: order.amount};
         pending[village.getId()] = entry;
         Lockr.set(pendingKey, pending);
         timers.set(village.getId(), setTimeout(() => {
             try {
-                if (!reconcile(village, snapshot(village))) {
+                if (!reconcile(village, snapshot(village)) && running && !config.preview_only) {
                     recruiter.stop('Recruitment acknowledgement or resource update missing; inspect the game queue');
                 }
             } catch (error) {
@@ -182,6 +216,25 @@ define('two/recruiter', [
             const suffix = `${player.getWorldId()}_${player.getId()}`;
             pendingKey = `recruiter_pending_${suffix}`;
             pending = Lockr.get(pendingKey, {});
+            if (eventTypeProvider.BARRACKS_RECRUIT_JOB_CREATED) {
+                $rootScope.$on(eventTypeProvider.BARRACKS_RECRUIT_JOB_CREATED, (event, job) => {
+                    if (!job) {
+                        return;
+                    }
+                    const entry = pending[job.village_id];
+                    if (entry && job.job_id && job.unit_type === entry.unit
+                        && Number(job.amount) === Number(entry.amount)
+                        && (!entry.beforeJobs || !entry.beforeJobs.includes(String(job.job_id)))) {
+                        entry.jobId = job.job_id;
+                        const village = modelDataService.getSelectedCharacter().getVillage(job.village_id);
+                        if (village) {
+                            reconcile(village, snapshot(village));
+                        }
+                        Lockr.set(pendingKey, pending);
+                        publish();
+                    }
+                });
+            }
             settings = new Settings({settingsMap, storageKey: `recruiter_settings_${suffix}`});
             config = settings.getAll();
             settings.onChange(() => {
@@ -233,6 +286,7 @@ define('two/recruiter', [
             delete pending[villageId];
             Lockr.set(pendingKey, pending);
             resourceBudget.clear(villageId);
+            reservations.delete(Number(villageId));
             clearTimeout(timers.get(Number(villageId)));
             timers.delete(Number(villageId));
             recruiter.status = 'Guard cleared after manual check; start again';

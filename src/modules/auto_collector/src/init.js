@@ -3,42 +3,19 @@ require([
     'two/autoCollector',
     'two/autoCollector/ui',
     'Lockr',
-    'queues/EventQueue',
+    'two/moduleState',
     'two/autoCollector/secondVillage',
     'two/autoCollector/events'
-], function (
-    ready,
-    autoCollector,
-    autoCollectorInterface,
-    Lockr,
-    eventQueue
-) {
-    const STORAGE_KEYS = {
-        ACTIVE: 'auto_collector_active'
-    };
-
-    if (autoCollector.isInitialized()) {
-        return false;
-    }
-
+], function (ready, autoCollector, ui, Lockr, restoreModuleState) {
     ready(function () {
+        if (autoCollector.isInitialized()) {
+            return;
+        }
         autoCollector.init();
         autoCollector.secondVillage.init();
-        autoCollectorInterface();
-        
-        ready(function () {
-            if (Lockr.get(STORAGE_KEYS.ACTIVE, false, true)) {
-                autoCollector.start();
-                autoCollector.secondVillage.start();
-            }
-
-            eventQueue.register(eventTypeProvider.AUTO_COLLECTOR_STARTED, function () {
-                Lockr.set(STORAGE_KEYS.ACTIVE, true);
-            });
-
-            eventQueue.register(eventTypeProvider.AUTO_COLLECTOR_STOPPED, function () {
-                Lockr.set(STORAGE_KEYS.ACTIVE, false);
-            });
-        }, ['initial_village']);
-    });
+        ui();
+        const legacyActive = Lockr.get('auto_collector_active', false) === true;
+        restoreModuleState(autoCollector, 'auto_collector_active', eventTypeProvider.AUTO_COLLECTOR_STARTED, eventTypeProvider.AUTO_COLLECTOR_STOPPED);
+        restoreModuleState(autoCollector.secondVillage, 'auto_collector_second_village_active', eventTypeProvider.AUTO_COLLECTOR_SECONDVILLAGE_STARTED, eventTypeProvider.AUTO_COLLECTOR_SECONDVILLAGE_STOPPED, legacyActive);
+    }, ['initial_village', 'world_config']);
 });

@@ -14,6 +14,8 @@ define('two/autoCollector/secondVillage', [
     let initialized = false;
     let running = false;
     let allFinished = false;
+    let generation = 0;
+    let timer;
     const secondVillageService = injector.get('secondVillageService');
 
     const getRunningJob = function (jobs) {
@@ -70,7 +72,11 @@ define('two/autoCollector/secondVillage', [
     };
 
     const updateSecondVillageInfo = function (callback) {
+        const token = generation;
         socketService.emit(routeProvider.SECOND_VILLAGE_GET_INFO, {}, function (data) {
+            if (!running || token !== generation) {
+                return;
+            }
             if (secondVillageService.hasFinishedLastJob(data.jobs)) {
                 allFinished = true;
                 socketService.emit(routeProvider.SECOND_VILLAGE_FINISH_VILLAGE);
@@ -84,7 +90,9 @@ define('two/autoCollector/secondVillage', [
     };
 
     const updateAndAnalyse = function () {
-        updateSecondVillageInfo(analyse);
+        if (running) {
+            updateSecondVillageInfo(analyse);
+        }
     };
 
     const analyse = function () {
@@ -100,7 +108,8 @@ define('two/autoCollector/secondVillage', [
             const completed = $timeHelper.server2ClientTime(current.time_completed);
             const nextRun = completed - Date.now() + 1000;
 
-            setTimeout(updateAndAnalyse, nextRun);
+            clearTimeout(timer);
+            timer = setTimeout(updateAndAnalyse, nextRun);
 
             return false;
         }
@@ -119,13 +128,18 @@ define('two/autoCollector/secondVillage', [
         if (availableJobs) {
             const firstJob = getFirstJob(availableJobs);
 
+            const token = generation;
             startJob(firstJob, function () {
+                if (!running || token !== generation) {
+                    return;
+                }
+                clearTimeout(timer);
                 const job = availableJobs[firstJob];
 
                 if (job) {
-                    setTimeout(updateAndAnalyse, (job.duration * 1000) + 1000);
+                    timer = setTimeout(updateAndAnalyse, (job.duration * 1000) + 1000);
                 } else {
-                    setTimeout(updateAndAnalyse, 60 * 1000);
+                    timer = setTimeout(updateAndAnalyse, 60 * 1000);
                 }
 
             });
@@ -135,13 +149,21 @@ define('two/autoCollector/secondVillage', [
     const secondVillageCollector = {};
 
     secondVillageCollector.start = function () {
-        if (!initialized || allFinished) {
+        if (!initialized || running) {
             return false;
         }
 
-        eventQueue.trigger(eventTypeProvider.AUTO_COLLECTOR_SECONDVILLAGE_STARTED);
+        if (allFinished) {
+            socketService.emit(routeProvider.SECOND_VILLAGE_FINISH_VILLAGE);
+            secondVillageCollector.stop();
+            return false;
+        }
+
         running = true;
+        generation++;
+        eventQueue.trigger(eventTypeProvider.AUTO_COLLECTOR_SECONDVILLAGE_STARTED);
         updateAndAnalyse();
+        return true;
     };
 
     secondVillageCollector.stop = function () {
@@ -149,8 +171,10 @@ define('two/autoCollector/secondVillage', [
             return false;
         }
 
-        eventQueue.trigger(eventTypeProvider.AUTO_COLLECTOR_SECONDVILLAGE_STOPPED);
         running = false;
+        generation++;
+        clearTimeout(timer);
+        eventQueue.trigger(eventTypeProvider.AUTO_COLLECTOR_SECONDVILLAGE_STOPPED);
     };
 
     secondVillageCollector.isRunning = function () {
@@ -162,7 +186,7 @@ define('two/autoCollector/secondVillage', [
     };
 
     secondVillageCollector.init = function () {
-        if (!secondVillageService.isFeatureActive()) {
+        if (initialized || !secondVillageService.isFeatureActive()) {
             return false;
         }
 
@@ -171,7 +195,6 @@ define('two/autoCollector/secondVillage', [
         socketService.emit(routeProvider.SECOND_VILLAGE_GET_INFO, {}, function (data) {
             if (secondVillageService.hasFinishedLastJob(data.jobs)) {
                 allFinished = true;
-                socketService.emit(routeProvider.SECOND_VILLAGE_FINISH_VILLAGE);
             } else {
                 $rootScope.$on(eventTypeProvider.SECOND_VILLAGE_VILLAGE_CREATED, updateAndAnalyse);
                 $rootScope.$on(eventTypeProvider.SECOND_VILLAGE_JOB_COLLECTED, updateAndAnalyse);

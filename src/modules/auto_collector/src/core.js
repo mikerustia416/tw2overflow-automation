@@ -1,11 +1,13 @@
 define('two/autoCollector', [
     'queues/EventQueue',
     'helper/time',
-    'two/debug'
+    'two/debug',
+    'Lockr'
 ], function (
     eventQueue,
     timeHelper,
-    setupDebug
+    setupDebug,
+    Lockr
 ) {
     let initialized = false;
     let running = false;
@@ -69,7 +71,7 @@ define('two/autoCollector', [
     const analyse = function () {
         debug(1, 'analyse');
 
-        if (!running) {
+        if (!running || Lockr.get('deposit_planner_pending', null)) {
             return false;
         }
 
@@ -85,13 +87,13 @@ define('two/autoCollector', [
 
         const collectible = data.getCollectibleJobs();
 
-        if (collectible) {
+        if (collectible && collectible.length) {
             return finalizeJob(collectible.shift());
         }
 
         const ready = data.getReadyJobs();
 
-        if (ready) {
+        if (ready && ready.length) {
             return startJob(getFastestJob(ready));
         }
     };
@@ -128,7 +130,7 @@ define('two/autoCollector', [
             nextUpdateId = setTimeout(updateDepositInfo, resetTime);
         }
 
-        if (data.time_next_reset) {
+        if (data.time_new_milestones) {
             clearTimeout(nextMilestoneId);
             const resetTime = timeHelper.server2ClientTime(data.time_new_milestones) - timeHelper.gameTime();
             nextMilestoneId = setTimeout(updateDepositInfo, resetTime);
@@ -146,7 +148,15 @@ define('two/autoCollector', [
      * Inicializa o AutoDepois, configura os eventos.
      */
     autoCollector.init = function () {
+        if (initialized) {
+            return false;
+        }
         initialized = true;
+        $rootScope.$on('two_deposit_planner_controls_deposit', function () {
+            if (running) {
+                autoCollector.stop();
+            }
+        });
 
         if (!modelDataService.getWorldConfig().isResourceDepositEnabled()) {
             return false;
@@ -185,17 +195,23 @@ define('two/autoCollector', [
      * Inicia a analise dos trabalhos.
      */
     autoCollector.start = function () {
-        eventQueue.trigger(eventTypeProvider.AUTO_COLLECTOR_STARTED);
+        if (!initialized || running || !modelDataService.getWorldConfig().isResourceDepositEnabled()) {
+            return false;
+        }
         running = true;
-        socketService.emit(routeProvider.RESOURCE_DEPOSIT_GET_INFO);
+        eventQueue.trigger(eventTypeProvider.AUTO_COLLECTOR_STARTED);
+        socketService.emit(routeProvider.RESOURCE_DEPOSIT_GET_INFO, {});
+        return true;
     };
 
     /**
      * Para a analise dos trabalhos.
      */
     autoCollector.stop = function () {
-        eventQueue.trigger(eventTypeProvider.AUTO_COLLECTOR_STOPPED);
         running = false;
+        clearTimeout(nextUpdateId);
+        clearTimeout(nextMilestoneId);
+        eventQueue.trigger(eventTypeProvider.AUTO_COLLECTOR_STOPPED);
     };
 
     /**

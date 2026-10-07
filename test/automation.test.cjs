@@ -26,9 +26,12 @@ function recruitmentFixture (options = {}) {
     f.context.buildingService = {compute: () => {}};
     f.context.routeProvider.BARRACKS_RECRUIT = {type: 'recruit'};
     f.context.socketService.emit = (route, data, reply) => { requests.push(plain(data)); replies.push(reply); };
+    f.events.BARRACKS_RECRUIT_JOB_CREATED = 'barracks_created';
+    f.setModule('helper/time', {server2ClientTime: value => Number(value) * 1000});
     f.context.Date = {now: () => options.clock ? options.clock.now : 1000000};
     for (const village of Object.values(f.villages)) {
-        village.getResources = () => ({getComputed: () => Object.fromEntries(Object.entries(stocks).map(([type, currentStock]) => [type, {currentStock}]))});
+        village.getResources = () => ({getComputed: () => Object.fromEntries(Object.entries(stocks).map(([type, currentStock]) => [type, {currentStock}])),
+            getLastUpdate: () => options.resourceClock ? options.resourceClock.now : undefined});
         village.getUnitInfo = () => ({getUnits: () => units});
         village.getRecruitingQueue = () => ({jobs: jobs.map(data => ({data}))});
         village.getBuildingData = () => ({getDataForBuilding: name => levels[name]});
@@ -364,4 +367,59 @@ test('saving recruiter settings invalidates old readiness callbacks', () => {
     assert.equal(g.timers.size, 0);
     waiting[1]();
     assert.equal([...g.timers.values()].filter(timer => timer.interval === 10000).length, 1);
+});
+
+
+test('turning preview off starts actual recruitment and queue events confirm empty socket replies', async () => {
+    const resourceClock = {now: 999};
+    const f = recruitmentFixture({resourceClock, config: {check_interval: '10 seconds'}});
+    assert.equal(f.recruiter.start(), true);
+    assert.equal(f.requests.length, 0);
+    f.recruiter.stop();
+    f.recruiter.getSettings().setAll({preview_only: false});
+    assert.equal(f.recruiter.start(), true);
+    assert.equal(f.requests.length, 1);
+    f.replies[0]({}); // Real transport can acknowledge without a job payload.
+    const job = {job_id: 28, village_id: 1, unit_type: 'spear', amount: 50, recruited: 0, start_time: 1000};
+    f.jobs.push(job);
+    f.rootScope.$broadcast(f.events.BARRACKS_RECRUIT_JOB_CREATED, job);
+    await f.tick(10000);
+    assert.equal(f.requests.length, 1, 'A job alone does not allow spending stale resources');
+    resourceClock.now = 1010;
+    // Production or incoming resources may already have replaced a small debit.
+    await f.tick(10000);
+    assert.equal(f.requests.length, 2);
+    assert.equal(f.recruiter.isRunning(), true);
+});
+
+test('legacy guards recover only from a matching dated queue job and fresh resources', () => {
+    const entry = {sentAt: 990000, before: {wood: 10000, clay: 10000, iron: 10000, food: 500},
+        cost: {wood: 50, clay: 30, iron: 20, food: 1}, unit: 'spear', amount: 1};
+    const storageEntries = [['recruiter_pending_101_7', {1: entry}]];
+    const config = {preview_only: false};
+    const job = {job_id: 19, unit_type: 'spear', amount: 1, recruited: 0, start_time: 990};
+    const f = recruitmentFixture({config, storageEntries, resourceClock: {now: 1000}, jobs: [job]});
+    assert.equal(f.recruiter.start(), true);
+    assert.equal(f.requests.length, 1);
+    const unrelated = recruitmentFixture({config, storageEntries, resourceClock: {now: 1000}, jobs: [{...job, start_time: 800}]});
+    unrelated.recruiter.start();
+    assert.equal(unrelated.requests.length, 0, 'An older similar job cannot clear an uncertain order');
+});
+
+test('pre-existing identical queue jobs never acknowledge a new request', async () => {
+    const f = recruitmentFixture({config: {preview_only: false}, resourceClock: {now: 1001},
+        jobs: [{job_id: 1, unit_type: 'spear', amount: 50, recruited: 40}]});
+    f.recruiter.start();
+    await f.tick(10000);
+    assert.equal(f.requests.length, 1);
+    assert.equal(f.recruiter.getPending()[1].jobId, undefined);
+});
+
+test('an old actual-order timeout cannot stop a running preview', async () => {
+    const f = recruitmentFixture({config: {preview_only: false}});
+    f.recruiter.start();
+    f.recruiter.getSettings().setAll({preview_only: true});
+    await f.tick(30000);
+    assert.equal(f.recruiter.isRunning(), true);
+    assert.equal(f.requests.length, 1);
 });

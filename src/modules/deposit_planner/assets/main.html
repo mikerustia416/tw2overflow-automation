@@ -1,0 +1,27 @@
+<div id="two-deposit-planner" class="win-content two-window">
+    <header class="win-head"><h2>Deposit Planner</h2><ul class="list-btn"><li><a href="#" class="size-34x34 btn-red icon-26x26-close" ng-click="closeWindow()"></a></li></ul></header>
+    <div class="win-main" scrollbar=""><div class="box-paper footer"><div class="scroll-wrap">
+        <h3>{{ status }}</h3>
+        <p>Running and paused state, settings, observed boards and pending actions persist across page reloads. Preview mode reads game data without starting, collecting or rerolling errands. Automatic mode uses inventory reroll items only.</p>
+        <div ng-if="state" class="deposit-summary">
+            <p><strong>Progress:</strong> {{ state.progress | number:0 }} / {{ state.target | number:0 }} &mdash; {{ state.target - state.progress > 0 ? state.target - state.progress : 0 | number:0 }} needed<br><strong>Target reward:</strong> {{ reward.reward }} ({{ reward.amount }})</p>
+            <p><strong>Free errands:</strong> {{ until(state.errandsReset) }}<br><strong>Milestone reset:</strong> {{ until(state.milestonesReset) }}<br><strong>Reroll inventory:</strong> {{ state.itemCount }} items; {{ state.rerollsUsed }} reserved/used this milestone cycle</p>
+        </div>
+        <h3>Recommended action: {{ plan.action }}</h3>
+        <p>{{ plan.reason }}</p>
+        <p ng-if="plan.knownEta">Visible target collection: {{ date(plan.knownEta) }} (in {{ until(plan.knownEta) }})</p>
+        <p ng-if="state.current">Current errand completes: {{ date(state.current.completedAt) }} (in {{ until(state.current.completedAt) }})</p>
+        <p ng-if="pending">Pending {{ pending.action }}: automatic retries are blocked until game confirmation. <a href="#" ng-if="!running" class="btn-border btn-orange" ng-click="resolvePending()">Resolve after checking game</a></p>
+        <table ng-if="jobs.length" class="tbl-border-light tbl-content"><tr><th>Planned errand</th><th>Resources</th><th>Duration</th><th>Collection estimate</th></tr><tr ng-repeat="job in jobs"><td>{{ job.resource }} #{{ job.id }}</td><td>{{ job.amount | number:0 }}</td><td>{{ seconds(job.duration) }}</td><td>{{ date(job.eta) }}</td></tr></table>
+        <div ng-if="plan.forecast">
+            <h3>Reroll and waiting forecast</h3>
+            <p>{{ plan.forecast.sampleCount }} observed boards with matching village and bonuses. {{ plan.forecast.reason }}. Forecasts use the remaining item budget; they do not promise the maximum reward. ETAs below are conditional on reaching the target.</p>
+            <table ng-if="plan.forecast.ready" class="tbl-border-light tbl-content"><tr><th>First action</th><th>Item limit</th><th>Modeled chance</th><th>Median target ETA</th><th>90th percentile ETA</th></tr><tr ng-repeat="option in plan.forecast.options"><td>{{ option.action }}</td><td>{{ option.itemLimit }}</td><td>{{ percent(option.probability) }}</td><td>{{ date(option.eta) }}</td><td>{{ date(option.conservativeEta) }}</td></tr></table>
+        </div>
+        <p>Dates use {{ localZone }}. Errands selected automatically must finish and be collected before both reset deadlines, including the configured buffer. After reaching the target, the module waits for the next milestone cycle.</p>
+        <h3>Settings</h3>
+        <p>Turn on item rerolls while keeping Preview only enabled to inspect the proposed item budget. Turn Preview only off to execute plans. Taking control pauses Collector's deposit actions; its Second Village helper stays separate.</p>
+        <table class="tbl-border-light tbl-content tbl-medium-height"><tr ng-repeat="id in controls" ng-switch="map[id].inputType"><td>{{ labels[id] }}</td><td ng-switch-when="checkbox"><div switch-slider="" enabled="true" border="true" value="settings[id]" vertical="false" size="'56x28'"></div></td><td ng-switch-when="number"><input type="number" class="fit textfield-border" ng-model="settings[id]" min="{{ map[id].min }}" max="{{ map[id].max }}" step="1"><span class="setting-range">{{ map[id].min }} &ndash; {{ map[id].max }}</span></td></tr></table>
+    </div></div></div>
+    <footer class="win-foot"><ul class="list-btn list-center"><li><a href="#" class="btn-border btn-orange" ng-click="refresh()">Refresh preview</a></li><li><a href="#" class="btn-border btn-orange" ng-click="save()">Save</a></li><li><a href="#" class="btn-border" ng-class="running ? 'btn-red' : 'btn-green'" ng-click="toggle()">{{ running ? 'Pause' : 'Start' }}</a></li></ul></footer>
+</div>

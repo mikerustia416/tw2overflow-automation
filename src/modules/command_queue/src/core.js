@@ -215,6 +215,9 @@ define('two/commandQueue', [
     };
 
     commandQueue.init = function () {
+        if (commandQueue.initialized) {
+            return false;
+        }
         timeOffset = utils.getTimeOffset();
         commandQueue.initialized = true;
         sentCommands = Lockr.get(STORAGE_KEYS.QUEUE_SENT, [], true);
@@ -440,10 +443,14 @@ define('two/commandQueue', [
     };
 
     commandQueue.start = function (disableNotif) {
+        if (!commandQueue.initialized || running) {
+            return false;
+        }
         running = true;
         eventQueue.trigger(eventTypeProvider.COMMAND_QUEUE_START, {
             disableNotif: !!disableNotif
         });
+        return true;
     };
 
     commandQueue.stop = function () {

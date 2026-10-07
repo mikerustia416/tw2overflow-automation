@@ -27,7 +27,7 @@ test('bundled startup and module dependencies include no missing two modules', (
         require: dependencies => requests.push(...Array.from(dependencies)), angular: {}};
     const context = {window: browser, unsafeWindow: browser, console, setTimeout: () => {}, setInterval: () => {}};
     vm.runInNewContext(fs.readFileSync(path.join(root, 'userscript/tw2overflow-farming.user.js'), 'utf8'), context);
-    for (const name of ['two/farmOverflow', 'two/recruiter', 'two/autoQuest', 'two/builderQueue', 'two/autoMinter', 'two/spy_recruiter']) assert.ok(definitions.has(name), name);
+    for (const name of ['two/farmOverflow', 'two/recruiter', 'two/autoQuest', 'two/builderQueue', 'two/autoMinter', 'two/spy_recruiter', 'two/depositPlanner', 'two/commandQueue', 'two/autoCollector/secondVillage']) assert.ok(definitions.has(name), name);
     assert.equal(definitions.has('two/usage_report'), false);
     const dependencies = [...requests, ...Array.from(definitions.values()).flat()];
     assert.deepEqual([...new Set(dependencies.filter(name => name.startsWith('two/') && !definitions.has(name)))], []);

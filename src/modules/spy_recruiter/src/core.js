@@ -166,6 +166,9 @@ define('two/___spy_recruiter_id', [
     const ___spy_recruiter_id = {};
 
     ___spy_recruiter_id.init = function () {
+        if (initialized) {
+            return false;
+        }
         debug(1, 'initialized');
 
         initialized = true;
@@ -215,8 +218,13 @@ define('two/___spy_recruiter_id', [
     };
 
     ___spy_recruiter_id.start = function () {
+        if (!initialized || running || !Number.isFinite(localSettings[SETTINGS.CHECK_INTERVAL])
+            || localSettings[SETTINGS.CHECK_INTERVAL] < 1000) {
+            return false;
+        }
         startRecruitCycle();
         eventQueue.trigger(eventTypeProvider.___spy_recruiter_id_START);
+        return true;
     };
 
     ___spy_recruiter_id.stop = function () {

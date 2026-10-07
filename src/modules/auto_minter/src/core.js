@@ -137,6 +137,9 @@ define('two/autoMinter', [
     const autoMinter = {};
 
     autoMinter.init = function () {
+        if (initialized) {
+            return false;
+        }
         debug(1, 'initialized');
 
         initialized = true;
@@ -186,9 +189,14 @@ define('two/autoMinter', [
     };
 
     autoMinter.start = function () {
+        if (!initialized || running || !Number.isFinite(localSettings[SETTINGS.CHECK_INTERVAL])
+            || localSettings[SETTINGS.CHECK_INTERVAL] < 1000) {
+            return false;
+        }
         debug(1, 'start');
         startChecker();
         eventQueue.trigger(eventTypeProvider.AUTO_MINTER_START);
+        return true;
     };
 
     autoMinter.stop = function () {

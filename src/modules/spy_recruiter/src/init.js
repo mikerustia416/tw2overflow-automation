@@ -1,19 +1,9 @@
-require([
-    'two/ready',
-    'two/___spy_recruiter_id',
-    'two/___spy_recruiter_id/ui',
-    'two/___spy_recruiter_id/events'
-], function (
-    ready,
-    ___spy_recruiter_id,
-    ___spy_recruiter_idInterface
-) {
-    if (___spy_recruiter_id.isInitialized()) {
-        return false;
-    }
-
+require(['two/ready', 'two/___spy_recruiter_id', 'two/___spy_recruiter_id/ui', 'two/___spy_recruiter_id/events', 'two/moduleState'], function (ready, module, ui, moduleEvents, restoreModuleState) {
     ready(function () {
-        ___spy_recruiter_id.init();
-        ___spy_recruiter_idInterface();
-    });
+        if (!module.isInitialized()) {
+            module.init();
+            ui();
+            restoreModuleState(module, 'spy_recruiter_active', eventTypeProvider.___spy_recruiter_id_START, eventTypeProvider.___spy_recruiter_id_STOP);
+        }
+    }, ['all_villages_ready', 'world_config']);
 });

@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name        TW2Overflow Farmer, Recruiter, Builder and Quest
+// @name        TW2Overflow Farmer, Recruiter, Builder, Quest and Deposit Planner
 // @description Automating the boring stuff on Tribal Wars 2 with tools like auto farming, auto builder, command scheduler, minimap and more.
 // @namespace   local/tw2overflow-farming
-// @version     2.1.500.5
+// @version     2.1.500.6
 // @grant       unsafeWindow
 // @run-at      document-start
 // @include     https://*.tribalwars2.com/game.php*
@@ -11,7 +11,7 @@
 
 /*!
  * tw2overflow v2.1.500
- * Wed, 07 Oct 2026 00:23:26 GMT
+ * Wed, 07 Oct 2026 01:42:30 GMT
  * Developed by Relaxeaza <relaxeaza@outlook.com>
  *
  * This work is free. You can redistribute it and/or modify it under the
@@ -775,6 +775,9 @@ define('two/language', [
             "tab_waiting": "Příkazy ve frontě",
             "tab_logs": "Příkazové protokoly"
         },
+        "deposit_planner": {
+            "description": "Plan resource deposit rewards, free resets and item rerolls."
+        },
         "farm_overflow": {
             "auto_presets": "Create automatic farming presets",
             "auto_preset_min_units": "Minimum soldiers per packet",
@@ -1208,6 +1211,9 @@ define('two/language', [
             "tab_add": "Befehl hinzufügen",
             "tab_waiting": "Befehle in Warteschleife",
             "tab_logs": "Befehlsprotokoll"
+        },
+        "deposit_planner": {
+            "description": "Plan resource deposit rewards, free resets and item rerolls."
         },
         "farm_overflow": {
             "auto_presets": "Create automatic farming presets",
@@ -1643,6 +1649,9 @@ define('two/language', [
             "tab_waiting": "Εντολές ουράς",
             "tab_logs": "Αρχεία εντολών"
         },
+        "deposit_planner": {
+            "description": "Plan resource deposit rewards, free resets and item rerolls."
+        },
         "farm_overflow": {
             "auto_presets": "Create automatic farming presets",
             "auto_preset_min_units": "Minimum soldiers per packet",
@@ -2076,6 +2085,9 @@ define('two/language', [
             "tab_add": "Add command",
             "tab_waiting": "Queued commands",
             "tab_logs": "Command logs"
+        },
+        "deposit_planner": {
+            "description": "Plan resource deposit rewards, free resets and item rerolls."
         },
         "farm_overflow": {
             "auto_presets": "Create automatic farming presets",
@@ -2511,6 +2523,9 @@ define('two/language', [
             "tab_waiting": "Comandos en cola",
             "tab_logs": "Registros de comandos"
         },
+        "deposit_planner": {
+            "description": "Plan resource deposit rewards, free resets and item rerolls."
+        },
         "farm_overflow": {
             "auto_presets": "Create automatic farming presets",
             "auto_preset_min_units": "Minimum soldiers per packet",
@@ -2944,6 +2959,9 @@ define('two/language', [
             "tab_add": "Ajouter une commande",
             "tab_waiting": "Commandes en file d'attente",
             "tab_logs": "Journaux de commande"
+        },
+        "deposit_planner": {
+            "description": "Plan resource deposit rewards, free resets and item rerolls."
         },
         "farm_overflow": {
             "auto_presets": "Create automatic farming presets",
@@ -3379,6 +3397,9 @@ define('two/language', [
             "tab_waiting": "In wachtrij geplaatste opdrachten",
             "tab_logs": "Opdrachtlogboeken"
         },
+        "deposit_planner": {
+            "description": "Plan resource deposit rewards, free resets and item rerolls."
+        },
         "farm_overflow": {
             "auto_presets": "Create automatic farming presets",
             "auto_preset_min_units": "Minimum soldiers per packet",
@@ -3812,6 +3833,9 @@ define('two/language', [
             "tab_add": "Dodaj rozkaz",
             "tab_waiting": "Oczekujące",
             "tab_logs": "Logi"
+        },
+        "deposit_planner": {
+            "description": "Plan resource deposit rewards, free resets and item rerolls."
         },
         "farm_overflow": {
             "auto_presets": "Create automatic farming presets",
@@ -4247,6 +4271,9 @@ define('two/language', [
             "tab_waiting": "Comandos em espera",
             "tab_logs": "Registro de comandos"
         },
+        "deposit_planner": {
+            "description": "Plan resource deposit rewards, free resets and item rerolls."
+        },
         "farm_overflow": {
             "auto_presets": "Create automatic farming presets",
             "auto_preset_min_units": "Minimum soldiers per packet",
@@ -4681,6 +4708,9 @@ define('two/language', [
             "tab_waiting": "Comenzi în coadă",
             "tab_logs": "Jurnalele de comandă"
         },
+        "deposit_planner": {
+            "description": "Plan resource deposit rewards, free resets and item rerolls."
+        },
         "farm_overflow": {
             "auto_presets": "Create automatic farming presets",
             "auto_preset_min_units": "Minimum soldiers per packet",
@@ -5114,6 +5144,9 @@ define('two/language', [
             "tab_add": "Добавить команду",
             "tab_waiting": "Команды в очереди",
             "tab_logs": "Журнал команд"
+        },
+        "deposit_planner": {
+            "description": "Plan resource deposit rewards, free resets and item rerolls."
         },
         "farm_overflow": {
             "auto_presets": "Create automatic farming presets",
@@ -5942,7 +5975,7 @@ define('two/moduleState', [
     'Lockr',
     'queues/EventQueue'
 ], function (Lockr, eventQueue) {
-    return function (module, storageKey, startEvent, stopEvent) {
+    return function (module, storageKey, startEvent, stopEvent, defaultActive = false) {
         eventQueue.register(startEvent, function () {
             Lockr.set(storageKey, true);
         });
@@ -5950,7 +5983,7 @@ define('two/moduleState', [
             Lockr.set(storageKey, false);
         });
 
-        if (Lockr.get(storageKey, false) === true) {
+        if (Lockr.get(storageKey, defaultActive) === true) {
             module.start();
             // Validation can reject a saved run before a start/stop event is emitted.
             Lockr.set(storageKey, module.isRunning());
@@ -7298,11 +7331,13 @@ require([
 define('two/autoCollector', [
     'queues/EventQueue',
     'helper/time',
-    'two/debug'
+    'two/debug',
+    'Lockr'
 ], function (
     eventQueue,
     timeHelper,
-    setupDebug
+    setupDebug,
+    Lockr
 ) {
     let initialized = false;
     let running = false;
@@ -7366,7 +7401,7 @@ define('two/autoCollector', [
     const analyse = function () {
         debug(1, 'analyse');
 
-        if (!running) {
+        if (!running || Lockr.get('deposit_planner_pending', null)) {
             return false;
         }
 
@@ -7382,13 +7417,13 @@ define('two/autoCollector', [
 
         const collectible = data.getCollectibleJobs();
 
-        if (collectible) {
+        if (collectible && collectible.length) {
             return finalizeJob(collectible.shift());
         }
 
         const ready = data.getReadyJobs();
 
-        if (ready) {
+        if (ready && ready.length) {
             return startJob(getFastestJob(ready));
         }
     };
@@ -7425,7 +7460,7 @@ define('two/autoCollector', [
             nextUpdateId = setTimeout(updateDepositInfo, resetTime);
         }
 
-        if (data.time_next_reset) {
+        if (data.time_new_milestones) {
             clearTimeout(nextMilestoneId);
             const resetTime = timeHelper.server2ClientTime(data.time_new_milestones) - timeHelper.gameTime();
             nextMilestoneId = setTimeout(updateDepositInfo, resetTime);
@@ -7443,7 +7478,15 @@ define('two/autoCollector', [
      * Inicializa o AutoDepois, configura os eventos.
      */
     autoCollector.init = function () {
+        if (initialized) {
+            return false;
+        }
         initialized = true;
+        $rootScope.$on('two_deposit_planner_controls_deposit', function () {
+            if (running) {
+                autoCollector.stop();
+            }
+        });
 
         if (!modelDataService.getWorldConfig().isResourceDepositEnabled()) {
             return false;
@@ -7482,17 +7525,23 @@ define('two/autoCollector', [
      * Inicia a analise dos trabalhos.
      */
     autoCollector.start = function () {
-        eventQueue.trigger(eventTypeProvider.AUTO_COLLECTOR_STARTED);
+        if (!initialized || running || !modelDataService.getWorldConfig().isResourceDepositEnabled()) {
+            return false;
+        }
         running = true;
-        socketService.emit(routeProvider.RESOURCE_DEPOSIT_GET_INFO);
+        eventQueue.trigger(eventTypeProvider.AUTO_COLLECTOR_STARTED);
+        socketService.emit(routeProvider.RESOURCE_DEPOSIT_GET_INFO, {});
+        return true;
     };
 
     /**
      * Para a analise dos trabalhos.
      */
     autoCollector.stop = function () {
-        eventQueue.trigger(eventTypeProvider.AUTO_COLLECTOR_STOPPED);
         running = false;
+        clearTimeout(nextUpdateId);
+        clearTimeout(nextMilestoneId);
+        eventQueue.trigger(eventTypeProvider.AUTO_COLLECTOR_STOPPED);
     };
 
     /**
@@ -7587,6 +7636,8 @@ define('two/autoCollector/secondVillage', [
     let initialized = false;
     let running = false;
     let allFinished = false;
+    let generation = 0;
+    let timer;
     const secondVillageService = injector.get('secondVillageService');
 
     const getRunningJob = function (jobs) {
@@ -7643,7 +7694,11 @@ define('two/autoCollector/secondVillage', [
     };
 
     const updateSecondVillageInfo = function (callback) {
+        const token = generation;
         socketService.emit(routeProvider.SECOND_VILLAGE_GET_INFO, {}, function (data) {
+            if (!running || token !== generation) {
+                return;
+            }
             if (secondVillageService.hasFinishedLastJob(data.jobs)) {
                 allFinished = true;
                 socketService.emit(routeProvider.SECOND_VILLAGE_FINISH_VILLAGE);
@@ -7657,7 +7712,9 @@ define('two/autoCollector/secondVillage', [
     };
 
     const updateAndAnalyse = function () {
-        updateSecondVillageInfo(analyse);
+        if (running) {
+            updateSecondVillageInfo(analyse);
+        }
     };
 
     const analyse = function () {
@@ -7673,7 +7730,8 @@ define('two/autoCollector/secondVillage', [
             const completed = $timeHelper.server2ClientTime(current.time_completed);
             const nextRun = completed - Date.now() + 1000;
 
-            setTimeout(updateAndAnalyse, nextRun);
+            clearTimeout(timer);
+            timer = setTimeout(updateAndAnalyse, nextRun);
 
             return false;
         }
@@ -7692,13 +7750,18 @@ define('two/autoCollector/secondVillage', [
         if (availableJobs) {
             const firstJob = getFirstJob(availableJobs);
 
+            const token = generation;
             startJob(firstJob, function () {
+                if (!running || token !== generation) {
+                    return;
+                }
+                clearTimeout(timer);
                 const job = availableJobs[firstJob];
 
                 if (job) {
-                    setTimeout(updateAndAnalyse, (job.duration * 1000) + 1000);
+                    timer = setTimeout(updateAndAnalyse, (job.duration * 1000) + 1000);
                 } else {
-                    setTimeout(updateAndAnalyse, 60 * 1000);
+                    timer = setTimeout(updateAndAnalyse, 60 * 1000);
                 }
 
             });
@@ -7708,13 +7771,21 @@ define('two/autoCollector/secondVillage', [
     const secondVillageCollector = {};
 
     secondVillageCollector.start = function () {
-        if (!initialized || allFinished) {
+        if (!initialized || running) {
             return false;
         }
 
-        eventQueue.trigger(eventTypeProvider.AUTO_COLLECTOR_SECONDVILLAGE_STARTED);
+        if (allFinished) {
+            socketService.emit(routeProvider.SECOND_VILLAGE_FINISH_VILLAGE);
+            secondVillageCollector.stop();
+            return false;
+        }
+
         running = true;
+        generation++;
+        eventQueue.trigger(eventTypeProvider.AUTO_COLLECTOR_SECONDVILLAGE_STARTED);
         updateAndAnalyse();
+        return true;
     };
 
     secondVillageCollector.stop = function () {
@@ -7722,8 +7793,10 @@ define('two/autoCollector/secondVillage', [
             return false;
         }
 
-        eventQueue.trigger(eventTypeProvider.AUTO_COLLECTOR_SECONDVILLAGE_STOPPED);
         running = false;
+        generation++;
+        clearTimeout(timer);
+        eventQueue.trigger(eventTypeProvider.AUTO_COLLECTOR_SECONDVILLAGE_STOPPED);
     };
 
     secondVillageCollector.isRunning = function () {
@@ -7735,7 +7808,7 @@ define('two/autoCollector/secondVillage', [
     };
 
     secondVillageCollector.init = function () {
-        if (!secondVillageService.isFeatureActive()) {
+        if (initialized || !secondVillageService.isFeatureActive()) {
             return false;
         }
 
@@ -7744,7 +7817,6 @@ define('two/autoCollector/secondVillage', [
         socketService.emit(routeProvider.SECOND_VILLAGE_GET_INFO, {}, function (data) {
             if (secondVillageService.hasFinishedLastJob(data.jobs)) {
                 allFinished = true;
-                socketService.emit(routeProvider.SECOND_VILLAGE_FINISH_VILLAGE);
             } else {
                 $rootScope.$on(eventTypeProvider.SECOND_VILLAGE_VILLAGE_CREATED, updateAndAnalyse);
                 $rootScope.$on(eventTypeProvider.SECOND_VILLAGE_JOB_COLLECTED, updateAndAnalyse);
@@ -7760,44 +7832,21 @@ require([
     'two/autoCollector',
     'two/autoCollector/ui',
     'Lockr',
-    'queues/EventQueue',
+    'two/moduleState',
     'two/autoCollector/secondVillage',
     'two/autoCollector/events'
-], function (
-    ready,
-    autoCollector,
-    autoCollectorInterface,
-    Lockr,
-    eventQueue
-) {
-    const STORAGE_KEYS = {
-        ACTIVE: 'auto_collector_active'
-    };
-
-    if (autoCollector.isInitialized()) {
-        return false;
-    }
-
+], function (ready, autoCollector, ui, Lockr, restoreModuleState) {
     ready(function () {
+        if (autoCollector.isInitialized()) {
+            return;
+        }
         autoCollector.init();
         autoCollector.secondVillage.init();
-        autoCollectorInterface();
-
-        ready(function () {
-            if (Lockr.get(STORAGE_KEYS.ACTIVE, false, true)) {
-                autoCollector.start();
-                autoCollector.secondVillage.start();
-            }
-
-            eventQueue.register(eventTypeProvider.AUTO_COLLECTOR_STARTED, function () {
-                Lockr.set(STORAGE_KEYS.ACTIVE, true);
-            });
-
-            eventQueue.register(eventTypeProvider.AUTO_COLLECTOR_STOPPED, function () {
-                Lockr.set(STORAGE_KEYS.ACTIVE, false);
-            });
-        }, ['initial_village']);
-    });
+        ui();
+        const legacyActive = Lockr.get('auto_collector_active', false) === true;
+        restoreModuleState(autoCollector, 'auto_collector_active', eventTypeProvider.AUTO_COLLECTOR_STARTED, eventTypeProvider.AUTO_COLLECTOR_STOPPED);
+        restoreModuleState(autoCollector.secondVillage, 'auto_collector_second_village_active', eventTypeProvider.AUTO_COLLECTOR_SECONDVILLAGE_STARTED, eventTypeProvider.AUTO_COLLECTOR_SECONDVILLAGE_STOPPED, legacyActive);
+    }, ['initial_village', 'world_config']);
 });
 
 define('two/autoMinter', [
@@ -7939,6 +7988,9 @@ define('two/autoMinter', [
     const autoMinter = {};
 
     autoMinter.init = function () {
+        if (initialized) {
+            return false;
+        }
         debug(1, 'initialized');
 
         initialized = true;
@@ -7988,9 +8040,14 @@ define('two/autoMinter', [
     };
 
     autoMinter.start = function () {
+        if (!initialized || running || !Number.isFinite(localSettings[SETTINGS.CHECK_INTERVAL])
+            || localSettings[SETTINGS.CHECK_INTERVAL] < 1000) {
+            return false;
+        }
         debug(1, 'start');
         startChecker();
         eventQueue.trigger(eventTypeProvider.AUTO_MINTER_START);
+        return true;
     };
 
     autoMinter.stop = function () {
@@ -8207,24 +8264,14 @@ define('two/autoMinter/settings/map', [
     };
 });
 
-require([
-    'two/ready',
-    'two/autoMinter',
-    'two/autoMinter/ui',
-    'two/autoMinter/events'
-], function (
-    ready,
-    autoMinter,
-    autoMinterInterface
-) {
-    if (autoMinter.isInitialized()) {
-        return false;
-    }
-
+require(['two/ready', 'two/autoMinter', 'two/autoMinter/ui', 'two/autoMinter/events', 'two/moduleState'], function (ready, module, ui, moduleEvents, restoreModuleState) {
     ready(function () {
-        autoMinter.init();
-        autoMinterInterface();
-    });
+        if (!module.isInitialized()) {
+            module.init();
+            ui();
+            restoreModuleState(module, 'auto_minter_active', eventTypeProvider.AUTO_MINTER_START, eventTypeProvider.AUTO_MINTER_STOP);
+        }
+    }, ['all_villages_ready', 'world_config']);
 });
 
 define('two/autoQuest', [
@@ -10892,6 +10939,9 @@ define('two/commandQueue', [
     };
 
     commandQueue.init = function () {
+        if (commandQueue.initialized) {
+            return false;
+        }
         timeOffset = utils.getTimeOffset();
         commandQueue.initialized = true;
         sentCommands = Lockr.get(STORAGE_KEYS.QUEUE_SENT, [], true);
@@ -11117,10 +11167,14 @@ define('two/commandQueue', [
     };
 
     commandQueue.start = function (disableNotif) {
+        if (!commandQueue.initialized || running) {
+            return false;
+        }
         running = true;
         eventQueue.trigger(eventTypeProvider.COMMAND_QUEUE_START, {
             disableNotif: !!disableNotif
         });
+        return true;
     };
 
     commandQueue.stop = function () {
@@ -11929,28 +11983,800 @@ define('two/commandQueue/errorCodes', [], function () {
     };
 });
 
-require([
-    'two/ready',
-    'two/commandQueue',
-    'two/commandQueue/ui',
-    'two/commandQueue/events'
-], function (
-    ready,
-    commandQueue,
-    commandQueueInterface
-) {
-    if (commandQueue.initialized) {
-        return false;
-    }
-
+require(['two/ready', 'two/commandQueue', 'two/commandQueue/ui', 'two/commandQueue/events', 'two/moduleState'], function (ready, commandQueue, ui, moduleEvents, restoreModuleState) {
     ready(function () {
-        commandQueue.init();
-        commandQueueInterface();
-
-        if (commandQueue.getWaitingCommands().length > 0) {
-            commandQueue.start(true);
+        if (commandQueue.initialized) {
+            return;
         }
+        commandQueue.init();
+        ui();
+        // Migrate the previous automatic startup only when no state has been saved.
+        // An explicit saved pause always wins, even with pending commands.
+        restoreModuleState({start: () => commandQueue.start(true), isRunning: () => commandQueue.isRunning()},
+            'command_queue_active',
+            eventTypeProvider.COMMAND_QUEUE_START,
+            eventTypeProvider.COMMAND_QUEUE_STOP,
+            commandQueue.getWaitingCommands().length > 0);
     }, ['map', 'world_config']);
+});
+
+define('two/depositPlanner', [
+    'two/Settings',
+    'two/depositPlanner/settings/map',
+    'two/depositPlanner/policy',
+    'two/depositPlanner/adapter',
+    'Lockr',
+    'queues/EventQueue'
+], function (Settings, map, policy, adapter, Lockr, events) {
+    const KEYS = {pending: 'deposit_planner_pending', samples: 'deposit_planner_samples', cycle: 'deposit_planner_cycle', revision: 'deposit_planner_board_revision'};
+    let initialized = false;
+    let running = false;
+    let settings;
+    let config;
+    let info;
+    let lastInfoAt = 0;
+    let pending;
+    let samples = [];
+    let cycle;
+    let boardRevision = 0;
+    let wake;
+    let plan = {action: 'wait', reason: 'Open the planner to refresh deposit data', jobs: []};
+    let status = 'Paused';
+    let poll;
+    let deferred;
+    let generation = 0;
+    let takeoverUntil = 0;
+    let refreshing = false;
+    let refreshTimeout;
+    let forecastKey;
+    let forecastCache;
+    const publish = () => events.trigger('two_deposit_planner_updated');
+    const storePending = () => Lockr.set(KEYS.pending, pending || null);
+
+    const refresh = function () {
+        if (!refreshing && routeProvider.RESOURCE_DEPOSIT_GET_INFO) {
+            refreshing = true;
+            clearTimeout(refreshTimeout);
+            refreshTimeout = setTimeout(() => {
+                refreshing = false;
+            }, 5000);
+            socketService.emit(routeProvider.RESOURCE_DEPOSIT_GET_INFO, {});
+        }
+    };
+    const schedule = function () {
+        if (!running || deferred) {
+            return;
+        }
+        const token = generation;
+        deferred = setTimeout(() => {
+            deferred = null;
+            if (running && token === generation) {
+                execute();
+            }
+        }, 300);
+    };
+    const reconcile = function (state) {
+        if (!pending) {
+            return true;
+        }
+        const idMatches = job => job && String(job.id) === String(pending.jobId);
+        const all = state.jobs.concat(state.collectible, state.current || []);
+        const startConfirmed = pending.action === 'start' && (idMatches(state.current) || state.collectible.some(idMatches));
+        const collectionConfirmed = pending.action === 'collect' && !all.some(idMatches)
+            && (pending.ack || state.cycleId === pending.cycleId && state.progress > pending.progress);
+        const rerollConfirmed = pending.action === 'reroll' && (pending.rerollAck || adapter.boardKey(state) !== pending.boardKey)
+            && (pending.itemDebited || state.itemCount < pending.itemCount);
+        if (startConfirmed || collectionConfirmed || rerollConfirmed) {
+            pending = null;
+            storePending();
+            return true;
+        }
+        if (running && state.now - pending.sentAt >= 30) {
+            planner.stop('Pending ' + pending.action + ' needs a game check; automatic retry blocked');
+        }
+        return false;
+    };
+    const armWake = function (state) {
+        clearTimeout(wake);
+        if (!running) {
+            return;
+        }
+        const candidates = [state.errandsReset + 1, state.milestonesReset + 1];
+        if (state.current) {
+            candidates.push(state.current.completedAt + config.action_delay);
+        }
+        if (pending) {
+            candidates.push(pending.sentAt + 30);
+        }
+        if (takeoverUntil > state.now) {
+            candidates.push(takeoverUntil + 0.1);
+        }
+        const next = Math.min(...candidates.filter(timestamp => timestamp > state.now));
+        if (Number.isFinite(next)) {
+            wake = setTimeout(() => {
+                wake = null;
+                refresh();
+                schedule();
+            }, Math.max(100, (next - state.now) * 1000));
+        }
+    };
+    const preview = function () {
+        try {
+            if (!policy.validSettings(config, map)) {
+                throw new Error('Invalid planner settings');
+            }
+            let state = adapter.snapshot(info, config, cycle.spent);
+            if (cycle.reset !== state.cycleId) {
+                // A corrected future timestamp must not replenish the daily budget.
+                if (cycle.reset && adapter.toClientSeconds(cycle.reset) <= state.now) {
+                    cycle.spent = 0;
+                }
+                cycle.reset = state.cycleId;
+                Lockr.set(KEYS.cycle, cycle);
+                state = {...state, rerollsUsed: cycle.spent};
+            }
+            if (state.jobs.length === 6 && !state.current && !state.collectible.length && state.jobs.every(policy.validJob)) {
+                const key = JSON.stringify([adapter.boardKey(state), state.context, state.cycleId, state.errandsReset, boardRevision]);
+                if (!samples.some(sample => sample.key === key)) {
+                    samples.push({key, context: state.context, at: state.now,
+                        jobs: state.jobs.map(job => ({id: job.id, duration: job.duration, amount: job.amount}))});
+                    samples = samples.filter(sample => sample.at >= state.now - 30 * 86400).slice(-60);
+                    Lockr.set(KEYS.samples, samples);
+                }
+            }
+            reconcile(state);
+            const key = JSON.stringify([state.jobs,
+                state.current,
+                state.collectible,
+                state.progress,
+                state.target,
+                state.errandsReset,
+                state.milestonesReset,
+                state.itemCount,
+                state.rerollsUsed,
+                state.context,
+                Math.floor(state.now),
+                config,
+                samples.length]);
+            plan = policy.plan(state, config, samples, function () {
+                if (key !== forecastKey) {
+                    forecastCache = policy.forecast(state, config, samples);
+                    forecastKey = key;
+                }
+                return forecastCache;
+            });
+            armWake(state);
+            if (pending) {
+                plan = {...plan, action: 'pending', reason: 'Waiting for game confirmation of ' + pending.action};
+            }
+            publish();
+            return plan;
+        } catch (error) {
+            plan = {action: 'unavailable', reason: error.message, jobs: []};
+            publish();
+            return plan;
+        }
+    };
+    const send = function (action, state, job) {
+        if (!running || config.preview_only || pending) {
+            return;
+        }
+        let route;
+        let payload;
+        if (action === 'reroll') {
+            if (!config.auto_reroll || policy.budgetFor(state, config) < 1 || !state.itemId || state.current || state.collectible.length) {
+                return;
+            }
+            // The premium reroll route spends Crowns. Only use the inventory item.
+            route = routeProvider.PREMIUM_USE_ITEM;
+            payload = {village_id: modelDataService.getSelectedVillage().getId(), item_id: state.itemId};
+        } else if (action === 'start') {
+            route = routeProvider.RESOURCE_DEPOSIT_START_JOB;
+            payload = {job_id: job.id};
+        } else {
+            route = routeProvider.RESOURCE_DEPOSIT_COLLECT;
+            payload = {job_id: job.id, village_id: modelDataService.getSelectedVillage().getId()};
+        }
+        if (!route) {
+            planner.stop('Required game route unavailable');
+            return;
+        }
+        pending = {action, jobId: job && job.id, itemId: state.itemId, itemCount: state.itemCount,
+            boardKey: adapter.boardKey(state), progress: state.progress, cycleId: state.cycleId, sentAt: Date.now() / 1000};
+        // Reserve the item budget before emitting, including uncertain responses.
+        if (action === 'reroll') {
+            cycle.spent++;
+            Lockr.set(KEYS.cycle, cycle);
+        }
+        storePending();
+        status = 'Awaiting ' + action + ' confirmation';
+        const entry = pending;
+        socketService.emit(route, payload, reply => {
+            if (pending !== entry) {
+                return;
+            }
+            if (reply && reply.error) {
+                planner.stop('Game rejected ' + action + '; inspect the pending guard');
+            }
+            refresh();
+            schedule();
+        });
+        preview();
+    };
+    const execute = function () {
+        if (!running) {
+            return;
+        }
+        const next = preview();
+        if (!running) {
+            return;
+        }
+        if (next.action === 'unavailable' || next.action === 'refresh' || Date.now() / 1000 - lastInfoAt > config.poll_seconds + 5) {
+            status = next.reason;
+            refresh();
+            return;
+        }
+        if (pending || Date.now() / 1000 < takeoverUntil) {
+            status = pending ? 'Waiting for game confirmation' : 'Waiting for Collector handover';
+            return;
+        }
+        status = config.preview_only ? 'Running — preview only' : 'Running — ' + next.reason;
+        if (config.preview_only) {
+            publish();
+            return;
+        }
+        if (next.action === 'target' && !config.hold_after_target && next.state.collectible.length) {
+            send('collect', next.state, next.state.collectible[0]);
+        } else if (['start', 'collect', 'reroll'].includes(next.action)) {
+            if (next.action === 'reroll' && !config.auto_reroll) {
+                status = 'Item reroll recommended; automatic rerolls are disabled';
+            } else {
+                send(next.action, next.state, next.job);
+            }
+        }
+        publish();
+    };
+    const onInfo = function (data) {
+        refreshing = false;
+        clearTimeout(refreshTimeout);
+        if (data && data.time_next_reset && data.time_new_milestones) {
+            info = {time_next_reset: data.time_next_reset, time_new_milestones: data.time_new_milestones};
+            lastInfoAt = Date.now() / 1000;
+            forecastKey = null;
+        }
+        preview();
+        schedule();
+    };
+    const planner = {
+        init: function () {
+            if (initialized) {
+                return;
+            }
+            initialized = true;
+            pending = Lockr.get(KEYS.pending, null);
+            samples = Lockr.get(KEYS.samples, []);
+            if (!Array.isArray(samples)) {
+                samples = [];
+            }
+            samples = samples.filter(sample => sample && Array.isArray(sample.jobs));
+            boardRevision = Number(Lockr.get(KEYS.revision, 0)) || 0;
+            cycle = Lockr.get(KEYS.cycle, {reset: null, spent: 0});
+            if (!cycle || !Number.isInteger(cycle.spent) || cycle.spent < 0) {
+                cycle = {reset: null, spent: 20};
+            }
+            settings = new Settings({settingsMap: map, storageKey: 'deposit_planner_settings', onChange: function () {
+                const resume = running;
+                if (resume) {
+                    planner.stop();
+                }
+                config = settings.getAll();
+                forecastKey = null;
+                if (resume) {
+                    planner.start();
+                } else {
+                    preview();
+                }
+            }});
+            config = settings.getAll();
+            $rootScope.$on(eventTypeProvider.RESOURCE_DEPOSIT_INFO, (event, data) => onInfo(data));
+            for (const name of ['RESOURCE_DEPOSIT_JOBS_REROLLED',
+                'RESOURCE_DEPOSIT_JOB_STARTED',
+                'RESOURCE_DEPOSIT_JOB_COLLECTED',
+                'RESOURCE_DEPOSIT_JOB_COLLECTIBLE',
+                'INVENTORY_ITEM_CHANGED']) {
+                if (!eventTypeProvider[name]) {
+                    continue;
+                }
+                $rootScope.$on(eventTypeProvider[name], function (event, data) {
+                    if (name === 'RESOURCE_DEPOSIT_JOBS_REROLLED') {
+                        boardRevision++;
+                        Lockr.set(KEYS.revision, boardRevision);
+                        if (pending && pending.action === 'reroll') {
+                            pending.rerollAck = true;
+                            storePending();
+                        }
+                    }
+                    if (pending && data) {
+                        if (name === 'RESOURCE_DEPOSIT_JOB_COLLECTED' && pending.action === 'collect'
+                            && String(data.job_id) === String(pending.jobId)) {
+                            pending.ack = true;
+                        }
+                        if (name === 'INVENTORY_ITEM_CHANGED' && pending.action === 'reroll'
+                            && data.type === 'resource_deposit_reroll' && String(data.id) === String(pending.itemId)
+                            && Number(data.amount) < pending.itemCount) {
+                            pending.itemDebited = true;
+                        }
+                        storePending();
+                    }
+                    forecastKey = null;
+                    if (name !== 'RESOURCE_DEPOSIT_JOB_COLLECTIBLE') {
+                        refresh();
+                    }
+                    schedule();
+                });
+            }
+            for (const name of ['EFFECT_CHANGED', 'EFFECT_EXPIRED', 'EFFECT_EFFECT']) {
+                if (eventTypeProvider[name]) {
+                    $rootScope.$on(eventTypeProvider[name], () => {
+                        forecastKey = null; refresh(); schedule();
+                    });
+                }
+            }
+            $rootScope.$on('auto_collector_started', function () {
+                if (running && !config.preview_only) {
+                    planner.stop('Paused because Collector took control of the deposit');
+                }
+            });
+            refresh();
+        },
+        start: function () {
+            if (!initialized || running || !policy.validSettings(config, map)
+                || !modelDataService.getWorldConfig().isResourceDepositEnabled()) {
+                return false;
+            }
+            running = true;
+            generation++;
+            if (!config.preview_only) {
+                takeoverUntil = Date.now() / 1000 + 3;
+                events.trigger('two_deposit_planner_controls_deposit');
+            }
+            status = config.preview_only ? 'Running — preview only' : 'Running';
+            events.trigger('two_deposit_planner_start');
+            // Fresh data is mandatory after every start and reload.
+            lastInfoAt = 0;
+            refresh();
+            poll = setInterval(() => {
+                refresh(); execute();
+            }, config.poll_seconds * 1000);
+            schedule();
+            publish();
+            return true;
+        },
+        stop: function (reason) {
+            running = false;
+            generation++;
+            clearInterval(poll);
+            clearTimeout(deferred);
+            clearTimeout(wake);
+            deferred = null;
+            status = reason || 'Paused';
+            events.trigger('two_deposit_planner_stop');
+            publish();
+        },
+        resolvePending: function () {
+            if (running) {
+                return false;
+            }
+            pending = null;
+            storePending();
+            forecastKey = null;
+            refresh();
+            preview();
+            return true;
+        },
+        isRunning: () => running,
+        isInitialized: () => initialized,
+        getSettings: () => settings,
+        getPlan: () => plan,
+        getStatus: () => status,
+        getPending: () => pending,
+        refresh,
+        preview
+    };
+    return planner;
+});
+
+define('two/depositPlanner/adapter', ['helper/time', 'conf/effectTypes', 'conf/tribeSkillNames'], function (time, effects, skills) {
+    const normalizedJob = function (job) {
+        return {id: job.id, duration: Number(job.duration), amount: Number(job.amount), quality: Number(job.quality),
+            resource: job.resource_type,
+            completedAt: job.time_completed ? time.server2ClientTime(Number(job.time_completed)) / 1000 : null};
+    };
+    const snapshot = function (info, config, rerollsUsed) {
+        const character = modelDataService.getSelectedCharacter();
+        const model = character && character.getResourceDeposit();
+        if (!model || !model.isAvailable()) {
+            throw new Error('Resource deposit unavailable');
+        }
+        const milestones = model.getMilestones().map(item => ({target: Number(item.target),
+            reward: item.i18n, achieved: !!item.achieved, amount: item.amount}));
+        const cap = Math.max(0, ...milestones.map(item => item.target));
+        const left = Number(model.getResourcesLeft());
+        if (!cap || !Number.isFinite(left) || left < 0 || left > cap || config.target > cap) {
+            throw new Error('Milestone progress unavailable or target exceeds the deposit maximum');
+        }
+        if (!info || !Number(info.time_next_reset) || !Number(info.time_new_milestones)) {
+            throw new Error('Waiting for both reset timestamps from the server');
+        }
+        const inventory = modelDataService.getInventory();
+        if (!inventory) {
+            throw new Error('Waiting for inventory data');
+        }
+        const item = inventory.getItemByType('resource_deposit_reroll');
+        const itemCount = item ? Number(item.amount) : 0;
+        if (!Number.isInteger(itemCount) || itemCount < 0 || item && item.type !== 'resource_deposit_reroll') {
+            throw new Error('Reroll item data unavailable');
+        }
+        const effectService = injector.get('effectService');
+        const tribe = modelDataService.getTribeSkills();
+        const effectValue = function (type) {
+            const effect = effectService.getStackedEffect(type);
+            return effect ? effectService.getEffectValue(effect) : null;
+        };
+        // Effective server job values are authoritative. Never multiply bonuses twice.
+        const context = JSON.stringify([modelDataService.getSelectedVillage().getId(),
+            effectValue(effects.INCREASED_CARRYING_CAPACITY),
+            effectValue(effects.RESOURCE_DEPOSIT_JOB_DURATION),
+            tribe ? tribe.isSkillActive(skills.loot_bonus) : false,
+            tribe ? tribe.isSkillActive(skills.raid_speed) : false]);
+        const current = model.getCurrentJob();
+        const state = {now: Date.now() / 1000, progress: cap - left, target: config.target || cap, cap, milestones, context,
+            jobs: (model.getReadyJobs() || []).map(normalizedJob),
+            collectible: (model.getCollectibleJobs() || []).map(normalizedJob),
+            current: current ? normalizedJob(current) : null,
+            errandsReset: time.server2ClientTime(Number(info.time_next_reset)) / 1000,
+            milestonesReset: time.server2ClientTime(Number(info.time_new_milestones)) / 1000,
+            cycleId: Number(info.time_new_milestones), itemCount, itemId: item && item.id, rerollsUsed};
+        if (![state.errandsReset, state.milestonesReset].every(Number.isFinite)
+            || state.current && !Number.isFinite(state.current.completedAt)) {
+            throw new Error('Errand completion or reset time unavailable');
+        }
+        return state;
+    };
+    const boardKey = state => JSON.stringify(state.jobs.map(job => job.id).sort());
+    return {snapshot, boardKey, toClientSeconds: seconds => time.server2ClientTime(seconds) / 1000};
+});
+
+define('two/depositPlanner/ui', [
+    'two/ui', 'two/depositPlanner', 'two/depositPlanner/policy', 'two/EventScope', 'two/utils', 'queues/EventQueue'
+], function (ui, planner, policy, EventScope, utils, events) {
+    const labels = {
+        preview_only: 'Preview only (no game actions)', auto_reroll: 'Allow automatic item rerolls',
+        target: 'Target progress (0 = final milestone)', max_rerolls: 'Maximum rerolls per milestone cycle',
+        reserve_items: 'Reroll items to keep', free_refresh_wait: 'Prefer a free refresh within (seconds)',
+        deadline_buffer: 'Buffer before reset deadlines (seconds)', action_delay: 'Estimated start/collection overhead per errand (seconds)',
+        success_percent: 'Desired forecast success (%)', min_improvement: 'Minimum gain to reroll now (percentage points)',
+        min_samples: 'Complete observed boards required for forecasts', poll_seconds: 'Refresh interval (seconds)',
+        hold_after_target: 'Hold completed errands after reaching the target'
+    };
+    return function () {
+        if (!modelDataService.getWorldConfig().isResourceDepositEnabled()) {
+            return;
+        }
+        const button = ui.addMenuButton('Deposit Planner', 51, 'Optimize deposit rewards, free resets and item rerolls');
+        const updateButton = function () {
+            button.classList.toggle('btn-red', planner.isRunning());
+            button.classList.toggle('btn-orange', !planner.isRunning());
+        };
+        events.register('two_deposit_planner_updated', updateButton);
+        updateButton();
+        ui.addTemplate('two_deposit_planner_window', `<div id=\"two-deposit-planner\" class=\"win-content two-window\"><header class=\"win-head\"><h2>Deposit Planner</h2><ul class=\"list-btn\"><li><a href=\"#\" class=\"size-34x34 btn-red icon-26x26-close\" ng-click=\"closeWindow()\"></a></ul></header><div class=\"win-main\" scrollbar=\"\"><div class=\"box-paper footer\"><div class=\"scroll-wrap\"><h3>{{ status }}</h3><p>Running and paused state, settings, observed boards and pending actions persist across page reloads. Preview mode reads game data without starting, collecting or rerolling errands. Automatic mode uses inventory reroll items only.<div ng-if=\"state\" class=\"deposit-summary\"><p><strong>Progress:</strong> {{ state.progress | number:0 }} / {{ state.target | number:0 }} &mdash; {{ state.target - state.progress > 0 ? state.target - state.progress : 0 | number:0 }} needed<br><strong>Target reward:</strong> {{ reward.reward }} ({{ reward.amount }})<p><strong>Free errands:</strong> {{ until(state.errandsReset) }}<br><strong>Milestone reset:</strong> {{ until(state.milestonesReset) }}<br><strong>Reroll inventory:</strong> {{ state.itemCount }} items; {{ state.rerollsUsed }} reserved/used this milestone cycle</div><h3>Recommended action: {{ plan.action }}</h3><p>{{ plan.reason }}<p ng-if=\"plan.knownEta\">Visible target collection: {{ date(plan.knownEta) }} (in {{ until(plan.knownEta) }})<p ng-if=\"state.current\">Current errand completes: {{ date(state.current.completedAt) }} (in {{ until(state.current.completedAt) }})<p ng-if=\"pending\">Pending {{ pending.action }}: automatic retries are blocked until game confirmation. <a href=\"#\" ng-if=\"!running\" class=\"btn-border btn-orange\" ng-click=\"resolvePending()\">Resolve after checking game</a><table ng-if=\"jobs.length\" class=\"tbl-border-light tbl-content\"><tr><th>Planned errand<th>Resources<th>Duration<th>Collection estimate<tr ng-repeat=\"job in jobs\"><td>{{ job.resource }} #{{ job.id }}<td>{{ job.amount | number:0 }}<td>{{ seconds(job.duration) }}<td>{{ date(job.eta) }}</table><div ng-if=\"plan.forecast\"><h3>Reroll and waiting forecast</h3><p>{{ plan.forecast.sampleCount }} observed boards with matching village and bonuses. {{ plan.forecast.reason }}. Forecasts use the remaining item budget; they do not promise the maximum reward. ETAs below are conditional on reaching the target.<table ng-if=\"plan.forecast.ready\" class=\"tbl-border-light tbl-content\"><tr><th>First action<th>Item limit<th>Modeled chance<th>Median target ETA<th>90th percentile ETA<tr ng-repeat=\"option in plan.forecast.options\"><td>{{ option.action }}<td>{{ option.itemLimit }}<td>{{ percent(option.probability) }}<td>{{ date(option.eta) }}<td>{{ date(option.conservativeEta) }}</table></div><p>Dates use {{ localZone }}. Errands selected automatically must finish and be collected before both reset deadlines, including the configured buffer. After reaching the target, the module waits for the next milestone cycle.<h3>Settings</h3><p>Turn on item rerolls while keeping Preview only enabled to inspect the proposed item budget. Turn Preview only off to execute plans. Taking control pauses Collector's deposit actions; its Second Village helper stays separate.<table class=\"tbl-border-light tbl-content tbl-medium-height\"><tr ng-repeat=\"id in controls\" ng-switch=\"map[id].inputType\"><td>{{ labels[id] }}<td ng-switch-when=\"checkbox\"><div switch-slider=\"\" enabled=\"true\" border=\"true\" value=\"settings[id]\" vertical=\"false\" size=\"'56x28'\"></div><td ng-switch-when=\"number\"><input type=\"number\" class=\"fit textfield-border\" ng-model=\"settings[id]\" min=\"{{ map[id].min }}\" max=\"{{ map[id].max }}\" step=\"1\"><span class=\"setting-range\">{{ map[id].min }} &ndash; {{ map[id].max }}</span></table></div></div></div><footer class=\"win-foot\"><ul class=\"list-btn list-center\"><li><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"refresh()\">Refresh preview</a><li><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"save()\">Save</a><li><a href=\"#\" class=\"btn-border\" ng-class=\"running ? 'btn-red' : 'btn-green'\" ng-click=\"toggle()\">{{ running ? 'Pause' : 'Start' }}</a></ul></footer></div>`);
+        ui.addStyle('#two-deposit-planner .scroll-wrap{padding:12px}#two-deposit-planner p{margin:10px 0;line-height:1.5}#two-deposit-planner h3{margin-top:16px}#two-deposit-planner .deposit-summary{border-bottom:1px solid #bca475}#two-deposit-planner .setting-range{display:block;font-size:11px}#two-deposit-planner td{padding:5px}');
+        button.addEventListener('click', function () {
+            const scope = $rootScope.$new();
+            const settings = planner.getSettings();
+            const map = settings.settingsMap;
+            settings.injectScope(scope);
+            scope.labels = labels;
+            scope.map = map;
+            scope.controls = Object.keys(labels);
+            scope.seconds = function (seconds) {
+                if (!Number.isFinite(seconds)) {
+                    return 'Unknown';
+                }
+                const value = Math.max(0, Math.ceil(seconds));
+                return Math.floor(value / 3600) + 'h ' + Math.floor(value % 3600 / 60) + 'm ' + value % 60 + 's';
+            };
+            scope.until = timestamp => Number.isFinite(timestamp) ? scope.seconds(timestamp - Date.now() / 1000) : 'Unknown';
+            scope.date = timestamp => Number.isFinite(timestamp) ? new Date(timestamp * 1000).toLocaleString() : 'Not established';
+            scope.percent = probability => Number.isFinite(probability) ? (probability * 100).toFixed(1) + '%' : 'Unknown';
+            scope.localZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            const update = function () {
+                scope.running = planner.isRunning();
+                scope.status = planner.getStatus();
+                scope.plan = planner.getPlan();
+                scope.pending = planner.getPending();
+                const state = scope.plan.state;
+                scope.state = state;
+                scope.reward = state && state.milestones.find(item => item.target >= state.target);
+                let eta = state ? state.now : Date.now() / 1000;
+                scope.jobs = scope.plan.jobs.map(job => {
+                    eta += job.duration + settings.get('action_delay');
+                    return {...job, eta};
+                });
+            };
+            scope.save = function () {
+                const values = settings.decode(scope.settings);
+                if (!policy.validSettings(values, map)) {
+                    utils.notif('error', 'Use whole numbers within the displayed setting limits');
+                    return false;
+                }
+                settings.setAll(values);
+                update();
+                utils.notif('success', 'Deposit Planner settings saved');
+                return true;
+            };
+            scope.toggle = function () {
+                if (planner.isRunning()) {
+                    planner.stop();
+                } else if (scope.save() && !planner.start()) {
+                    utils.notif('error', 'Deposit Planner could not start; check settings and world availability');
+                }
+                update();
+            };
+            scope.refresh = () => planner.refresh();
+            scope.resolvePending = function () {
+                const modal = $rootScope.$new();
+                modal.title = 'Resolve pending deposit action';
+                modal.text = 'Check the active/completed errand, deposit progress and reroll inventory in the game first. Clearing this guard permits another action and can repeat an earlier request if game data is stale. The reserved reroll budget stays charged.';
+                modal.submitText = 'I checked the game; clear guard';
+                modal.cancelText = 'Cancel';
+                modal.submit = function () {
+                    modal.closeWindow(); planner.resolvePending(); update();
+                };
+                modal.cancel = () => modal.closeWindow();
+                windowManagerService.getModal('modal_attention', modal);
+            };
+            const timer = setInterval(() => scope.$evalAsync(() => {
+                if (!scope.$$destroyed) {
+                    update();
+                }
+            }), 1000);
+            const eventScope = new EventScope('two_deposit_planner_window', () => clearInterval(timer));
+            eventScope.register('two_deposit_planner_updated', () => scope.$evalAsync(() => {
+                if (!scope.$$destroyed) {
+                    update();
+                }
+            }));
+            scope.$on('$destroy', () => clearInterval(timer));
+            update();
+            windowManagerService.getScreenWithInjectedScope('!two_deposit_planner_window', scope);
+            planner.refresh();
+        });
+    };
+});
+
+define('two/depositPlanner/policy', [], function () {
+    const REFRESH_SECONDS = 8 * 60 * 60;
+    const FORECAST_RUNS = 128;
+    const validSettings = function (config, map) {
+        return Object.entries(map).every(([key, field]) => field.inputType === 'checkbox'
+            ? typeof config[key] === 'boolean'
+            : Number.isInteger(config[key]) && config[key] >= field.min && config[key] <= field.max);
+    };
+    const validJob = job => job && job.id !== undefined && Number.isFinite(job.duration) && job.duration > 0
+        && Number.isFinite(job.amount) && job.amount > 0;
+    const ordered = jobs => jobs.slice().sort((a, b) => b.amount / b.duration - a.amount / a.duration
+        || a.duration - b.duration || String(a.id).localeCompare(String(b.id)));
+
+    // Exact for a fixed board: collect every selected job before both deadlines.
+    // Deliberately do not assume that starting a job protects it from an errand reset.
+    const optimize = function (jobs, gap, budget, delay) {
+        if (!Array.isArray(jobs) || jobs.length > 12 || !jobs.every(validJob)) {
+            throw new Error('Errand rewards or durations unavailable');
+        }
+        let best = {jobs: [], reward: 0, seconds: 0};
+        for (let mask = 1; gap > 0 && mask < 2 ** jobs.length; mask++) {
+            const selected = jobs.filter((job, index) => mask & (1 << index));
+            const seconds = selected.reduce((sum, job) => sum + job.duration + delay, 0);
+            const reward = Math.min(gap, selected.reduce((sum, job) => sum + job.amount, 0));
+            if (seconds <= budget && (reward > best.reward || reward === best.reward && seconds < best.seconds)) {
+                best = {jobs: ordered(selected), reward, seconds};
+            }
+        }
+        return best;
+    };
+    const quantile = function (values, fraction) {
+        if (!values.length) {
+            return null;
+        }
+        const sorted = values.slice().sort((a, b) => a - b);
+        return sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * fraction) - 1)];
+    };
+    const random = function (seed) {
+        return function () {
+            seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+            return seed / 4294967296;
+        };
+    };
+    const hash = function (text) {
+        let value = 2166136261;
+        for (const letter of text) {
+            value = Math.imul(value ^ letter.charCodeAt(0), 16777619) >>> 0;
+        }
+        return value;
+    };
+    const budgetFor = (state, config) => Math.max(0, Math.min(config.max_rerolls - state.rerollsUsed,
+        state.itemCount - config.reserve_items));
+
+    const simulate = function (state, config, samples, first, limit, seed) {
+        const rng = random(seed);
+        let time = state.now;
+        let progress = state.progress;
+        let free = state.errandsReset;
+        let jobs = state.jobs.map(job => ({...job}));
+        let spent = 0;
+        const deadline = state.milestonesReset - config.deadline_buffer;
+        const board = () => samples[Math.floor(rng() * samples.length)].jobs.map((job, id) => ({...job, id}));
+        const wait = function () {
+            time = Math.max(time, free) + config.action_delay;
+            free += REFRESH_SECONDS;
+            jobs = board();
+        };
+        const reroll = function () {
+            spent++;
+            time += config.action_delay;
+            jobs = board();
+        };
+        if (state.current) {
+            time = Math.max(time, state.current.completedAt) + config.action_delay;
+            progress += state.current.amount;
+            if (progress >= state.target || time >= deadline) {
+                return {success: progress >= state.target && time <= deadline, time, spent};
+            }
+            if (time >= free) {
+                wait();
+            }
+        }
+        if (first === 'wait') {
+            wait();
+        } else if (first === 'reroll') {
+            reroll();
+        }
+        // A forecast is a bounded rollout of a replanning policy, not a claim of
+        // global optimality over unknown boards or independently sampled errands.
+        for (let step = 0; step < 256 && time < deadline && progress < state.target; step++) {
+            if (time >= free) {
+                wait();
+                continue;
+            }
+            const selection = optimize(jobs, state.target - progress, Math.min(free - config.deadline_buffer, deadline) - time, config.action_delay);
+            if (selection.jobs.length) {
+                const job = selection.jobs[0];
+                time += job.duration + config.action_delay;
+                progress += job.amount;
+                jobs = jobs.filter(candidate => candidate.id !== job.id);
+            } else if (free < deadline && (free - time <= config.free_refresh_wait || spent >= limit)) {
+                wait();
+            } else if (spent < limit) {
+                reroll();
+            } else {
+                break;
+            }
+        }
+        return {success: progress >= state.target && time <= deadline, time, spent};
+    };
+
+    const forecast = function (state, config, history) {
+        const samples = history.filter(sample => sample.context === state.context && sample.jobs.length === 6
+            && sample.jobs.every(validJob) && sample.at >= state.now - 30 * 86400);
+        if (samples.length < config.min_samples) {
+            return {ready: false, sampleCount: samples.length, options: [], reason: 'Learning complete boards before estimating rerolls'};
+        }
+        const options = [];
+        const maximum = config.auto_reroll ? budgetFor(state, config) : 0;
+        // Common random numbers make candidate comparisons repeatable and fair.
+        const baseSeed = hash(JSON.stringify([state.jobs, state.progress, Math.floor(state.now / 30), state.context]));
+        for (const action of ['continue', 'wait', 'reroll']) {
+            if (action === 'continue' && !state.current && !optimize(state.jobs, state.target - state.progress, Math.min(state.errandsReset, state.milestonesReset) - config.deadline_buffer - state.now, config.action_delay).jobs.length) {
+                continue;
+            }
+            for (let limit = action === 'reroll' ? 1 : 0; limit <= maximum; limit++) {
+                const results = Array.from({length: FORECAST_RUNS}, (unused, index) => simulate(state, config, samples, action, limit, baseSeed + index * 7919));
+                const successes = results.filter(result => result.success);
+                const times = successes.map(result => result.time);
+                options.push({action, itemLimit: limit, probability: successes.length / results.length,
+                    eta: quantile(times, 0.5), conservativeEta: quantile(times, 0.9),
+                    meanItems: results.reduce((sum, result) => sum + result.spent, 0) / results.length});
+            }
+        }
+        const reliable = options.filter(option => option.probability * 100 >= config.success_percent);
+        const rank = option => option.action === 'continue' ? 0 : option.action === 'wait' ? 1 : 2;
+        const contenders = reliable.length ? reliable : options;
+        contenders.sort((a, b) => (reliable.length ? a.itemLimit - b.itemLimit : b.probability - a.probability)
+            || a.meanItems - b.meanItems || rank(a) - rank(b) || (a.eta || Infinity) - (b.eta || Infinity));
+        let best = contenders[0];
+        const withoutReroll = options.filter(option => option.action !== 'reroll')
+            .sort((a, b) => b.probability - a.probability || a.itemLimit - b.itemLimit || rank(a) - rank(b))[0];
+        if (best && best.action === 'reroll' && withoutReroll
+            && (best.probability - withoutReroll.probability) * 100 < config.min_improvement) {
+            best = withoutReroll;
+        }
+        return {ready: true, sampleCount: samples.length, best, options,
+            reason: 'Empirical simulation; ETAs describe successful runs and are not guarantees'};
+    };
+
+    const plan = function (state, config, history = [], predict = () => forecast(state, config, history)) {
+        const base = {state, action: 'wait', reason: '', jobs: [], knownEta: null, forecast: null};
+        if (state.progress >= state.target) {
+            return {...base, action: 'target', reason: 'Target reached; preserve reroll items for the next milestone cycle'};
+        }
+        if (state.now >= state.milestonesReset || state.now >= state.errandsReset) {
+            return {...base, action: 'refresh', reason: 'Reset elapsed; waiting for fresh server data'};
+        }
+        if (state.now + config.action_delay >= state.milestonesReset - config.deadline_buffer) {
+            return {...base, reason: 'Collection buffer reached; wait for the next milestone cycle'};
+        }
+        if (state.collectible.length && state.collectible[0].completedAt > state.now) {
+            return {...base, reason: 'Completed status is ahead of the synchronized timer; wait'};
+        }
+        if (state.collectible.length) {
+            return {...base, action: 'collect', job: state.collectible[0], reason: 'Collect completed resources, then recalculate'};
+        }
+        if (state.current) {
+            return {...base, reason: 'An errand is running; wait for completion', forecast: predict()};
+        }
+        const selection = optimize(state.jobs, state.target - state.progress, Math.min(state.errandsReset, state.milestonesReset) - config.deadline_buffer - state.now, config.action_delay);
+        const result = {...base, jobs: selection.jobs, reachableProgress: state.progress + selection.reward,
+            knownEta: selection.reward >= state.target - state.progress ? state.now + selection.seconds : null};
+        if (result.knownEta !== null) {
+            return {...result, action: 'start', job: selection.jobs[0], reason: 'Visible errands reach the target before both resets'};
+        }
+        const prediction = predict();
+        result.forecast = prediction;
+        const best = prediction.best;
+        if (best && best.action === 'reroll') {
+            return {...result, action: 'reroll', reason: 'An item reroll materially improves the forecast before the deadline'};
+        }
+        if (selection.jobs.length && (!best || best.action === 'continue')) {
+            return {...result, action: 'start', job: selection.jobs[0], reason: 'Collect the best feasible visible rewards, then recalculate'};
+        }
+        const close = state.errandsReset - state.now <= config.free_refresh_wait;
+        return {...result, reason: best && best.action === 'wait' || close
+            ? 'Wait for free errands and keep reroll items'
+            : prediction.ready ? 'No useful reroll within the item budget; wait for the next reset' : prediction.reason};
+    };
+    return {validSettings, validJob, optimize, forecast, plan, budgetFor};
+});
+
+define('two/depositPlanner/settings/map', [], function () {
+    const number = (value, min, max) => ({default: value, updates: [], inputType: 'number', min, max});
+    const checkbox = value => ({default: value, updates: [], inputType: 'checkbox'});
+    return {
+        preview_only: checkbox(true),
+        auto_reroll: checkbox(false),
+        target: number(0, 0, 1000000),
+        max_rerolls: number(3, 0, 20),
+        reserve_items: number(1, 0, 10000),
+        free_refresh_wait: number(600, 0, 28800),
+        deadline_buffer: number(60, 5, 3600),
+        action_delay: number(2, 1, 60),
+        success_percent: number(95, 50, 100),
+        min_improvement: number(5, 1, 100),
+        min_samples: number(5, 1, 30),
+        poll_seconds: number(30, 5, 300),
+        hold_after_target: checkbox(true)
+    };
+});
+
+require(['two/ready', 'two/depositPlanner', 'two/depositPlanner/ui', 'two/moduleState'], function (ready, planner, ui, restoreModuleState) {
+    ready(function () {
+        if (!planner.isInitialized()) {
+            planner.init();
+            ui();
+            restoreModuleState(planner, 'deposit_planner_active', 'two_deposit_planner_start', 'two_deposit_planner_stop');
+        }
+    }, ['initial_village', 'world_config']);
 });
 
 define('two/farmOverflow', [
@@ -16476,8 +17302,9 @@ define('two/recruiter', [
     'two/resourceBudget',
     'two/ready',
     'queues/EventQueue',
-    'Lockr'
-], function (Settings, settingsMap, policy, resourceBudget, ready, eventQueue, Lockr) {
+    'Lockr',
+    'helper/time'
+], function (Settings, settingsMap, policy, resourceBudget, ready, eventQueue, Lockr, time) {
     let initialized = false;
     let running = false;
     let settings;
@@ -16489,6 +17316,7 @@ define('two/recruiter', [
     let plans = [];
     const resources = ['wood', 'clay', 'iron', 'food'];
     const timers = new Map();
+    const reservations = new Map();
     const publish = () => eventQueue.trigger('two_recruiter_updated');
     const unitData = () => modelDataService.getGameData().getUnitsObject();
     const buildingData = () => modelDataService.getGameData().getBuildings();
@@ -16505,7 +17333,10 @@ define('two/recruiter', [
 
     const snapshot = function (village) {
         buildingService.compute(village);
-        const computed = village.getResources().getComputed();
+        const resourceModel = village.getResources();
+        const computed = resourceModel.getComputed();
+        const updatedAt = typeof resourceModel.getLastUpdate === 'function'
+            ? time.server2ClientTime(resourceModel.getLastUpdate()) : NaN;
         const stock = Object.fromEntries(resources.map(type => [type, computed[type] && computed[type].currentStock]));
         const data = village.getBuildingData();
         const barracks = data.getDataForBuilding('barracks');
@@ -16534,7 +17365,7 @@ define('two/recruiter', [
                 buildingCosts[type] += Number(cost[type]);
             }
         }
-        return {stock, buildingCosts, barracksLevel: barracks && barracks.level,
+        return {stock, updatedAt, buildingCosts, barracksLevel: barracks && barracks.level,
             jobs: Array.isArray(jobs) ? jobs.map(job => job.data || job) : null,
             units: village.getUnitInfo().getUnits()};
     };
@@ -16544,14 +17375,42 @@ define('two/recruiter', [
         if (!entry) {
             return !resourceBudget.isBusy(village);
         }
-        // Wait for both the server job and resource debit before permitting another order.
-        const observed = entry.jobId && state.jobs && state.jobs.some(job => String(job.job_id || job.id) === String(entry.jobId));
-        if (observed && resources.every(type => !entry.cost[type]
-            || state.stock[type] <= entry.before[type] - entry.cost[type])) {
+        // Socket callbacks can omit the job; the authoritative queue/event also confirms it.
+        const matches = (state.jobs || []).filter(job => {
+            const id = job.job_id || job.id;
+            if (entry.jobId) {
+                return String(id) === String(entry.jobId);
+            }
+            if (job.unit_type !== entry.unit || Number(job.amount) !== Number(entry.amount)) {
+                return false;
+            }
+            if (Array.isArray(entry.beforeJobs)) {
+                return !entry.beforeJobs.includes(String(id));
+            }
+            // Older persisted guards have no queue baseline. Match their actual start time.
+            const startedAt = time.server2ClientTime(job.start_time);
+            return Number.isFinite(startedAt) && Math.abs(startedAt - entry.sentAt) <= 5000;
+        });
+        if (matches.length === 1) {
+            entry.jobId = matches[0].job_id || matches[0].id;
+            entry.queueObserved = true;
+            Lockr.set(pendingKey, pending);
+        }
+        // Production can replace a small debit before the next poll. A newer server
+        // resource snapshot is authoritative even when the computed stock grew again.
+        const fresh = Number.isFinite(state.updatedAt) && state.updatedAt > entry.sentAt;
+        const debited = resources.every(type => !entry.cost[type]
+            || state.stock[type] <= entry.before[type] - entry.cost[type]);
+        if (entry.queueObserved && (fresh || debited)) {
             delete pending[village.getId()];
             Lockr.set(pendingKey, pending);
             clearTimeout(timers.get(village.getId()));
             timers.delete(village.getId());
+            const reservation = reservations.get(village.getId());
+            if (reservation) {
+                resourceBudget.reject(village, reservation);
+                reservations.delete(village.getId());
+            }
             return !resourceBudget.isBusy(village);
         }
         return false;
@@ -16603,12 +17462,13 @@ define('two/recruiter', [
         if (!reservation) {
             return;
         }
-        const entry = {before: state.stock, cost: order.cost, sentAt: Date.now(), unit: order.unit_type, amount: order.amount};
+        reservations.set(village.getId(), reservation);
+        const entry = {beforeJobs: (state.jobs || []).map(job => String(job.job_id || job.id)), before: state.stock, cost: order.cost, sentAt: Date.now(), unit: order.unit_type, amount: order.amount};
         pending[village.getId()] = entry;
         Lockr.set(pendingKey, pending);
         timers.set(village.getId(), setTimeout(() => {
             try {
-                if (!reconcile(village, snapshot(village))) {
+                if (!reconcile(village, snapshot(village)) && running && !config.preview_only) {
                     recruiter.stop('Recruitment acknowledgement or resource update missing; inspect the game queue');
                 }
             } catch (error) {
@@ -16653,6 +17513,25 @@ define('two/recruiter', [
             const suffix = `${player.getWorldId()}_${player.getId()}`;
             pendingKey = `recruiter_pending_${suffix}`;
             pending = Lockr.get(pendingKey, {});
+            if (eventTypeProvider.BARRACKS_RECRUIT_JOB_CREATED) {
+                $rootScope.$on(eventTypeProvider.BARRACKS_RECRUIT_JOB_CREATED, (event, job) => {
+                    if (!job) {
+                        return;
+                    }
+                    const entry = pending[job.village_id];
+                    if (entry && job.job_id && job.unit_type === entry.unit
+                        && Number(job.amount) === Number(entry.amount)
+                        && (!entry.beforeJobs || !entry.beforeJobs.includes(String(job.job_id)))) {
+                        entry.jobId = job.job_id;
+                        const village = modelDataService.getSelectedCharacter().getVillage(job.village_id);
+                        if (village) {
+                            reconcile(village, snapshot(village));
+                        }
+                        Lockr.set(pendingKey, pending);
+                        publish();
+                    }
+                });
+            }
             settings = new Settings({settingsMap, storageKey: `recruiter_settings_${suffix}`});
             config = settings.getAll();
             settings.onChange(() => {
@@ -16704,6 +17583,7 @@ define('two/recruiter', [
             delete pending[villageId];
             Lockr.set(pendingKey, pending);
             resourceBudget.clear(villageId);
+            reservations.delete(Number(villageId));
             clearTimeout(timers.get(Number(villageId)));
             timers.delete(Number(villageId));
             recruiter.status = 'Guard cleared after manual check; start again';
@@ -17105,6 +17985,9 @@ define('two/spy_recruiter', [
     const spy_recruiter = {};
 
     spy_recruiter.init = function () {
+        if (initialized) {
+            return false;
+        }
         debug(1, 'initialized');
 
         initialized = true;
@@ -17154,8 +18037,13 @@ define('two/spy_recruiter', [
     };
 
     spy_recruiter.start = function () {
+        if (!initialized || running || !Number.isFinite(localSettings[SETTINGS.CHECK_INTERVAL])
+            || localSettings[SETTINGS.CHECK_INTERVAL] < 1000) {
+            return false;
+        }
         startRecruitCycle();
         eventQueue.trigger(eventTypeProvider.spy_recruiter_START);
+        return true;
     };
 
     spy_recruiter.stop = function () {
@@ -17377,24 +18265,14 @@ define('two/spy_recruiter/settings/map', [
     };
 });
 
-require([
-    'two/ready',
-    'two/spy_recruiter',
-    'two/spy_recruiter/ui',
-    'two/spy_recruiter/events'
-], function (
-    ready,
-    spy_recruiter,
-    spy_recruiterInterface
-) {
-    if (spy_recruiter.isInitialized()) {
-        return false;
-    }
-
+require(['two/ready', 'two/spy_recruiter', 'two/spy_recruiter/ui', 'two/spy_recruiter/events', 'two/moduleState'], function (ready, module, ui, moduleEvents, restoreModuleState) {
     ready(function () {
-        spy_recruiter.init();
-        spy_recruiterInterface();
-    });
+        if (!module.isInitialized()) {
+            module.init();
+            ui();
+            restoreModuleState(module, 'spy_recruiter_active', eventTypeProvider.spy_recruiter_START, eventTypeProvider.spy_recruiter_STOP);
+        }
+    }, ['all_villages_ready', 'world_config']);
 });
 
 });
