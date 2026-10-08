@@ -17,8 +17,38 @@
 })(typeof unsafeWindow !== 'undefined' ? unsafeWindow : window, function (window, undefined) {
 
 const injector = window.injector;
-const define = window.define;
-const require = window.require;
+// Keep privileged storage out of the page's AMD module registry. Other game
+// integration modules retain their existing registration and dependencies.
+const privateModules = Object.create(null);
+const define = function (name, dependencies, factory) {
+    if (name === 'Lockr') {
+        privateModules.Lockr = dependencies();
+        return;
+    }
+    if (!Array.isArray(dependencies) || !dependencies.includes('Lockr')) {
+        return window.define.apply(window, arguments);
+    }
+    const publicDependencies = dependencies.filter(dependency => dependency !== 'Lockr');
+    return window.define(name, publicDependencies, function (...values) {
+        let index = 0;
+        return factory.apply(this, dependencies.map(dependency =>
+            dependency === 'Lockr' ? privateModules.Lockr : values[index++]));
+    });
+};
+const require = function (dependencies, callback, ...options) {
+    if (dependencies === 'Lockr') {
+        return privateModules.Lockr;
+    }
+    if (!Array.isArray(dependencies) || !dependencies.includes('Lockr')) {
+        return window.require.apply(window, arguments);
+    }
+    const publicDependencies = dependencies.filter(dependency => dependency !== 'Lockr');
+    return window.require(publicDependencies, function (...values) {
+        let index = 0;
+        return callback.apply(this, dependencies.map(dependency =>
+            dependency === 'Lockr' ? privateModules.Lockr : values[index++]));
+    }, ...options);
+};
 const angular = window.angular;
 
 const $rootScope = injector.get('$rootScope');

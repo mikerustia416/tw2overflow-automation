@@ -456,6 +456,7 @@ function generateOverflowModule () {
 
     overflow.js = overflow.js.concat([
         `/src/header.js`,
+        `/src/libs/lockr.js`,
         `/src/event-scope.js`,
         `/src/debug.js`,
         `/src/utils.js`,
@@ -467,7 +468,6 @@ function generateOverflowModule () {
         `/src/map-data.js`,
         `/src/ui.js`,
         `/src/init.js`,
-        `/src/libs/lockr.js`,
         `/src/libs/numbered.js`,
         `/src/libs/human-interval.js`
     ]);

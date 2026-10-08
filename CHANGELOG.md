@@ -1,5 +1,12 @@
 # TWOverflow Changelog
 
+## Unreleased — 2026-10-08 (userscript 2.1.500.16)
+
+- **Private storage:** Route all Lockr persistence through Tampermonkey's synchronous storage APIs and retain character/world namespaces. Keep the privileged storage helper out of the game's module registry and request the JavaScript sandbox needed for page integration.
+- **Migration:** Copy and verify owned localStorage entries across saved worlds/characters before removing them. Preserve conflicting legacy values as private backups; retain original data and stop startup on storage failures. Never fall back to page storage or remove unrelated game entries. Preserve settings, logs, running states, command queues and pending-order guards.
+- **Privacy limits:** Added UI, game integration, runtime settings and automation remain observable. Tampermonkey's JavaScript sandbox can fall back to page context in Chrome and does not guarantee isolated execution. Installation and live migration remain unverified.
+- **Validation:** All 233 offline tests pass, including 20 private-storage regressions for reloads, namespace isolation, migration, conflicts, copy/removal failures, pending-guard preservation and fail-closed bundled startup. Source lint, userscript syntax, generated/tracked artifact comparison and diff checks pass. No live game orders were submitted.
+
 ## Unreleased — 2026-10-07 (userscript 2.1.500.15)
 
 - **Builder sequences:** Extend automatic name matching to every saved building sequence. Add **Save as new sequence** for current edited steps while preserving the original. Trim names, reject case/space-equivalent duplicates and reserved object keys, and preserve the shared sequence library across reloads. Creating a sequence opens its editor without saving unrelated village drafts or changing the active village sequence.
