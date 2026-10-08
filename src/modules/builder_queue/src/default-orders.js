@@ -152,6 +152,8 @@ define('two/builderQueue/defaultOrders', [
         [
             // Quest: Market Barker
             BUILDING_TYPES.HEADQUARTER, // 6
+        ],
+        [
             BUILDING_TYPES.MARKET, // 1
 
             // Quest: Preparations
