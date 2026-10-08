@@ -29,7 +29,7 @@ test('bundled startup and module dependencies include no missing two modules', (
         URLSearchParams, location: {search: '?world=en1&character_id=7'},
         localStorage: {length: 0}, GM_getValue: () => undefined, GM_setValue: () => {}};
     vm.runInNewContext(fs.readFileSync(path.resolve(root, process.env.TW2_TEST_USERSCRIPT || 'userscript/tw2overflow-farming.user.js'), 'utf8'), context);
-    for (const name of ['two/farmOverflow', 'two/recruiter', 'two/autoQuest', 'two/builderQueue', 'two/autoMinter', 'two/spy_recruiter', 'two/depositPlanner', 'two/commandQueue', 'two/autoCollector/secondVillage']) assert.ok(definitions.has(name), name);
+    for (const name of ['two/farmOverflow', 'two/recruiter', 'two/autoQuest', 'two/dailyPopups', 'two/builderQueue', 'two/autoMinter', 'two/spy_recruiter', 'two/depositPlanner', 'two/commandQueue', 'two/autoCollector/secondVillage']) assert.ok(definitions.has(name), name);
     assert.equal(definitions.has('two/usage_report'), false);
     assert.equal(definitions.has('Lockr'), false);
     assert.equal(requests.includes('Lockr'), false);

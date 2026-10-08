@@ -1,6 +1,6 @@
 # TW2Overflow Automation
 
-Automate farming, maintain troop targets without spending protected resources, and collect completed quest rewards in Tribal Wars 2. This customized userscript provides five primary automation modules:
+Automate farming, maintain troop targets without spending protected resources, and collect completed quest rewards in Tribal Wars 2. This customized userscript provides six primary automation modules:
 
 | Module | Features |
 | --- | --- |
@@ -9,6 +9,7 @@ Automate farming, maintain troop targets without spending protected resources, a
 | **Recruiter** | Saved village profiles, barracks troop targets, queued-soldier accounting, savings, building budgets, population limits, spending caps, and recruitment previews. |
 | **Builder / BuilderQueue** | Saved village profiles, building sequences, resource reserves, automatic upgrades, and build logs. |
 | **Quest / AutoQuest** | Open marked quest lines, select completed tasks to reveal rewards, collect them, and close the quest panel. |
+| **Daily Popups** | Watch for daily login rewards and promotional adverts, claim today's reward, and close adverts with their own dismissal confirmation. |
 
 This README is the feature and setup guide. [CHANGELOG.md](CHANGELOG.md) tracks change history.
 
@@ -20,9 +21,9 @@ This README is the feature and setup guide. [CHANGELOG.md](CHANGELOG.md) tracks 
 4. Keep **Preview only** enabled in Farmer and Recruiter while reviewing their plans. Review Deposit Planner forecasts while paused, then press Start when ready.
 5. For live farming or recruitment, pause, disable **Preview only**, save, and start again. Quest collects rewards directly after you press Start. Deposit Planner starts and collects errands after Start; automatic item rerolls have a separate switch.
 
-The checked-in userscript includes Farmer, Recruiter, BuilderQueue, AutoQuest, Deposit Planner, shared infrastructure, and the retained modules listed below. It excludes the upstream usage-report module, does not contact the old tracking endpoints, and disables upstream automatic updates. Its namespace remains `local/tw2overflow-farming` so installing a new version updates the same custom script.
+The checked-in userscript includes Farmer, Recruiter, BuilderQueue, AutoQuest, Daily Popups, Deposit Planner, shared infrastructure, and the retained modules listed below. It excludes the upstream usage-report module, does not contact the old tracking endpoints, and disables upstream automatic updates. Its namespace remains `local/tw2overflow-farming` so installing a new version updates the same custom script.
 
-Farmer and Recruiter default to preview mode. Deposit Planner starts paused with read-only forecasts. Farmer, Recruiter, Builder, AutoQuest, Deposit Planner, AutoMinter and AutoSpyRecruiter start stopped on first use and restore their saved running or stopped state after reload. Second Village saves its own state independently of Deposit Planner. The former Collector deposit helper is now part of Deposit Planner. Commander restores an explicit pause even when commands are queued; a legacy queue without a saved flag retains its previous automatic start behavior. Saving changed settings while a module is running restarts it with the new settings; saving while stopped leaves it stopped. AutoMinter and AutoSpyRecruiter also restart on settings changes when running. Other scripts, forks, and upstream downloads can have different behavior.
+Farmer and Recruiter default to preview mode. Deposit Planner starts paused with read-only forecasts. Farmer, Recruiter, Builder, AutoQuest, Deposit Planner, AutoMinter and AutoSpyRecruiter start stopped on first use and restore their saved running or stopped state after reload. Second Village saves its own state independently of Deposit Planner. The former Collector deposit helper is now part of Deposit Planner. Commander restores an explicit pause even when commands are queued; a legacy queue without a saved flag retains its previous automatic start behavior. Saving changed settings while a module is running restarts it with the new settings; saving while stopped leaves it stopped. AutoMinter and AutoSpyRecruiter also restart on settings changes when running. Daily Popups starts automatically on first use, with both actions enabled; it restores your saved pause independently. Its setting changes apply on the next check without restarting. Other scripts, forks, and upstream downloads can have different behavior.
 
 ## Saved data and privacy
 
@@ -273,6 +274,18 @@ Open **Quest**, save its settings, and press Start. The module follows the quest
 AutoQuest skips unfinished, closed, hidden, disabled, and unrelated controls. It waits for task selection to render before continuing and suppresses repeated claims while a claim is pending. Clicks are deferred while Angular is applying updates so they do not nest another digest cycle. Stopping cancels scheduled checks.
 
 The check interval defaults to 30 seconds and supports 5 seconds to 5 minutes. Saved settings and the last running/stopped state persist after reload. Quest collects rewards directly; it has no preview mode and does not perform unfinished quest goals or buy premium actions. Its settings panel and unrelated game windows are left open.
+
+## Daily Popups
+
+Open **Daily Popups** in the TW2Overflow menu to pause/start the tracker and separately enable **Claim daily login rewards** and **Close promotional adverts**. Both actions are enabled on first use and the tracker starts automatically. Settings and the running/paused state are saved per world and character in private userscript storage. AutoQuest remains independent.
+
+The tracker checks every two seconds while the game is open and checks again after game window changes. It handles popups already present at startup and ones that appear later, including daily rollover; it does not require a local-midnight timer or request new reward windows from the server.
+
+For the game's daily login modal, it selects the current day if needed, then invokes the native free **Claim reward** button. It waits for the game to close the window and never repeats an ambiguous claim against the same controller, even after a timeout or pause/start. If an action remains unconfirmed, the panel asks you to check the game manually. The session counter records claims requested, not confirmed rewards.
+
+For native promotional interstitials, it clicks Close and, when required, submits only the new **Dismiss** confirmation produced by that advert. It leaves existing or unrelated confirmations alone. It watches the top modal only, defers clicks during Angular updates, skips hidden/disabled controls, and never accepts advert offers, purchases shop items, or closes ordinary shop screens, quests, connection warnings or other game windows. Pause cancels scheduled clicks; disabling adverts also stops a pending dismissal submission. The panel displays status and session counters.
+
+The implementation was checked against the current game's public daily-login and interstitial controllers/templates. Offline regressions cover action eligibility, rollover, day selection, duplicate suppression, queued popups, owned dismissal prompts, settings, pause/resume and startup. Installation and live reward/ad dismissal remain unverified; the currently open game had no matching popup available.
 
 ## Compatibility and account considerations
 

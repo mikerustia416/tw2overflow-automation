@@ -1,5 +1,12 @@
 # TWOverflow Changelog
 
+## Unreleased — 2026-10-08 (userscript 2.1.500.17)
+
+- **Daily Popups:** Add a separate module with its own menu, Start/Pause control, saved world/character settings and session status/counters. Start automatically on first use; restore an explicit pause independently of AutoQuest. Watch every two seconds and after window changes, including popups present at startup or appearing after daily rollover.
+- **Daily login:** Select today's reward when another day is selected and invoke the native free claim control. Skip claimed, malformed, hidden and disabled controls. Defer clicks during Angular updates and retain ambiguous claim guards across pause/resume instead of retrying; the claim counter records requests rather than confirmed rewards.
+- **Advertisements:** Close native promotional interstitials and submit only the new matching Dismiss confirmation created by that advert. Leave purchases, ordinary shop screens, pre-existing confirmations and other game windows alone. Handle stacked adverts one at a time; pause or disabling adverts prevents a scheduled dismissal submission.
+- **Validation:** All 256 offline tests pass, including 23 Daily Popups regressions for rollover, current-day selection, pending guards, stacked windows, confirmation ownership, manual cancellation, saved flags, independent startup and panel controls. Source lint, userscript syntax, bundled dependencies, generated/tracked artifact comparison and diff checks pass. Inspected the current public game controllers/templates; the open Chrome session had no matching popup. Installation and live reward/ad dismissal remain unverified; no game actions were submitted.
+
 ## Unreleased — 2026-10-08 (userscript 2.1.500.16)
 
 - **Private storage:** Route all Lockr persistence through Tampermonkey's synchronous storage APIs and retain character/world namespaces. Keep the privileged storage helper out of the game's module registry and request the JavaScript sandbox needed for page integration.

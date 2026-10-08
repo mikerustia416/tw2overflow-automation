@@ -1,0 +1,25 @@
+<div id="two-daily-popups" class="win-content two-window">
+    <header class="win-head">
+        <h2>Daily Popups</h2>
+        <ul class="list-btn"><li><a href="#" class="size-34x34 btn-red icon-26x26-close" ng-click="closeWindow()"></a></li></ul>
+    </header>
+    <div class="win-main" scrollbar="">
+        <div class="box-paper footer"><div class="scroll-wrap">
+            <table class="settings tbl-border-light tbl-striped tbl-medium-height">
+                <colgroup><col><col width="270px"></colgroup>
+                <tr><th colspan="2">Daily popup tracker</th></tr>
+                <tr><td>Claim daily login rewards</td><td><div switch-slider="" enabled="true" border="true" value="claimDaily" vertical="false" size="'56x28'"></div></td></tr>
+                <tr><td>Close promotional adverts</td><td><div switch-slider="" enabled="true" border="true" value="closeAds" vertical="false" size="'56x28'"></div></td></tr>
+                <tr><td>Status</td><td>{{ status.message }}</td></tr>
+                <tr><td>Reward claims requested this session</td><td>{{ status.claimsRequested }}</td></tr>
+                <tr><td>Adverts cleared this session</td><td>{{ status.advertsDismissed }}</td></tr>
+                <tr><td colspan="2">Watches while the game is open, including after daily rollover. Starts automatically on first use; your pause and settings are saved. Claims today's login reward and dismisses game promotional adverts. Does not purchase offers or close other game windows.</td></tr>
+                <tr ng-if="saved"><td colspan="2">Settings saved.</td></tr>
+            </table>
+        </div></div>
+    </div>
+    <footer class="win-foot"><ul class="list-btn list-center">
+        <li><a href="#" class="btn-border btn-orange" ng-click="saveSettings()">Save</a></li>
+        <li><a href="#" class="btn-border" ng-class="{'btn-red': running, 'btn-orange': !running}" ng-click="switchState()">{{ running ? 'Pause' : 'Start' }}</a></li>
+    </ul></footer>
+</div>
