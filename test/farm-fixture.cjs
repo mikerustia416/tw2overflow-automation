@@ -134,7 +134,7 @@ function fixture (options = {}) {
         return value;
     };
     for (const file of ['src/libs/numbered.js', 'src/libs/human-interval.js', 'src/settings.js',
-        'src/modules/farm_overflow/src/settings.js', 'src/modules/farm_overflow/src/types.js',
+        'src/module-state.js', 'src/modules/farm_overflow/src/settings.js', 'src/modules/farm_overflow/src/types.js',
         'src/modules/farm_overflow/src/events.js', 'src/modules/farm_overflow/src/policy.js',
         'src/modules/farm_overflow/src/auto-presets.js', 'src/modules/farm_overflow/src/core.js']) {
         vm.runInContext(fs.readFileSync(path.join(root, file), 'utf8'), context, {filename: file});

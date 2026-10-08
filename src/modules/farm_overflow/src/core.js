@@ -21,7 +21,8 @@ define('two/farmOverflow', [
     'Lockr',
     'two/debug',
     'two/farmOverflow/policy',
-    'two/farmOverflow/autoPresets'
+    'two/farmOverflow/autoPresets',
+    'two/migratePreviewSettings'
 ], function (
     Settings,
     ERROR_TYPES,
@@ -45,7 +46,8 @@ define('two/farmOverflow', [
     Lockr,
     setupDebug,
     policy,
-    autoPresets
+    autoPresets,
+    migratePreviewSettings
 ) {
     let initialized = false;
     let running = false;
@@ -908,10 +910,6 @@ define('two/farmOverflow', [
         });
 
         const checkPresets = stepFactory('checkPresets', (resolve, reject) => {
-            if (localSettings[SETTINGS.PREVIEW_ONLY]) {
-                return resolve();
-            }
-
             enableRequiredPresets(this.villageId, () => {
                 if (isActive()) {
                     resolve();
@@ -1053,21 +1051,17 @@ define('two/farmOverflow', [
             this.index++;
             this.attacksThisCycle++;
 
-            if (localSettings[SETTINGS.PREVIEW_ONLY]) {
-                this.setStatus(STATUS.PREVIEW);
-                addLog(LOG_TYPES.PLANNED_VILLAGE, {
-                    targetId: target.id,
-                    originId: this.villageId,
-                    presetId: selectedPreset.id,
-                    units: {...selectedPreset.units},
-                    capacity: selectedChoice.haul,
-                    travelSeconds: selectedChoice.travelSeconds,
-                    ratePerHour: Math.round(selectedChoice.score * 3600),
-                    usingLootEstimate: localSettings[SETTINGS.ESTIMATED_TARGET_LOOT] > 0
-                });
-                this.targetStep({delay: true});
-                return;
-            }
+            // Every live send keeps the same plan details visible in the logs.
+            addLog(LOG_TYPES.PLANNED_VILLAGE, {
+                targetId: target.id,
+                originId: this.villageId,
+                presetId: selectedPreset.id,
+                units: {...selectedPreset.units},
+                capacity: selectedChoice.haul,
+                travelSeconds: selectedChoice.travelSeconds,
+                ratePerHour: Math.round(selectedChoice.score * 3600),
+                usingLootEstimate: localSettings[SETTINGS.ESTIMATED_TARGET_LOOT] > 0
+            });
 
             this.setStatus(STATUS.ATTACKING);
 
@@ -1474,18 +1468,47 @@ define('two/farmOverflow', [
 
     const farmOverflow = {};
 
+    farmOverflow.preview = function () {
+        return Promise.all(farmers.map(farmer => new Promise((resolve, reject) => {
+            villageService.ensureVillageDataLoaded(farmer.villageId, () => {
+                twoMapData.load(loadedTargets => {
+                    try {
+                        // Keep preview targets and packets separate from an active cycle.
+                        const view = Object.create(farmer);
+                        const pos = farmer.village.getPosition();
+                        view.targets = sortTargets(filterTargets(calcDistances(loadedTargets, pos), pos))
+                            .slice(0, localSettings[SETTINGS.TARGET_LIMIT]);
+                        view.generatedPresets = view.buildAutoPresets();
+                        const packets = view.generatedPresets.map(preset => ({
+                            villageId: farmer.villageId, name: preset.name, units: preset.units,
+                            nearbyTargets: preset.nearbyTargets, capacity: getPresetHaul(preset)
+                        }));
+                        const targets = view.targets.map(target => {
+                            const choice = getPresetChoice(view, target);
+                            let reason = choice.preset ? 'Candidate; rechecked before sending' : choice.reason;
+                            if (targetCooldowns[target.id] > timeHelper.gameTime()) {
+                                reason = 'Target cooldown';
+                            } else if (localSettings[SETTINGS.IGNORE_FULL_STORAGE] && storageIsFull(view.village)) {
+                                reason = 'Village storage full';
+                            } else if (view.village.getCommandListModel().getOutgoingCommands(true, true).length
+                                >= VILLAGE_COMMAND_LIMIT - localSettings[SETTINGS.PRESERVE_COMMAND_SLOTS]) {
+                                reason = 'Command limit';
+                            }
+                            return {targetId: target.id, presetId: choice.preset && choice.preset.id,
+                                units: choice.preset && choice.preset.units, capacity: choice.haul,
+                                travelSeconds: choice.travelSeconds, ratePerHour: Math.round((choice.score || 0) * 3600), reason};
+                        });
+                        resolve({villageId: farmer.villageId, packets, targets});
+                    } catch (error) {
+                        reject(error);
+                    }
+                });
+            });
+        })));
+    };
+
     farmOverflow.previewAutoPresets = function () {
-        return Promise.all(farmers.map(farmer => new Promise(resolve => {
-            villageService.ensureVillageDataLoaded(farmer.villageId, () => farmer.loadTargets(() => {
-                resolve(farmer.buildAutoPresets().map(preset => ({
-                    villageId: farmer.villageId,
-                    name: preset.name,
-                    units: preset.units,
-                    nearbyTargets: preset.nearbyTargets,
-                    capacity: getPresetHaul(preset)
-                })));
-            }));
-        }))).then(plans => [].concat(...plans));
+        return farmOverflow.preview().then(plans => plans.flatMap(plan => plan.packets));
     };
 
     farmOverflow.init = function () {
@@ -1505,6 +1528,7 @@ define('two/farmOverflow', [
             }
         }
 
+        migratePreviewSettings(STORAGE_KEYS.SETTINGS, 'farm_overflow_active');
         settings = new Settings({
             settingsMap: SETTINGS_MAP,
             storageKey: STORAGE_KEYS.SETTINGS

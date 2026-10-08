@@ -8,6 +8,8 @@ function uiFixture () {
     let scope;
     let starts = 0;
     let running = false;
+    let previews = 0;
+    let destroy;
     const pending = {};
     const resolutions = [];
     const notifications = [];
@@ -17,19 +19,19 @@ function uiFixture () {
         getBuildings: () => ({farm: {max_level: 30}})});
     f.context.windowManagerService = {getScreenWithInjectedScope: (name, value) => {scope = value;}};
     f.get('two/utils').notif = (kind, text) => notifications.push({kind, text});
-    f.setModule('two/EventScope', class {register () {}});
+    f.setModule('two/EventScope', class {constructor (name, callback) {destroy = callback;} register () {}});
     f.setModule('two/ui', {addMenuButton: () => ({classList: {toggle: () => {}},
         addEventListener: (name, listener) => {click = listener;}}), addTemplate: () => {}, addStyle: () => {}});
     for (const file of ['settings', 'policy']) f.loadSource('src/modules/recruiter/src/' + file + '.js');
     const settings = new (f.get('two/Settings'))({settingsMap: f.get('two/recruiter/settings/map'), storageKey: 'recruiter_ui'});
-    const getSettings = id => f.get('two/villageSettings')(settings, id, ['preview_only', 'check_interval', 'enabled_groups']);
+    const getSettings = id => f.get('two/villageSettings')(settings, id, ['check_interval', 'enabled_groups']);
     f.setModule('two/recruiter', {getSettings, isRunning: () => running, getPlans: () => [], getPending: () => pending,
         resolvePending: id => {resolutions.push(id); delete pending[id]; return true;},
-        status: 'Stopped', start: () => {starts++; return true;}});
+        preview: () => {previews++;}, status: 'Stopped', start: () => {starts++; return true;}});
     f.loadSource('src/modules/recruiter/src/interface.js');
     f.get('two/recruiter/ui')();
     click();
-    return {...f, scope, settings, getSettings, notifications, click, currentScope: () => scope, starts: () => starts, pending, resolutions, setRunning: value => {running = value;}};
+    return {...f, previews: () => previews, destroy: () => destroy(), scope, settings, getSettings, notifications, click, currentScope: () => scope, starts: () => starts, pending, resolutions, setRunning: value => {running = value;}};
 }
 
 test('Recruiter UI opens current village, switches profiles, and saves separate targets and protected upgrades', () => {
@@ -56,19 +58,19 @@ test('Recruiter UI opens current village, switches profiles, and saves separate 
     assert.equal(f.currentScope().units[0].target, 100);
 });
 
-test('Recruiter UI default edits apply to unsaved villages, reset removes only selected profile, and mode stays shared', () => {
+test('Recruiter UI default edits apply to unsaved villages, reset removes only selected profile, and timing stays shared', () => {
     const f = uiFixture();
     f.scope.units[0].target = 100;
     f.scope.save();
     f.scope.profileVillage = '';
     f.scope.selectVillage();
     f.scope.units[0].target = 50;
-    f.scope.settings.preview_only = false;
+    f.scope.settings.check_interval = '10 seconds';
     f.scope.save();
     f.scope.profileVillage = '2';
     f.scope.selectVillage();
     assert.equal(f.scope.units[0].target, 50);
-    assert.equal(f.scope.settings.preview_only, false);
+    assert.equal(f.scope.settings.check_interval, '10 seconds');
     f.scope.profileVillage = '1';
     f.scope.selectVillage();
     assert.equal(f.scope.units[0].target, 100);
@@ -77,13 +79,13 @@ test('Recruiter UI default edits apply to unsaved villages, reset removes only s
     assert.equal(f.settings.get('village_profiles')['1'], undefined);
 });
 
-test('invalid recruiter UI inputs cannot save a profile or partially change global mode', () => {
+test('invalid recruiter UI inputs cannot save a profile or partially change shared timing', () => {
     const f = uiFixture();
     f.scope.units[0].target = -1;
-    f.scope.settings.preview_only = false;
+    f.scope.settings.check_interval = '10 seconds';
     f.scope.toggle();
     assert.equal(f.starts(), 0);
-    assert.equal(f.settings.get('preview_only'), true);
+    assert.equal(f.settings.get('check_interval'), 60000);
     assert.equal(Object.keys(f.settings.get('village_profiles')).length, 0);
     assert.equal(f.notifications.at(-1).kind, 'error');
 });
@@ -125,4 +127,19 @@ test('pending recovery cannot clear a guard after recruitment starts or the guar
     delete f.pending[1];
     assert.equal(f.scope.confirmPendingResolution(), false);
     assert.deepEqual(f.resolutions, []);
+});
+
+test('Recruiter UI shows a preview immediately, removes the switch and stops polling when closed', async () => {
+    const f = uiFixture();
+    assert.equal(f.previews(), 1);
+    assert.equal(f.scope.controls.includes('preview_only'), false);
+    assert.equal(f.scope.settings.preview_only, undefined);
+    await f.tick(5000);
+    assert.equal(f.previews(), 2);
+    f.scope.refreshPreview();
+    assert.equal(f.previews(), 3);
+    f.destroy();
+    await f.tick(5000);
+    assert.equal(f.previews(), 3);
+    assert.equal(f.starts(), 0);
 });

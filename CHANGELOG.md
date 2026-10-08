@@ -1,5 +1,13 @@
 # TWOverflow Changelog
 
+## Unreleased — 2026-10-08 (userscript 2.1.500.18)
+
+- **Start/Stop controls:** Remove the Farmer and Recruiter Preview only settings, UI switches and execution branches. Start performs the configured actions; Stop/Pause cancels further work. Retain existing resource, troop, target and pending-order protections.
+- **Previews:** Show manual and automatic farming candidates, selected packets, capacity, travel and hourly estimates without starting Farmer. Refresh saved-setting previews every five seconds while its panel is open, keeping preview targets and packets separate from active cycles. Retain plan details in live attack logs. Recruiter previews targets, queues, reserves, building costs and batches while stopped, on settings changes and while its panel is open; retain plans while running. Close panels to cancel preview polling. Builder and Deposit Planner retain their existing previews.
+- **Migration:** Delete obsolete saved flags from defaults and village profiles. Pause previously running preview sessions on upgrade, preserve saved live runs and explicit pauses, and retain settings and pending guards.
+- **Agent rules:** Add standing authorization to track changes, complete documentation/build/validation, commit scoped changes and push to GitHub at task completion. Update the project publication skill to follow that authorization and preserve unrelated local changes.
+- **Validation:** All 262 offline tests pass against the synced userscript, including stopped previews, Start/Stop behavior, panel polling cleanup, active-cycle isolation, migration and pending-order guards. Combined build/source lint, both userscript syntax checks, bundled startup dependencies, generated/tracked artifact comparison and diff checks pass. No live game orders submitted; browser installation and live rendering remain unverified.
+
 ## Unreleased — 2026-10-08 (userscript 2.1.500.17)
 
 - **Daily Popups:** Add a separate module with its own menu, Start/Pause control, saved world/character settings and session status/counters. Start automatically on first use; restore an explicit pause independently of AutoQuest. Watch every two seconds and after window changes, including popups present at startup or appearing after daily rollover.

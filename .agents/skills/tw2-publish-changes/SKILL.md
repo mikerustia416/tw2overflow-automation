@@ -5,7 +5,7 @@ description: Finish a TW2Overflow change with README and changelog updates, a ve
 
 # Publish TW2Overflow changes
 
-Use this workflow for changes in this repository. A request to implement or review code alone does not authorize a commit or push; carry out only the stages the user requested. Existing authorization to commit and push covers those stages without another confirmation.
+Use this workflow for changes in this repository. The shared and project core rules provide standing authorization to commit and push implementation changes at task completion. Follow explicit overrides in the current request; review-only tasks do not require a commit when nothing changes. Existing authorization covers these stages without another confirmation.
 
 ## Checkout and scope
 

@@ -7,8 +7,9 @@ define('two/recruiter', [
     'two/ready',
     'queues/EventQueue',
     'Lockr',
-    'helper/time'
-], function (Settings, villageSettings, settingsMap, policy, resourceBudget, ready, eventQueue, Lockr, time) {
+    'helper/time',
+    'two/migratePreviewSettings'
+], function (Settings, villageSettings, settingsMap, policy, resourceBudget, ready, eventQueue, Lockr, time, migratePreviewSettings) {
     let initialized = false;
     let running = false;
     let settings;
@@ -37,7 +38,7 @@ define('two/recruiter', [
         return ids.map(id => player.getVillage(id)).filter(Boolean);
     };
 
-    const villageConfig = villageId => villageSettings(settings, villageId, ['preview_only', 'check_interval', 'enabled_groups']).getAll();
+    const villageConfig = villageId => villageSettings(settings, villageId, ['check_interval', 'enabled_groups']).getAll();
 
     const snapshot = function (village, config = villageConfig(village.getId())) {
         buildingService.compute(village);
@@ -157,7 +158,7 @@ define('two/recruiter', [
             }
             const state = snapshot(village, config);
             let batch = batches.get(villageId);
-            if (!config.preview_only && !reconcile(village, state)) {
+            if (!reconcile(village, state)) {
                 const plan = policy.plan(state, config, unitData(), batch && batch.remaining);
                 plan.reason = 'Waiting for an earlier spend to appear in game data';
                 showPlan(villageId, plan);
@@ -176,9 +177,6 @@ define('two/recruiter', [
             }
             const plan = policy.plan(state, config, unitData(), batch && batch.remaining);
             showPlan(villageId, plan);
-            if (config.preview_only) {
-                return;
-            }
             if (!batch && plan.orders.length) {
                 batch = {remaining: {...plan.budget}};
                 batches.set(villageId, batch);
@@ -235,7 +233,7 @@ define('two/recruiter', [
         Lockr.set(pendingKey, pending);
         timers.set(village.getId(), setTimeout(() => {
             try {
-                if (!reconcile(village, snapshot(village)) && running && !config.preview_only) {
+                if (!reconcile(village, snapshot(village)) && running) {
                     recruiter.stop('Recruitment acknowledgement or resource update missing; inspect the game queue');
                 }
             } catch (error) {
@@ -299,6 +297,7 @@ define('two/recruiter', [
                     }
                 });
             }
+            migratePreviewSettings(`recruiter_settings_${suffix}`, 'recruiter_active');
             settings = new Settings({settingsMap, storageKey: `recruiter_settings_${suffix}`});
             config = settings.getAll();
             settings.onChange(() => {
@@ -309,8 +308,11 @@ define('two/recruiter', [
                 config = settings.getAll();
                 if (restart) {
                     recruiter.start();
+                } else {
+                    recruiter.preview();
                 }
             });
+            recruiter.preview();
         },
         start: function () {
             if (running || !valid()) {
@@ -318,7 +320,7 @@ define('two/recruiter', [
             }
             running = true;
             eventQueue.trigger('two_recruiter_start');
-            recruiter.status = config.preview_only ? 'Previewing recruitment' : 'Recruiting';
+            recruiter.status = 'Recruiting';
             const token = ++version;
             ready(() => {
                 if (!running || token !== version) {
@@ -343,11 +345,37 @@ define('two/recruiter', [
             batches.clear();
             recruiter.status = reason;
             eventQueue.trigger('two_recruiter_stop');
+            recruiter.preview();
+        },
+        preview: function () {
+            if (!initialized || running) {
+                return plans;
+            }
+            plans = [];
+            for (const village of villages()) {
+                const villageId = village.getId();
+                try {
+                    const local = villageConfig(villageId);
+                    if (!policy.validSettings(local, settingsMap, unitData(), buildingData()) || !local.enabled) {
+                        showPlan(villageId, {reason: local.enabled ? 'Invalid village recruitment settings'
+                            : 'Recruitment disabled for this village', orders: []});
+                        continue;
+                    }
+                    const plan = policy.plan(snapshot(village, local), local, unitData());
+                    if (pending[villageId] || resourceBudget.isBusy(village)) {
+                        plan.reason = 'Waiting for an earlier spend to appear in game data';
+                    }
+                    showPlan(villageId, plan);
+                } catch (error) {
+                    showPlan(villageId, {reason: error.message, orders: []});
+                }
+            }
             publish();
+            return plans;
         },
         isRunning: () => running,
         isInitialized: () => initialized,
-        getSettings: villageId => villageSettings(settings, villageId, ['preview_only', 'check_interval', 'enabled_groups']),
+        getSettings: villageId => villageSettings(settings, villageId, ['check_interval', 'enabled_groups']),
         resolvePending: function (villageId) {
             if (running) {
                 return false;

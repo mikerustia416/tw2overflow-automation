@@ -78,11 +78,12 @@ test('auto presets work without manual presets and preview makes no writes', asy
     f.farm.start();
     await f.settle();
     assert.ok(f.farm.getLogs().some(log => log.presetId && log.presetId.startsWith('auto:')));
-    assert.equal(f.requests.some(r => ['send', 'custom', 'assign'].includes(r.route)), false);
+    assert.equal(f.requests.filter(r => r.route === 'custom').length, 1);
+    assert.equal(f.requests.some(r => r.route === 'assign'), false);
 });
 
 test('auto preset live attacks use custom army and retain normal send timeout', async () => {
-    const f = fixture({presets: {}, autoAck: false, settings: {auto_presets: true, auto_preset_units: ['spear'], preview_only: false}});
+    const f = fixture({presets: {}, autoAck: false, settings: {auto_presets: true, auto_preset_units: ['spear']}});
     f.farm.start();
     await f.settle();
     const custom = f.requests.filter(r => r.route === 'custom');
@@ -99,9 +100,9 @@ test('invalid auto preset packet limits reject start', () => {
     assert.equal(f.farm.start(), false);
 });
 
-test('Recruiter defaults to preview and counts own totals plus unfinished queue jobs', () => {
+test('stopped Recruiter previews own totals plus unfinished queue jobs without orders', () => {
     const f = recruitmentFixture({jobs: [{job_id: 1, unit_type: 'spear', amount: 40, recruited: 10}]});
-    f.recruiter.start();
+    f.recruiter.preview();
     const plan = f.recruiter.getPlans()[0];
     assert.equal(plan.deficits[0].owned, 20); // owned includes troops away; support is not ours
     assert.equal(plan.deficits[0].queued, 30);
@@ -156,7 +157,7 @@ test('missing resources, troop totals, queue fields, or protected building costs
         {levels: {barracks: {level: undefined}}}
     ];
     for (const data of cases) {
-        const f = recruitmentFixture({...data, config: {...data.config, preview_only: false}});
+        const f = recruitmentFixture({...data, config: {...data.config}});
         f.recruiter.start();
         assert.equal(f.requests.length, 0, JSON.stringify(data));
     }
@@ -172,7 +173,7 @@ test('negative, fractional, or unknown troop targets and invalid intervals canno
 });
 
 test('recruitment continues only after the preceding queue and resource update', async () => {
-    const f = recruitmentFixture({config: {preview_only: false, check_interval: '10 seconds'}});
+    const f = recruitmentFixture({config: {check_interval: '10 seconds'}});
     f.recruiter.start();
     assert.deepEqual(f.requests, [{village_id: 1, unit_type: 'spear', amount: 50}]);
     f.replies[0]({job_id: 17, village_id: 1, unit_type: 'spear', amount: 50});
@@ -189,7 +190,7 @@ test('recruitment continues only after the preceding queue and resource update',
 });
 
 test('missing acknowledgement pauses recruitment and preserves guard across restart', async () => {
-    const f = recruitmentFixture({config: {preview_only: false}});
+    const f = recruitmentFixture({config: {}});
     f.recruiter.start();
     await f.tick(30000);
     assert.equal(f.recruiter.isRunning(), false);
@@ -204,7 +205,7 @@ test('missing acknowledgement pauses recruitment and preserves guard across rest
 });
 
 test('persisted pending guard prevents resending after reload', () => {
-    const f = recruitmentFixture({config: {preview_only: false}, storageEntries: [['recruiter_pending_101_7', {
+    const f = recruitmentFixture({config: {}, storageEntries: [['recruiter_pending_101_7', {
         1: {sentAt: 1000000, before: {wood: 10000, clay: 10000, iron: 10000, food: 500}, cost: {wood: 2500, clay: 1500, iron: 1000, food: 50}}
     }]]});
     f.recruiter.start();
@@ -212,7 +213,7 @@ test('persisted pending guard prevents resending after reload', () => {
 });
 
 test('server rejection releases guard and stops, while a late success after pause never sends', () => {
-    const f = recruitmentFixture({config: {preview_only: false}});
+    const f = recruitmentFixture({config: {}});
     f.recruiter.start();
     f.replies[0]({error: 'not enough resources'});
     assert.equal(f.recruiter.isRunning(), false);
@@ -226,7 +227,7 @@ test('server rejection releases guard and stops, while a late success after paus
 });
 
 test('stopping during readiness prevents a delayed recruitment start', () => {
-    const f = recruitmentFixture({config: {preview_only: false}});
+    const f = recruitmentFixture({config: {}});
     const g = fixture();
     // Replace ready dependency before instantiating a fresh core module.
     let loaded;
@@ -241,11 +242,11 @@ test('stopping during readiness prevents a delayed recruitment start', () => {
     r.stop();
     loaded();
     assert.equal(r.isRunning(), false);
-    assert.equal(r.getPlans().length, 0);
+    assert.equal(r.getPlans().length, 1, 'Stopped state still shows its preview');
 });
 
 test('shared spending guard prevents a building and recruiter using the same snapshot', () => {
-    const f = recruitmentFixture({config: {preview_only: false}});
+    const f = recruitmentFixture({config: {}});
     const ledger = f.get('two/resourceBudget');
     const v = f.villages[1];
     const cost = {wood: 1000, clay: 800, iron: 500, food: 10};
@@ -261,21 +262,21 @@ test('shared spending guard prevents a building and recruiter using the same sna
 
 test('zero spending and savings above stock cause no resource spend', () => {
     for (const config of [{spend_percent: 0}, {preserve_wood: 100000}]) {
-        const f = recruitmentFixture({config: {...config, preview_only: false}});
+        const f = recruitmentFixture({config: {...config}});
         f.recruiter.start();
         assert.equal(f.requests.length, 0);
     }
 });
 
 test('selected village groups are deduplicated and non-owned villages excluded', () => {
-    const f = recruitmentFixture({villageIds: [1, 2], config: {enabled_groups: [3, 4], preview_only: false}});
+    const f = recruitmentFixture({villageIds: [1, 2], config: {enabled_groups: [3, 4]}});
     f.context.modelDataService.getGroupList = () => ({getGroupVillageIds: () => [1, 1, 2, 999]});
     f.recruiter.start();
     assert.deepEqual(f.requests.map(r => r.village_id), [1, 2]);
 });
 
 test('a synchronous server rejection stops before spending in the next village', () => {
-    const f = recruitmentFixture({villageIds: [1, 2], config: {preview_only: false}});
+    const f = recruitmentFixture({villageIds: [1, 2], config: {}});
     f.context.socketService.emit = (route, data, reply) => {
         f.requests.push(plain(data));
         reply({error: 'rejected'});
@@ -286,7 +287,7 @@ test('a synchronous server rejection stops before spending in the next village',
 });
 
 test('BuilderQueue respects recruitment in-flight resources in a combined build', () => {
-    const f = recruitmentFixture({config: {preview_only: false}});
+    const f = recruitmentFixture({config: {}});
     f.recruiter.start();
     const buildingRequests = [];
     const village = f.villages[1];
@@ -328,7 +329,7 @@ test('BuilderQueue respects recruitment in-flight resources in a combined build'
 
 
 test('saving live recruitment settings restarts without duplicating an unconfirmed order', async () => {
-    const f = recruitmentFixture({config: {preview_only: false}});
+    const f = recruitmentFixture({config: {}});
     f.loadSource('src/module-state.js');
     f.get('two/moduleState')(f.recruiter, 'recruiter_active', 'two_recruiter_start', 'two_recruiter_stop');
     f.recruiter.start();
@@ -371,13 +372,11 @@ test('saving recruiter settings invalidates old readiness callbacks', () => {
 });
 
 
-test('turning preview off starts actual recruitment and queue events confirm empty socket replies', async () => {
+test('Start recruits from a stopped preview and queue events confirm empty socket replies', async () => {
     const resourceClock = {now: 999};
     const f = recruitmentFixture({resourceClock, config: {check_interval: '10 seconds'}});
-    assert.equal(f.recruiter.start(), true);
+    f.recruiter.preview();
     assert.equal(f.requests.length, 0);
-    f.recruiter.stop();
-    f.recruiter.getSettings().setAll({preview_only: false});
     assert.equal(f.recruiter.start(), true);
     assert.equal(f.requests.length, 1);
     f.replies[0]({}); // Real transport can acknowledge without a job payload.
@@ -397,7 +396,7 @@ test('legacy guards recover only from a matching dated queue job and fresh resou
     const entry = {sentAt: 990000, before: {wood: 10000, clay: 10000, iron: 10000, food: 500},
         cost: {wood: 50, clay: 30, iron: 20, food: 1}, unit: 'spear', amount: 1};
     const storageEntries = [['recruiter_pending_101_7', {1: entry}]];
-    const config = {preview_only: false};
+    const config = {};
     const job = {job_id: 19, unit_type: 'spear', amount: 1, recruited: 0, start_time: 990};
     const f = recruitmentFixture({config, storageEntries, resourceClock: {now: 1000}, jobs: [job]});
     assert.equal(f.recruiter.start(), true);
@@ -408,7 +407,7 @@ test('legacy guards recover only from a matching dated queue job and fresh resou
 });
 
 test('pre-existing identical queue jobs never acknowledge a new request', async () => {
-    const f = recruitmentFixture({config: {preview_only: false}, resourceClock: {now: 1001},
+    const f = recruitmentFixture({config: {}, resourceClock: {now: 1001},
         jobs: [{job_id: 1, unit_type: 'spear', amount: 50, recruited: 40}]});
     f.recruiter.start();
     await f.tick(10000);
@@ -416,12 +415,14 @@ test('pre-existing identical queue jobs never acknowledge a new request', async 
     assert.equal(f.recruiter.getPending()[1].jobId, undefined);
 });
 
-test('an old actual-order timeout cannot stop a running preview', async () => {
-    const f = recruitmentFixture({config: {preview_only: false}});
+test('stopped previews never resume an uncertain recruitment order', async () => {
+    const f = recruitmentFixture({config: {}});
     f.recruiter.start();
-    f.recruiter.getSettings().setAll({preview_only: true});
+    f.recruiter.stop();
+    f.recruiter.preview();
     await f.tick(30000);
-    assert.equal(f.recruiter.isRunning(), true);
+    assert.equal(f.recruiter.isRunning(), false);
+    assert.ok(f.recruiter.getPending()[1]);
     assert.equal(f.requests.length, 1);
 });
 
@@ -429,7 +430,7 @@ test('Recruiter village profiles isolate targets, reserves, upcoming buildings a
     const f = recruitmentFixture({villageIds: [1, 2, 3]});
     f.recruiter.getSettings(1).setAll({targets: {spear: 30}, preserve_wood: 7000, protect_buildings: ['farm']});
     f.recruiter.getSettings(2).setAll({targets: {axe: 10}, preserve_wood: 1000, protect_buildings: []});
-    f.recruiter.start();
+    f.recruiter.preview();
     const [one, two, inherited] = f.recruiter.getPlans();
     assert.deepEqual(plain(one.deficits).map(item => item.name), ['spear']);
     assert.equal(one.orders[0].amount, 10);
@@ -446,7 +447,7 @@ test('Recruiter village profiles isolate targets, reserves, upcoming buildings a
 });
 
 test('Recruiter village disablement and invalid profiles cannot submit orders in those villages', () => {
-    const f = recruitmentFixture({villageIds: [1, 2, 3], config: {preview_only: false}});
+    const f = recruitmentFixture({villageIds: [1, 2, 3], config: {}});
     f.recruiter.getSettings(1).set('enabled', false);
     f.recruiter.getSettings(2).set('targets', {spear: -1});
     f.recruiter.start();
@@ -455,7 +456,7 @@ test('Recruiter village disablement and invalid profiles cannot submit orders in
     assert.match(f.recruiter.getPlans()[1].reason, /Invalid village/);
 });
 
-test('saved profiles freeze local values, share timing/preview, and can return to defaults', () => {
+test('saved profiles freeze local values, share timing, and can return to defaults', () => {
     const f = recruitmentFixture({villageIds: [1, 2]});
     const profile = f.recruiter.getSettings(1);
     profile.setAll(profile.getAll()); // Save an unchanged inherited configuration.
@@ -485,7 +486,7 @@ function confirmRecruitment (f, index) {
 
 test('preview fills available queue slots with repeated capped batches and unit priority', () => {
     const f = recruitmentFixture();
-    f.recruiter.start();
+    f.recruiter.preview();
     const plan = f.recruiter.getPlans()[0];
     assert.deepEqual(plain(plan.orders.map(order => [order.unit_type, order.amount])),
         [['spear', 50], ['spear', 30], ['axe', 40]]);
@@ -494,12 +495,12 @@ test('preview fills available queue slots with repeated capped batches and unit 
     assert.equal(f.requests.length, 0);
     const capped = recruitmentFixture({config: {targets: {spear: 1000}, max_queue_jobs: 3},
         jobs: [{job_id: 1, unit_type: 'spear', amount: 10, recruited: 0}]});
-    capped.recruiter.start();
+    capped.recruiter.preview();
     assert.deepEqual(plain(capped.recruiter.getPlans()[0].orders.map(order => order.amount)), [50, 50]);
 });
 
 test('all affordable recruitment batches fill the queue before the next configured interval', async () => {
-    const f = recruitmentFixture({config: {preview_only: false, check_interval: '1 minute'}});
+    const f = recruitmentFixture({config: {check_interval: '1 minute'}});
     f.recruiter.start();
     for (let index = 0; index < 3; index++) {
         assert.equal(f.requests.length, index + 1);
@@ -516,7 +517,7 @@ test('all affordable recruitment batches fill the queue before the next configur
 
 test('spending percentage is one total interval budget, even if production replaces every debit', async () => {
     const resourceClock = {now: 1001};
-    const f = recruitmentFixture({resourceClock, config: {preview_only: false, check_interval: '1 minute',
+    const f = recruitmentFixture({resourceClock, config: {check_interval: '1 minute',
         targets: {spear: 1000}, max_batch: 10, max_queue_jobs: 20, spend_percent: 25}});
     f.recruiter.start();
     for (let index = 0; index < 5; index++) {
@@ -535,7 +536,7 @@ test('spending percentage is one total interval budget, even if production repla
 });
 
 test('queue cap applies across multiple sends and preserves pre-existing paid jobs', async () => {
-    const f = recruitmentFixture({config: {preview_only: false, targets: {spear: 1000}, max_batch: 10, max_queue_jobs: 3},
+    const f = recruitmentFixture({config: {targets: {spear: 1000}, max_batch: 10, max_queue_jobs: 3},
         jobs: [{job_id: 1, unit_type: 'spear', amount: 10, recruited: 0}]});
     f.recruiter.start();
     confirmRecruitment(f, 0);
@@ -549,7 +550,7 @@ test('queue cap applies across multiple sends and preserves pre-existing paid jo
 });
 
 test('new external spending and population changes reduce subsequent batches before sending', async () => {
-    const f = recruitmentFixture({config: {preview_only: false, max_batch: 10, protect_buildings: ['farm']}});
+    const f = recruitmentFixture({config: {max_batch: 10, protect_buildings: ['farm']}});
     f.recruiter.start();
     confirmRecruitment(f, 0);
     f.stocks.wood = 1650; // 1000 savings + 500 protected upgrade: only 150 remains
@@ -565,7 +566,7 @@ test('new external spending and population changes reduce subsequent batches bef
 });
 
 test('pausing cancels queue filling and a late acknowledgement never resumes it', async () => {
-    const f = recruitmentFixture({config: {preview_only: false, max_batch: 10}});
+    const f = recruitmentFixture({config: {max_batch: 10}});
     f.recruiter.start();
     f.recruiter.stop();
     confirmRecruitment(f, 0);
@@ -575,7 +576,7 @@ test('pausing cancels queue filling and a late acknowledgement never resumes it'
 });
 
 test('a rejection during queue filling stops remaining batches', async () => {
-    const f = recruitmentFixture({config: {preview_only: false, max_batch: 10}});
+    const f = recruitmentFixture({config: {max_batch: 10}});
     f.recruiter.start();
     confirmRecruitment(f, 0);
     await f.tick(500);
@@ -586,7 +587,7 @@ test('a rejection during queue filling stops remaining batches', async () => {
 });
 
 test('villages keep independent resource budgets while filling their own queues', async () => {
-    const f = recruitmentFixture({villageIds: [1, 2], config: {preview_only: false, max_batch: 10, targets: {spear: 50}}});
+    const f = recruitmentFixture({villageIds: [1, 2], config: {max_batch: 10, targets: {spear: 50}}});
     const secondStock = {wood: 0, clay: 0, iron: 0, food: 500};
     f.villages[2].getResources = () => ({getComputed: () => Object.fromEntries(
         Object.entries(secondStock).map(([name, currentStock]) => [name, {currentStock}]))});
@@ -600,7 +601,7 @@ test('villages keep independent resource budgets while filling their own queues'
 
 
 test('completed jobs free slots during queue filling without exceeding troop targets', async () => {
-    const f = recruitmentFixture({config: {preview_only: false, targets: {spear: 50}, max_batch: 10, max_queue_jobs: 1}});
+    const f = recruitmentFixture({config: {targets: {spear: 50}, max_batch: 10, max_queue_jobs: 1}});
     f.recruiter.start();
     for (let index = 0; index < 3; index++) {
         confirmRecruitment(f, index);
@@ -615,7 +616,7 @@ test('completed jobs free slots during queue filling without exceeding troop tar
 });
 
 test('Builder spending between recruitment batches blocks continuation until its debit is confirmed', async () => {
-    const f = recruitmentFixture({config: {preview_only: false, max_batch: 10}});
+    const f = recruitmentFixture({config: {max_batch: 10}});
     f.recruiter.start();
     confirmRecruitment(f, 0);
     f.rootScope.$broadcast(f.events.BARRACKS_RECRUIT_JOB_CREATED, f.jobs[0]);
@@ -629,4 +630,40 @@ test('Builder spending between recruitment batches blocks continuation until its
     for (const type of Object.keys(cost)) f.stocks[type] -= cost[type];
     await f.tick(500);
     assert.equal(f.requests.length, 2);
+});
+
+test('Recruiter previews refresh saved settings and current resources while stopped, then Start executes', () => {
+    const f = recruitmentFixture();
+    assert.equal(f.recruiter.isRunning(), false);
+    assert.equal(f.recruiter.getSettings().settingsMap.preview_only, undefined);
+    assert.equal(f.recruiter.getPlans()[0].orders[0].amount, 50);
+    f.stocks.wood = 1500;
+    f.recruiter.preview();
+    assert.equal(f.recruiter.getPlans()[0].orders[0].amount, 10);
+    f.recruiter.getSettings().set('preserve_wood', 1500);
+    assert.equal(f.recruiter.getPlans()[0].orders.length, 0);
+    assert.equal(f.requests.length, 0);
+    f.recruiter.getSettings().set('preserve_wood', 1000);
+    f.recruiter.start();
+    assert.equal(f.requests.length, 1);
+    assert.equal(f.requests[0].amount, 10);
+    f.recruiter.stop();
+    assert.ok(f.recruiter.getPlans().length);
+    assert.match(f.recruiter.getPlans()[0].reason, /earlier spend/);
+});
+
+test('Recruiter retires shared and profile preview flags while preserving live state and pending guards', () => {
+    for (const [preview, active, expected] of [[true, true, false], [false, true, true], [false, false, false]]) {
+        const guard = {1: {unit: 'spear', amount: 1, sentAt: 1000000}};
+        const f = recruitmentFixture({storageEntries: [['recruiter_active', active],
+            ['recruiter_settings_101_7', {preview_only: preview, village_profiles: {2: {preview_only: true, targets: {axe: 10}}}}],
+            ['recruiter_pending_101_7', guard]]});
+        assert.equal(f.storage.get('recruiter_active'), expected);
+        const saved = f.storage.get('recruiter_settings_101_7');
+        assert.equal(Object.hasOwn(saved, 'preview_only'), false);
+        assert.equal(Object.hasOwn(saved.village_profiles[2], 'preview_only'), false);
+        assert.equal(f.recruiter.getSettings(2).get('targets').axe, 10);
+        assert.deepEqual(plain(f.recruiter.getPending()), guard);
+        assert.equal(f.requests.length, 0);
+    }
 });

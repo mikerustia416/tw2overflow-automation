@@ -37,6 +37,18 @@
 
                 <!-- settings -->
                 <div class="settings" ng-show="selectedTab === TAB_TYPES.SETTINGS">
+                    <h3>Farming preview</h3>
+                    <p>Preview refreshes every five seconds using saved settings, while stopped or running. Start sends attacks; Stop prevents further sends. Candidates are rechecked for fresh troops, targets and incoming commands before sending.</p>
+                    <a href="#" class="btn-border btn-orange" ng-click="refreshPreview()">Refresh preview</a>
+                    <p ng-if="previewError">{{ previewError }}</p>
+                    <div ng-repeat="plan in farmPlans">
+                        <h4>Village {{ plan.villageId }}</h4>
+                        <p ng-if="!plan.targets.length">No eligible targets in range.</p>
+                        <table class="tbl-border-light tbl-content">
+                            <tr><th>Target / preset</th><th>Troops / capacity</th><th>Travel / hourly estimate</th><th>Status</th></tr>
+                            <tr ng-repeat="target in plan.targets"><td>{{ target.targetId }} / {{ target.presetId }}</td><td>{{ target.units }} / {{ target.capacity }}</td><td>{{ target.travelSeconds }}s / {{ target.ratePerHour }}</td><td>{{ target.reason }}</td></tr>
+                        </table>
+                    </div>
                     <table class="tbl-border-light tbl-content tbl-medium-height">
                         <colgroup><col><col width="270px"></colgroup>
                         <tr><th colspan="2">Automatic farming presets</th></tr>

@@ -3,7 +3,7 @@
     <div class="win-main" scrollbar=""><div class="box-paper footer"><div class="scroll-wrap">
         <label>Configure <select class="textfield-border" ng-model="profileVillage" ng-options="village.value as village.name for village in profileVillages" ng-change="selectVillage()"></select></label>
         <a href="#" class="btn-border btn-orange" ng-show="profileVillage" ng-click="useDefaults()">Use shared defaults for this village</a>
-        <p>Save before switching villages. Villages without a saved profile use shared defaults. Preview mode, check interval and group filter are shared.</p>
+        <p>Save before switching villages. Villages without a saved profile use shared defaults. Check interval and group filter are shared.</p>
         <p>Maintain troop targets per village. Targets include owned troops away from home and soldiers still in training. Zero disables a unit type. Each cycle fills available queue slots in the order shown, splitting troop deficits into batches up to the configured cap. All batches share one spending budget for the interval. Each village uses its own resources.</p>
         <p>Spendable budget = current stock − savings − additional building budget − selected upcoming upgrade costs. Queued buildings and troops are already paid and are not charged twice. Food means free population.</p>
         <table class="tbl-border-light tbl-content tbl-medium-height">
@@ -20,7 +20,9 @@
         <h3>Save for upcoming building upgrades</h3>
         <p>Reserve the next level cost of each selected building. A building with an upgrade already in the queue is skipped until that upgrade finishes. Use additional building budgets above to save for further levels or other spending.</p>
         <div class="building-choices"><label ng-repeat="building in buildings"><input type="checkbox" ng-model="building.enabled"> {{ building.name }}</label></div>
-        <h3>{{ status }}</h3>
+        <h3>Recruitment preview — {{ status }}</h3>
+        <p>Preview refreshes every five seconds while paused using saved settings. Start recruits; Pause prevents further orders. Plans remain visible while running.</p>
+        <a href="#" class="btn-border btn-orange" ng-click="refreshPreview()">Refresh preview</a>
         <div ng-repeat="(villageId, entry) in pending"><p>Village {{ villageId }}: pending {{ entry.amount }} {{ entry.unit }}.</p><a href="#" ng-show="!running" class="btn-border btn-orange" ng-click="resolvePending(villageId)">Resolve guard after checking game</a></div>
         <div ng-if="pendingToResolve !== null && pendingToResolve !== undefined && !running" class="recruit-plan">
             <h3>Resolve pending recruitment for village {{ pendingToResolve }}</h3>

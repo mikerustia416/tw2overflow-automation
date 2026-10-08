@@ -2,7 +2,7 @@ define('two/recruiter/ui', [
     'two/ui', 'two/recruiter', 'two/recruiter/policy', 'two/Settings', 'two/EventScope', 'two/utils', 'humanInterval', 'queues/EventQueue'
 ], function (ui, recruiter, policy, Settings, EventScope, utils, humanInterval, eventQueue) {
     const labels = {
-        enabled: 'Recruit for this village', preview_only: 'Preview only (shared)', check_interval: 'Check interval (shared)', spend_percent: 'Maximum share of spendable resources per cycle (%)',
+        enabled: 'Recruit for this village', check_interval: 'Check interval (shared)', spend_percent: 'Maximum share of spendable resources per cycle (%)',
         max_batch: 'Maximum soldiers per batch', max_queue_jobs: 'Maximum barracks queue jobs',
         preserve_wood: 'Wood savings', preserve_clay: 'Clay savings', preserve_iron: 'Iron savings', preserve_food: 'Free population to preserve',
         building_wood: 'Additional wood budget for buildings', building_clay: 'Additional clay budget for buildings',
@@ -20,6 +20,7 @@ define('two/recruiter/ui', [
         ui.addStyle('___recruiter_css_style');
         button.addEventListener('click', function () {
             const scope = $rootScope.$new();
+            recruiter.preview();
             let settings = recruiter.getSettings();
             const map = settings.settingsMap;
             const units = modelDataService.getGameData().getUnitsObject();
@@ -103,7 +104,9 @@ define('two/recruiter/ui', [
                 return resolved;
             };
             update();
-            const events = new EventScope('two_recruiter_window', noop);
+            scope.refreshPreview = () => recruiter.preview();
+            const previewTimer = setInterval(scope.refreshPreview, 5000);
+            const events = new EventScope('two_recruiter_window', () => clearInterval(previewTimer));
             events.register('two_recruiter_updated', () => scope.$evalAsync(() => {
                 if (!scope.$$destroyed) {
                     update();

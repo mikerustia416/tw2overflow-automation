@@ -1,3 +1,27 @@
+// Retire saved preview switches without turning an old preview session into orders.
+define('two/migratePreviewSettings', ['Lockr'], function (Lockr) {
+    return function (settingsKey, activeKey) {
+        const saved = Lockr.get(settingsKey, {});
+        let changed = false;
+        if (hasOwn.call(saved, 'preview_only')) {
+            if (saved.preview_only === true && Lockr.get(activeKey, false) === true) {
+                Lockr.set(activeKey, false);
+            }
+            delete saved.preview_only;
+            changed = true;
+        }
+        for (const profile of Object.values(saved.village_profiles || {})) {
+            if (hasOwn.call(profile, 'preview_only')) {
+                delete profile.preview_only;
+                changed = true;
+            }
+        }
+        if (changed) {
+            Lockr.set(settingsKey, saved);
+        }
+    };
+});
+
 define('two/moduleState', [
     'Lockr',
     'queues/EventQueue'

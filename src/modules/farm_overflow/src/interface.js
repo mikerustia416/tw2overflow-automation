@@ -350,7 +350,6 @@ define('two/farmOverflow/ui', [
         $scope.saveButtonColor = 'orange';
         $scope.settingsMap = settings.settingsMap;
         $scope.farmingSettings = [
-            SETTINGS.PREVIEW_ONLY,
             SETTINGS.BARBARIANS_ONLY,
             SETTINGS.OPTIMIZE_HAUL,
             SETTINGS.ESTIMATED_TARGET_LOOT,
@@ -396,13 +395,32 @@ define('two/farmOverflow/ui', [
             SETTINGS.AUTO_PRESET_MIN_UNITS,
             SETTINGS.AUTO_PRESET_MAX_UNITS,
             SETTINGS.AUTO_PRESET_CARRY];
+        let previewPending = false;
+        const scope = $scope;
+        scope.refreshPreview = function () {
+            if (previewPending || scope.$$destroyed) {
+                return;
+            }
+            previewPending = true;
+            farmOverflow.preview().then(plans => scope.$evalAsync(() => {
+                if (!scope.$$destroyed) {
+                    scope.farmPlans = plans;
+                    scope.autoPresetPlans = plans.flatMap(plan => plan.packets);
+                    scope.previewError = null;
+                }
+            })).catch(error => scope.$evalAsync(() => {
+                scope.previewError = error.message;
+            })).finally(() => {
+                previewPending = false;
+            });
+        };
+        scope.refreshPreview();
+        const previewTimer = setInterval(scope.refreshPreview, 5000);
         $scope.previewAutoPresets = function () {
             if (saveSettings() !== true) {
                 return;
             }
-            farmOverflow.previewAutoPresets().then(plans => $scope.$evalAsync(() => {
-                $scope.autoPresetPlans = plans;
-            }));
+            scope.refreshPreview();
         };
         eventHandlers.updatePresets();
         eventHandlers.updateGroups();
@@ -423,6 +441,7 @@ define('two/farmOverflow/ui', [
         $scope.removeIncluded = removeIncluded;
 
         const eventScope = new EventScope('twoverflow_farm_overflow_window', function onDestroy () {
+            clearInterval(previewTimer);
             clearInterval(cycleCountdownTimer);
         });
 
@@ -431,7 +450,6 @@ define('two/farmOverflow/ui', [
         eventScope.register(eventTypeProvider.GROUPS_UPDATED, eventHandlers.updateGroups, true);
         eventScope.register(eventTypeProvider.GROUPS_CREATED, eventHandlers.updateGroups, true);
         eventScope.register(eventTypeProvider.GROUPS_DESTROYED, eventHandlers.updateGroups, true);
-        const scope = $scope;
         const inAngular = (handler) => (...args) => scope.$evalAsync(() => {
             if (!scope.$$destroyed) {
                 handler(...args);

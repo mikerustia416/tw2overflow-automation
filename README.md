@@ -18,12 +18,12 @@ This README is the feature and setup guide. [CHANGELOG.md](CHANGELOG.md) tracks 
 1. Download [tw2overflow-farming.user.js](userscript/tw2overflow-farming.user.js) using GitHub's **Raw** or download button, then install it in your userscript manager.
 2. Disable other TW2Overflow copies and old `tw2tools` auto-start wrappers to avoid running multiple versions together.
 3. Open Tribal Wars 2 and use the TW2Overflow menu to configure each module.
-4. Keep **Preview only** enabled in Farmer and Recruiter while reviewing their plans. Review Deposit Planner forecasts while paused, then press Start when ready.
-5. For live farming or recruitment, pause, disable **Preview only**, save, and start again. Quest collects rewards directly after you press Start. Deposit Planner starts and collects errands after Start; automatic item rerolls have a separate switch.
+4. Review Farmer, Recruiter, Builder and Deposit Planner previews while stopped or paused. Farmer and Recruiter refresh saved-setting previews every five seconds while their panels are open; Deposit Planner keeps refreshing its forecast while paused.
+5. Save the configuration and press **Start** to execute. **Stop/Pause** prevents further actions; previews remain available. Quest collects rewards directly after you press Start. Deposit Planner starts and collects errands after Start; automatic item rerolls have a separate switch.
 
 The checked-in userscript includes Farmer, Recruiter, BuilderQueue, AutoQuest, Daily Popups, Deposit Planner, shared infrastructure, and the retained modules listed below. It excludes the upstream usage-report module, does not contact the old tracking endpoints, and disables upstream automatic updates. Its namespace remains `local/tw2overflow-farming` so installing a new version updates the same custom script.
 
-Farmer and Recruiter default to preview mode. Deposit Planner starts paused with read-only forecasts. Farmer, Recruiter, Builder, AutoQuest, Deposit Planner, AutoMinter and AutoSpyRecruiter start stopped on first use and restore their saved running or stopped state after reload. Second Village saves its own state independently of Deposit Planner. The former Collector deposit helper is now part of Deposit Planner. Commander restores an explicit pause even when commands are queued; a legacy queue without a saved flag retains its previous automatic start behavior. Saving changed settings while a module is running restarts it with the new settings; saving while stopped leaves it stopped. AutoMinter and AutoSpyRecruiter also restart on settings changes when running. Daily Popups starts automatically on first use, with both actions enabled; it restores your saved pause independently. Its setting changes apply on the next check without restarting. Other scripts, forks, and upstream downloads can have different behavior.
+Farmer and Recruiter show previews while stopped or running. Deposit Planner starts paused with read-only forecasts. Farmer, Recruiter, Builder, AutoQuest, Deposit Planner, AutoMinter and AutoSpyRecruiter start stopped on first use and restore their saved running or stopped state after reload. Second Village saves its own state independently of Deposit Planner. The former Collector deposit helper is now part of Deposit Planner. Commander restores an explicit pause even when commands are queued; a legacy queue without a saved flag retains its previous automatic start behavior. Saving changed settings while a module is running restarts it with the new settings; saving while stopped leaves it stopped. AutoMinter and AutoSpyRecruiter also restart on settings changes when running. Daily Popups starts automatically on first use, with both actions enabled; it restores your saved pause independently. Its setting changes apply on the next check without restarting. Other scripts, forks, and upstream downloads can have different behavior.
 
 ## Saved data and privacy
 
@@ -32,6 +32,8 @@ Install the Tampermonkey userscript build. Version 2.1.500.16 uses synchronous `
 On the first load, copy existing `<characterId>_twOverflow_<worldId>-` localStorage entries for all saved worlds/characters into private storage, verify each copy, then remove that exact browser entry. Leave unrelated game/browser storage untouched. Existing private values take priority; preserve conflicting legacy values under `tw2overflow:legacy-backup:<original-key>` in Tampermonkey storage. If storage access or verification fails, startup stops rather than discarding data or falling back to page storage. Close older script copies before updating so they cannot recreate legacy entries. Keep the same userscript identity when updating; uninstalling it can remove its private data.
 
 Ordinary page JavaScript cannot directly enumerate Tampermonkey storage. This does not make automation undetectable: the interface, game modules, active settings exposed through game integration and automated actions remain observable. Raw/extension builds without these userscript grants cannot initialize this storage helper.
+
+On upgrade, obsolete Farmer/Recruiter preview switches are removed from saved defaults and profiles. Formerly running preview sessions become paused; saved live runs and explicit pauses remain intact. Pending-order guards and village settings are preserved.
 
 ## Deposit Planner
 
@@ -129,10 +131,10 @@ Farmer checks each village's available troops and eligible targets, selects an a
 1. Select manual farming presets, enable automatic presets, or use both.
 2. Choose the farmer village groups, ignored and included target groups, distance and points ranges, target-count limit, and maximum travel time.
 3. Configure troop reserves, preserved command slots, storage checks, same-target arrival spacing, attack caps, and report cooldowns.
-4. Keep **Preview only** enabled, start Farmer, and review planned targets, selected presets, capacity, travel time, and hourly rate estimates in its logs.
-5. Adjust settings, then disable preview and restart when ready to send attacks. Saving changed settings restarts Farmer if it is running.
+4. Review the always-visible farming preview while stopped: candidate targets, selected manual or automatic packets, capacity, travel time and hourly rate estimates. It refreshes every five seconds while the panel is open using saved settings. Start sends attacks and Stop halts them; candidates are rechecked against fresh troops, ownership, cooldowns and incoming commands before each send. Preview refreshes never alter an active cycle. Sent attacks retain their plan details in the logs.
+5. Save adjusted settings, then press Start when ready to send attacks. Saving changed settings restarts Farmer if it is running.
 
-Preview reads game data and records planned attacks, but sends no attacks and assigns no game presets.
+Preview reads current game data without sending attacks or assigning game presets. Live cycles record the selected attack plan immediately before sending.
 
 ### Automatic farming presets
 
@@ -205,7 +207,7 @@ UI updates use AngularJS `$evalAsync`, and the cycle countdown uses the actual s
 
 ## Recruiter
 
-Recruiter maintains a target army independently of Farmer. Use **Configure** to select a village and Save its troop targets, savings, additional building budgets, protected upgrades, spending share and batch/queue limits. **Recruit for this village** can disable a village. Preview mode, check interval and village-group filter remain shared. Save before switching villages. Villages without a saved profile inherit **Shared defaults**; **Use shared defaults for this village** removes a profile. Existing settings remain the shared defaults. Profiles persist by world, character and village. Owned totals include your troops away from home; foreign support is not added. For each unit kind, it deducts the untrained portion of queued jobs from the deficit:
+Recruiter maintains a target army independently of Farmer. Use **Configure** to select a village and Save its troop targets, savings, additional building budgets, protected upgrades, spending share and batch/queue limits. **Recruit for this village** can disable a village. Check interval and village-group filter remain shared. Save before switching villages. Villages without a saved profile inherit **Shared defaults**; **Use shared defaults for this village** removes a profile. Existing settings remain the shared defaults. Profiles persist by world, character and village. Owned totals include your troops away from home; foreign support is not added. For each unit kind, it deducts the untrained portion of queued jobs from the deficit:
 
 ```text
 queued soldiers = sum(job amount - soldiers already recruited)
@@ -219,14 +221,14 @@ deficit = max(0, target - owned troops - queued soldiers)
 3. Set **Wood/Clay/Iron savings** for resources to preserve and reserve free population if needed.
 4. Select buildings whose next upgrade you want to fund. Add additional building budgets to save for further upgrades or other spending.
 5. Choose the spending share, batch-size cap, queue job cap, and check interval.
-6. Keep **Preview only** enabled and start. Review owned and queued troops, deficits, protected resources, building costs, cycle budgets, and proposed batches for each village.
-7. Pause, disable preview, save, and start to recruit. Saving changed settings restarts recruitment if it is running, retaining pending-order guards. Each village fills available queue slots during the same interval, splitting troop deficits into batches up to the batch-size cap and considering unit kinds in the configured order. It confirms each preceding order and resource update, then replans before sending the next batch; it does not wait for the next configured interval between confirmed batches. Each village spends only its own resources.
+6. Review the always-visible preview while paused: owned and queued troops, deficits, protected resources, building costs, cycle budgets and proposed batches for each village. Saved-setting previews refresh every five seconds while the panel is open and immediately when paused settings change.
+7. Save and press Start to recruit; Pause prevents further orders and keeps previews available. Saving changed settings restarts recruitment if it is running, retaining pending-order guards. Each village fills available queue slots during the same interval, splitting troop deficits into batches up to the batch-size cap and considering unit kinds in the configured order. It confirms each preceding order and resource update, then replans before sending the next batch; it does not wait for the next configured interval between confirmed batches. Each village spends only its own resources.
 
 The first proposed batch is the one a live cycle would submit. Later proposals show the remaining priority order under the same budget.
 
 | Recruiter setting | Default |
 | --- | --- |
-| Preview only | On |
+| Execution | Stopped until Start; saved running state restored |
 | Troop targets | All disabled |
 | Wood, clay, and iron savings | 5,000 each |
 | Free population reserve | 0 |

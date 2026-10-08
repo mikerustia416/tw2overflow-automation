@@ -71,18 +71,27 @@ test('arrival spacing uses seconds consistently and fails closed on unknown time
     assert.equal(policy.arrivalIsBusy(100, [{}], 2000), true);
 });
 
-test('preview is the default and neither sends attacks nor assigns presets', async () => {
+test('stopped Farmer previews manual presets without orders; Start sends and Stop keeps previews available', async () => {
     const f = fixture();
+    const preview = await f.farm.preview();
+    assert.equal(preview[0].targets[0].presetId, 1);
+    assert.equal(preview[0].targets[0].ratePerHour, 3750);
+    assert.equal(f.farm.isRunning(), false);
+    assert.equal(f.requests.length, 0);
+    assert.equal(f.farm.getSettings().settingsMap.preview_only, undefined);
     f.farm.start();
     await f.settle();
-    assert.equal(f.sends().length, 0);
-    assert.equal(f.requests.filter(r => r.route === 'assign').length, 0);
-    assert.equal(f.farm.getLogs()[0].type, 'planned_village');
-    assert.equal(f.farm.getLogs()[0].ratePerHour, 3750);
+    assert.equal(f.sends().length, 1);
+    assert.ok(f.farm.getLogs().some(log => log.type === 'planned_village' && log.ratePerHour === 3750));
+    f.farm.stop();
+    f.units.spear.in_town = 0;
+    assert.equal((await f.farm.preview())[0].targets[0].presetId, undefined);
+    await f.tick(10000);
+    assert.equal(f.sends().length, 1);
 });
 
 test('the actual farmer selects the more efficient available preset', async () => {
-    const f = fixture({settings: {preview_only: false}, presets: {
+    const f = fixture({settings: {}, presets: {
         1: {id: 1, units: {spear: 5}, fieldTime: 30},
         2: {id: 2, units: {spear: 20}, fieldTime: 60}
     }});
@@ -92,14 +101,14 @@ test('the actual farmer selects the more efficient available preset', async () =
 });
 
 test('a travel limit shorter than the actual trip prevents a send', async () => {
-    const f = fixture({settings: {preview_only: false, max_travel_time: '30 seconds'}});
+    const f = fixture({settings: {max_travel_time: '30 seconds'}});
     f.farm.start();
     await f.settle();
     assert.equal(f.sends().length, 0);
 });
 
 test('actual sends respect the base interval even with random timing enabled', async () => {
-    const f = fixture({settings: {preview_only: false}, targets: [
+    const f = fixture({settings: {}, targets: [
         {id: 100, x: 1, y: 0, points: 100, character_id: null},
         {id: 101, x: 2, y: 0, points: 100, character_id: null}
     ]});
@@ -117,14 +126,14 @@ test('removing a target with invalid points does not skip the next target', asyn
         {id: 100, x: 1, y: 0, points: 100, character_id: null},
         {id: 101, x: 2, y: 0, points: 100, character_id: null}
     ];
-    const f = fixture({targets, freshTargets: [{...targets[0], points: 99999}, targets[1]], settings: {preview_only: false}});
+    const f = fixture({targets, freshTargets: [{...targets[0], points: 99999}, targets[1]], settings: {}});
     f.farm.start();
     await f.settle();
     assert.equal(f.sends()[0].data.target_village, 101);
 });
 
 test('a newly conquered target is rejected using the current map data', async () => {
-    const f = fixture({settings: {preview_only: false}, freshTargets: [
+    const f = fixture({settings: {}, freshTargets: [
         {id: 100, x: 1, y: 0, points: 100, character_id: 8}
     ]});
     f.farm.start();
@@ -146,7 +155,7 @@ test('duplicate target entries are removed', () => {
 });
 
 test('server-loaded incoming attacks enforce arrival spacing', async () => {
-    const f = fixture({localReady: false, settings: {preview_only: false}, serverIncoming: [
+    const f = fixture({localReady: false, settings: {}, serverIncoming: [
         {type: 'attack', direction: 'forward', start_village_id: 2, time_completed: 1060}
     ]});
     f.farm.start();
@@ -156,7 +165,7 @@ test('server-loaded incoming attacks enforce arrival spacing', async () => {
 });
 
 test('single-farmer restriction applies even when this farmer also has an attack', async () => {
-    const f = fixture({settings: {preview_only: false, target_behavior: 'targets_allow_single_farmer'}, localIncoming: [
+    const f = fixture({settings: {target_behavior: 'targets_allow_single_farmer'}, localIncoming: [
         {startCharacterId: 7, startVillageId: 1, type: 'attack', data: {direction: 'forward'}, time_completed: 5000},
         {startCharacterId: 7, startVillageId: 2, type: 'attack', data: {direction: 'forward'}, time_completed: 5000}
     ]});
@@ -166,7 +175,7 @@ test('single-farmer restriction applies even when this farmer also has an attack
 });
 
 test('a late callback from an expired validation step cannot issue an attack', async () => {
-    const f = fixture({localReady: false, deferDetails: true, settings: {preview_only: false}});
+    const f = fixture({localReady: false, deferDetails: true, settings: {}});
     f.farm.start();
     await f.settle();
     assert.equal(f.deferredDetails.length, 1);
@@ -177,7 +186,7 @@ test('a late callback from an expired validation step cannot issue an attack', a
 });
 
 test('a callback from a stopped run cannot issue an attack after restart', async () => {
-    const f = fixture({localReady: false, deferDetails: true, settings: {preview_only: false}});
+    const f = fixture({localReady: false, deferDetails: true, settings: {}});
     f.farm.start();
     await f.settle();
     f.farm.stop();
@@ -193,7 +202,7 @@ test('a callback from a stopped run cannot issue an attack after restart', async
 });
 
 test('stopping during initialization prevents a late start', async () => {
-    const f = fixture({deferVillage: true, settings: {preview_only: false}});
+    const f = fixture({deferVillage: true, settings: {}});
     f.farm.start();
     f.farm.stop();
     for (const callback of f.deferredVillages) callback();
@@ -203,7 +212,7 @@ test('stopping during initialization prevents a late start', async () => {
 });
 
 test('an unacknowledged send stops the whole farmer without retrying', async () => {
-    const f = fixture({autoAck: false, settings: {preview_only: false}});
+    const f = fixture({autoAck: false, settings: {}});
     f.farm.start();
     await f.settle();
     assert.equal(f.sends().length, 1);
@@ -219,11 +228,11 @@ test('the target-count string saved by older releases is migrated', async () => 
     assert.equal(f.farm.getSettings().get('target_limit'), 25);
     f.farm.start();
     await f.settle();
-    assert.equal(f.farm.getLogs()[0].type, 'planned_village');
+    assert.ok(f.farm.getLogs().some(log => log.type === 'planned_village'));
 });
 
 test('empty haul causes a persistent cooldown without requiring an ignore group', async () => {
-    const f = fixture({settings: {preview_only: false}});
+    const f = fixture({settings: {}});
     f.farm.start();
     await f.settle();
     f.rootScope.$broadcast(f.events.REPORT_NEW, {type: 'attack', target_village_id: 100, result: 1, haul: 'none'});
@@ -232,7 +241,7 @@ test('empty haul causes a persistent cooldown without requiring an ignore group'
     f.farm.start();
     await f.settle();
     assert.equal(f.sends().length, 1);
-    const reloaded = fixture({storageEntries: [...f.storage.entries()], settings: {preview_only: false}});
+    const reloaded = fixture({storageEntries: [...f.storage.entries()], settings: {}});
     reloaded.farm.start();
     await reloaded.settle();
     assert.equal(reloaded.sends().length, 0);
@@ -254,7 +263,7 @@ test('the displayed next-cycle date matches the actual sampled timer', async () 
 });
 
 test('per-village cycle cap stops before issuing another attack', async () => {
-    const f = fixture({settings: {preview_only: false, max_attacks_per_cycle: 1, attack_jitter: '0 seconds'}, targets: [
+    const f = fixture({settings: {max_attacks_per_cycle: 1, attack_jitter: '0 seconds'}, targets: [
         {id: 100, x: 1, y: 0, points: 100, character_id: null},
         {id: 101, x: 2, y: 0, points: 100, character_id: null}
     ]});
@@ -266,7 +275,7 @@ test('per-village cycle cap stops before issuing another attack', async () => {
 });
 
 test('saving settings restarts and cancels the old in-progress validation step', async () => {
-    const f = fixture({localReady: false, deferDetails: true, settings: {preview_only: false}});
+    const f = fixture({localReady: false, deferDetails: true, settings: {}});
     f.farm.start();
     await f.settle();
     f.farm.getSettings().set('unit_reserve_percent', 50);
@@ -286,4 +295,67 @@ test('invalid persisted settings fail closed', () => {
         assert.equal(f.farm.start(), false);
         assert.equal(f.sends().length, 0);
     }
+});
+
+test('refreshing Farmer preview does not replace active targets, packets or cycle counters', async () => {
+    const f = fixture({settings: {auto_presets: true}, autoAck: false});
+    f.farm.start();
+    await f.settle();
+    const farmer = f.farm.getFarmer(1);
+    const targets = farmer.targets;
+    const packets = farmer.generatedPresets;
+    const index = farmer.index;
+    const attacks = farmer.attacksThisCycle;
+    const requests = f.requests.length;
+    const preview = await f.farm.preview();
+    assert.ok(preview[0].packets.length);
+    assert.equal(farmer.targets, targets);
+    assert.equal(farmer.generatedPresets, packets);
+    assert.equal(farmer.index, index);
+    assert.equal(farmer.attacksThisCycle, attacks);
+    assert.equal(f.requests.length, requests);
+});
+
+test('Farmer retires legacy flags and pauses only old preview sessions without losing settings', () => {
+    for (const [preview, active, expected] of [[true, true, false], [false, true, true], [false, false, false]]) {
+        const f = fixture({storageEntries: [['farm_overflow_active', active]], settings: {preview_only: preview, max_points: 1500}});
+        assert.equal(f.storage.get('farm_overflow_active'), expected);
+        assert.equal(Object.hasOwn(f.storage.get('farm_overflow_settings'), 'preview_only'), false);
+        assert.equal(f.farm.getSettings().get('max_points'), 1500);
+        const again = fixture({storageEntries: [...f.storage.entries()]});
+        assert.equal(again.storage.get('farm_overflow_active'), expected);
+    }
+});
+
+test('Farmer UI opens with previews and no switch, refreshes while stopped, and cancels polling on close', async () => {
+    const f = fixture();
+    let click;
+    let scope;
+    let destroy;
+    f.context.$rootScope.$new = () => ({$watch: () => {}, $evalAsync: fn => fn()});
+    f.context.storageService = {getPaginationLimit: () => 20};
+    f.context.mapService = {jumpToVillage: () => {}};
+    f.context.windowDisplayService = {openVillageInfo: () => {}};
+    f.context.reportService = {showReport: () => {}};
+    f.context.windowManagerService = {getScreenWithInjectedScope: (name, value) => {scope = value;}};
+    f.setModule('two/EventScope', class {constructor (name, callback) {destroy = callback;} register () {}});
+    f.setModule('helper/util', {toActionList: values => Object.values(values).map(value => ({value}))});
+    f.setModule('two/ui', {addMenuButton: () => ({classList: {add: () => {}, remove: () => {}},
+        addEventListener: (name, listener) => {click = listener;}}), addTemplate: () => {}, addStyle: () => {}});
+    f.loadSource('src/modules/farm_overflow/src/interface.js');
+    f.get('two/farmOverflow/ui')();
+    click();
+    await f.settle();
+    assert.equal(scope.farmingSettings.includes(undefined), false);
+    assert.equal(scope.settings.preview_only, undefined);
+    assert.equal(scope.farmPlans[0].targets[0].presetId, 1);
+    assert.equal(f.requests.length, 0);
+    f.units.spear.in_town = 0;
+    await f.tick(5000);
+    assert.equal(scope.farmPlans[0].targets[0].presetId, undefined);
+    destroy();
+    f.units.spear.in_town = 100;
+    await f.tick(5000);
+    assert.equal(scope.farmPlans[0].targets[0].presetId, undefined);
+    assert.equal(f.requests.length, 0);
 });

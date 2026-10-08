@@ -2,7 +2,7 @@
 // @name        TW2Overflow Farmer, Recruiter, Builder, Quest and Deposit Planner
 // @description Automating the boring stuff on Tribal Wars 2 with tools like auto farming, auto builder, command scheduler, minimap and more.
 // @namespace   local/tw2overflow-farming
-// @version     2.1.500.17
+// @version     2.1.500.18
 // @grant       unsafeWindow
 // @grant       GM_getValue
 // @grant       GM_setValue
@@ -14,7 +14,7 @@
 
 /*!
  * tw2overflow v2.1.500
- * Thu, 08 Oct 2026 02:39:51 GMT
+ * Thu, 08 Oct 2026 03:33:18 GMT
  * Developed by Relaxeaza <relaxeaza@outlook.com>
  *
  * This work is free. You can redistribute it and/or modify it under the
@@ -919,7 +919,6 @@ define('two/language', [
             "auto_preset_carry": "Desired packet carrying capacity",
             "farming_controls": "Farming controls",
             "farming_controls_help": "Preview records planned attacks without sending them. Capacity per hour estimates transport capacity, not actual loot. Saving settings pauses an active farmer.",
-            "preview_only": "Preview only (no attacks)",
             "barbarians_only": "Only attack barbarian villages",
             "optimize_haul": "Prefer carrying capacity per round-trip time",
             "estimated_target_loot": "Estimated loot per target (0 = unknown)",
@@ -1356,7 +1355,6 @@ define('two/language', [
             "auto_preset_carry": "Desired packet carrying capacity",
             "farming_controls": "Farming controls",
             "farming_controls_help": "Preview records planned attacks without sending them. Capacity per hour estimates transport capacity, not actual loot. Saving settings pauses an active farmer.",
-            "preview_only": "Preview only (no attacks)",
             "barbarians_only": "Only attack barbarian villages",
             "optimize_haul": "Prefer carrying capacity per round-trip time",
             "estimated_target_loot": "Estimated loot per target (0 = unknown)",
@@ -1793,7 +1791,6 @@ define('two/language', [
             "auto_preset_carry": "Desired packet carrying capacity",
             "farming_controls": "Farming controls",
             "farming_controls_help": "Preview records planned attacks without sending them. Capacity per hour estimates transport capacity, not actual loot. Saving settings pauses an active farmer.",
-            "preview_only": "Preview only (no attacks)",
             "barbarians_only": "Only attack barbarian villages",
             "optimize_haul": "Prefer carrying capacity per round-trip time",
             "estimated_target_loot": "Estimated loot per target (0 = unknown)",
@@ -2230,7 +2227,6 @@ define('two/language', [
             "auto_preset_carry": "Desired packet carrying capacity",
             "farming_controls": "Farming controls",
             "farming_controls_help": "Preview records planned attacks without sending them. Capacity per hour estimates transport capacity, not actual loot. Saving settings pauses an active farmer.",
-            "preview_only": "Preview only (no attacks)",
             "barbarians_only": "Only attack barbarian villages",
             "optimize_haul": "Prefer carrying capacity per round-trip time",
             "estimated_target_loot": "Estimated loot per target (0 = unknown)",
@@ -2667,7 +2663,6 @@ define('two/language', [
             "auto_preset_carry": "Desired packet carrying capacity",
             "farming_controls": "Farming controls",
             "farming_controls_help": "Preview records planned attacks without sending them. Capacity per hour estimates transport capacity, not actual loot. Saving settings pauses an active farmer.",
-            "preview_only": "Preview only (no attacks)",
             "barbarians_only": "Only attack barbarian villages",
             "optimize_haul": "Prefer carrying capacity per round-trip time",
             "estimated_target_loot": "Estimated loot per target (0 = unknown)",
@@ -3104,7 +3099,6 @@ define('two/language', [
             "auto_preset_carry": "Desired packet carrying capacity",
             "farming_controls": "Farming controls",
             "farming_controls_help": "Preview records planned attacks without sending them. Capacity per hour estimates transport capacity, not actual loot. Saving settings pauses an active farmer.",
-            "preview_only": "Preview only (no attacks)",
             "barbarians_only": "Only attack barbarian villages",
             "optimize_haul": "Prefer carrying capacity per round-trip time",
             "estimated_target_loot": "Estimated loot per target (0 = unknown)",
@@ -3541,7 +3535,6 @@ define('two/language', [
             "auto_preset_carry": "Desired packet carrying capacity",
             "farming_controls": "Farming controls",
             "farming_controls_help": "Preview records planned attacks without sending them. Capacity per hour estimates transport capacity, not actual loot. Saving settings pauses an active farmer.",
-            "preview_only": "Preview only (no attacks)",
             "barbarians_only": "Only attack barbarian villages",
             "optimize_haul": "Prefer carrying capacity per round-trip time",
             "estimated_target_loot": "Estimated loot per target (0 = unknown)",
@@ -3978,7 +3971,6 @@ define('two/language', [
             "auto_preset_carry": "Desired packet carrying capacity",
             "farming_controls": "Farming controls",
             "farming_controls_help": "Preview records planned attacks without sending them. Capacity per hour estimates transport capacity, not actual loot. Saving settings pauses an active farmer.",
-            "preview_only": "Preview only (no attacks)",
             "barbarians_only": "Only attack barbarian villages",
             "optimize_haul": "Prefer carrying capacity per round-trip time",
             "estimated_target_loot": "Estimated loot per target (0 = unknown)",
@@ -4415,7 +4407,6 @@ define('two/language', [
             "auto_preset_carry": "Desired packet carrying capacity",
             "farming_controls": "Farming controls",
             "farming_controls_help": "Preview records planned attacks without sending them. Capacity per hour estimates transport capacity, not actual loot. Saving settings pauses an active farmer.",
-            "preview_only": "Preview only (no attacks)",
             "barbarians_only": "Only attack barbarian villages",
             "optimize_haul": "Prefer carrying capacity per round-trip time",
             "estimated_target_loot": "Estimated loot per target (0 = unknown)",
@@ -4852,7 +4843,6 @@ define('two/language', [
             "auto_preset_carry": "Desired packet carrying capacity",
             "farming_controls": "Farming controls",
             "farming_controls_help": "Preview records planned attacks without sending them. Capacity per hour estimates transport capacity, not actual loot. Saving settings pauses an active farmer.",
-            "preview_only": "Preview only (no attacks)",
             "barbarians_only": "Only attack barbarian villages",
             "optimize_haul": "Prefer carrying capacity per round-trip time",
             "estimated_target_loot": "Estimated loot per target (0 = unknown)",
@@ -5289,7 +5279,6 @@ define('two/language', [
             "auto_preset_carry": "Desired packet carrying capacity",
             "farming_controls": "Farming controls",
             "farming_controls_help": "Preview records planned attacks without sending them. Capacity per hour estimates transport capacity, not actual loot. Saving settings pauses an active farmer.",
-            "preview_only": "Preview only (no attacks)",
             "barbarians_only": "Only attack barbarian villages",
             "optimize_haul": "Prefer carrying capacity per round-trip time",
             "estimated_target_loot": "Estimated loot per target (0 = unknown)",
@@ -6157,6 +6146,30 @@ define('two/resourceBudget', [], function () {
         },
         clear: function (villageId) {
             pending.delete(Number(villageId));
+        }
+    };
+});
+
+// Retire saved preview switches without turning an old preview session into orders.
+define('two/migratePreviewSettings', ['Lockr'], function (Lockr) {
+    return function (settingsKey, activeKey) {
+        const saved = Lockr.get(settingsKey, {});
+        let changed = false;
+        if (hasOwn.call(saved, 'preview_only')) {
+            if (saved.preview_only === true && Lockr.get(activeKey, false) === true) {
+                Lockr.set(activeKey, false);
+            }
+            delete saved.preview_only;
+            changed = true;
+        }
+        for (const profile of Object.values(saved.village_profiles || {})) {
+            if (hasOwn.call(profile, 'preview_only')) {
+                delete profile.preview_only;
+                changed = true;
+            }
+        }
+        if (changed) {
+            Lockr.set(settingsKey, saved);
         }
     };
 });
@@ -9589,7 +9602,9 @@ define('two/builderQueue/defaultOrders', [
         ],
         [
             // Quest: Market Barker
-            BUILDING_TYPES.HEADQUARTER, // 6
+            BUILDING_TYPES.HEADQUARTER // 6
+        ],
+        [
             BUILDING_TYPES.MARKET, // 1
 
             // Quest: Preparations
@@ -14160,7 +14175,8 @@ define('two/farmOverflow', [
     'Lockr',
     'two/debug',
     'two/farmOverflow/policy',
-    'two/farmOverflow/autoPresets'
+    'two/farmOverflow/autoPresets',
+    'two/migratePreviewSettings'
 ], function (
     Settings,
     ERROR_TYPES,
@@ -14184,7 +14200,8 @@ define('two/farmOverflow', [
     Lockr,
     setupDebug,
     policy,
-    autoPresets
+    autoPresets,
+    migratePreviewSettings
 ) {
     let initialized = false;
     let running = false;
@@ -15047,10 +15064,6 @@ define('two/farmOverflow', [
         });
 
         const checkPresets = stepFactory('checkPresets', (resolve, reject) => {
-            if (localSettings[SETTINGS.PREVIEW_ONLY]) {
-                return resolve();
-            }
-
             enableRequiredPresets(this.villageId, () => {
                 if (isActive()) {
                     resolve();
@@ -15192,21 +15205,17 @@ define('two/farmOverflow', [
             this.index++;
             this.attacksThisCycle++;
 
-            if (localSettings[SETTINGS.PREVIEW_ONLY]) {
-                this.setStatus(STATUS.PREVIEW);
-                addLog(LOG_TYPES.PLANNED_VILLAGE, {
-                    targetId: target.id,
-                    originId: this.villageId,
-                    presetId: selectedPreset.id,
-                    units: {...selectedPreset.units},
-                    capacity: selectedChoice.haul,
-                    travelSeconds: selectedChoice.travelSeconds,
-                    ratePerHour: Math.round(selectedChoice.score * 3600),
-                    usingLootEstimate: localSettings[SETTINGS.ESTIMATED_TARGET_LOOT] > 0
-                });
-                this.targetStep({delay: true});
-                return;
-            }
+            // Every live send keeps the same plan details visible in the logs.
+            addLog(LOG_TYPES.PLANNED_VILLAGE, {
+                targetId: target.id,
+                originId: this.villageId,
+                presetId: selectedPreset.id,
+                units: {...selectedPreset.units},
+                capacity: selectedChoice.haul,
+                travelSeconds: selectedChoice.travelSeconds,
+                ratePerHour: Math.round(selectedChoice.score * 3600),
+                usingLootEstimate: localSettings[SETTINGS.ESTIMATED_TARGET_LOOT] > 0
+            });
 
             this.setStatus(STATUS.ATTACKING);
 
@@ -15613,18 +15622,47 @@ define('two/farmOverflow', [
 
     const farmOverflow = {};
 
+    farmOverflow.preview = function () {
+        return Promise.all(farmers.map(farmer => new Promise((resolve, reject) => {
+            villageService.ensureVillageDataLoaded(farmer.villageId, () => {
+                twoMapData.load(loadedTargets => {
+                    try {
+                        // Keep preview targets and packets separate from an active cycle.
+                        const view = Object.create(farmer);
+                        const pos = farmer.village.getPosition();
+                        view.targets = sortTargets(filterTargets(calcDistances(loadedTargets, pos), pos))
+                            .slice(0, localSettings[SETTINGS.TARGET_LIMIT]);
+                        view.generatedPresets = view.buildAutoPresets();
+                        const packets = view.generatedPresets.map(preset => ({
+                            villageId: farmer.villageId, name: preset.name, units: preset.units,
+                            nearbyTargets: preset.nearbyTargets, capacity: getPresetHaul(preset)
+                        }));
+                        const targets = view.targets.map(target => {
+                            const choice = getPresetChoice(view, target);
+                            let reason = choice.preset ? 'Candidate; rechecked before sending' : choice.reason;
+                            if (targetCooldowns[target.id] > timeHelper.gameTime()) {
+                                reason = 'Target cooldown';
+                            } else if (localSettings[SETTINGS.IGNORE_FULL_STORAGE] && storageIsFull(view.village)) {
+                                reason = 'Village storage full';
+                            } else if (view.village.getCommandListModel().getOutgoingCommands(true, true).length
+                                >= VILLAGE_COMMAND_LIMIT - localSettings[SETTINGS.PRESERVE_COMMAND_SLOTS]) {
+                                reason = 'Command limit';
+                            }
+                            return {targetId: target.id, presetId: choice.preset && choice.preset.id,
+                                units: choice.preset && choice.preset.units, capacity: choice.haul,
+                                travelSeconds: choice.travelSeconds, ratePerHour: Math.round((choice.score || 0) * 3600), reason};
+                        });
+                        resolve({villageId: farmer.villageId, packets, targets});
+                    } catch (error) {
+                        reject(error);
+                    }
+                });
+            });
+        })));
+    };
+
     farmOverflow.previewAutoPresets = function () {
-        return Promise.all(farmers.map(farmer => new Promise(resolve => {
-            villageService.ensureVillageDataLoaded(farmer.villageId, () => farmer.loadTargets(() => {
-                resolve(farmer.buildAutoPresets().map(preset => ({
-                    villageId: farmer.villageId,
-                    name: preset.name,
-                    units: preset.units,
-                    nearbyTargets: preset.nearbyTargets,
-                    capacity: getPresetHaul(preset)
-                })));
-            }));
-        }))).then(plans => [].concat(...plans));
+        return farmOverflow.preview().then(plans => plans.flatMap(plan => plan.packets));
     };
 
     farmOverflow.init = function () {
@@ -15644,6 +15682,7 @@ define('two/farmOverflow', [
             }
         }
 
+        migratePreviewSettings(STORAGE_KEYS.SETTINGS, 'farm_overflow_active');
         settings = new Settings({
             settingsMap: SETTINGS_MAP,
             storageKey: STORAGE_KEYS.SETTINGS
@@ -16290,7 +16329,7 @@ define('two/farmOverflow/ui', [
             $button.classList.add('btn-orange');
         });
 
-        interfaceOverflow.addTemplate('twoverflow_farm_overflow_window', `<div id=\"two-farmoverflow\" class=\"win-content two-window\"><header class=\"win-head\"><h2>FarmOverflow</h2><ul class=\"list-btn\"><li><a href=\"#\" class=\"size-34x34 btn-red icon-26x26-close\" ng-click=\"closeWindow()\"></a></ul></header><div class=\"win-main\" scrollbar=\"\"><div class=\"tabs tabs-bg\"><div class=\"tabs-three-col\"><div class=\"tab\" ng-click=\"selectTab(TAB_TYPES.SETTINGS)\" ng-class=\"{'tab-active': selectedTab == TAB_TYPES.SETTINGS}\"><div class=\"tab-inner\"><div ng-class=\"{'box-border-light': selectedTab === TAB_TYPES.SETTINGS}\"><a href=\"#\" ng-class=\"{'btn-icon btn-orange': selectedTab !== TAB_TYPES.SETTINGS}\">{{ TAB_TYPES.SETTINGS | i18n:loc.ale:'common' }}</a></div></div></div><div class=\"tab\" ng-click=\"selectTab(TAB_TYPES.VILLAGES)\" ng-class=\"{'tab-active': selectedTab == TAB_TYPES.VILLAGES}\"><div class=\"tab-inner\"><div ng-class=\"{'box-border-light': selectedTab === TAB_TYPES.VILLAGES}\"><a href=\"#\" ng-class=\"{'btn-icon btn-orange': selectedTab !== TAB_TYPES.VILLAGES}\">{{ TAB_TYPES.VILLAGES | i18n:loc.ale:'common' }}</a></div></div></div><div class=\"tab\" ng-click=\"selectTab(TAB_TYPES.LOGS)\" ng-class=\"{'tab-active': selectedTab == TAB_TYPES.LOGS}\"><div class=\"tab-inner\"><div ng-class=\"{'box-border-light': selectedTab === TAB_TYPES.LOGS}\"><a href=\"#\" ng-class=\"{'btn-icon btn-orange': selectedTab !== TAB_TYPES.LOGS}\">{{ TAB_TYPES.LOGS | i18n:loc.ale:'common' }}</a></div></div></div></div></div><div class=\"box-paper footer\"><div class=\"scroll-wrap\"><div class=\"settings\" ng-show=\"selectedTab === TAB_TYPES.SETTINGS\"><table class=\"tbl-border-light tbl-content tbl-medium-height\"><col><col width=\"270px\"><tr><th colspan=\"2\">Automatic farming presets<tr><td colspan=\"2\">Farmer creates local troop packets for nearby barbarians each cycle, using troops in town after reserves. Carrying capacity estimates loot space; it does not estimate defenders. Manual presets remain available.<tr ng-repeat=\"settingId in autoPresetSettings\" ng-switch=\"settingsMap[settingId].inputType\"><td>{{ settingId | i18n:loc.ale:'farm_overflow' }}<td ng-switch-when=\"checkbox\"><div switch-slider=\"\" enabled=\"true\" border=\"true\" value=\"settings[settingId]\" vertical=\"false\" size=\"'56x28'\"></div><td ng-switch-when=\"number\"><input type=\"number\" class=\"fit textfield-border text-center\" ng-model=\"settings[settingId]\" min=\"{{ settingsMap[settingId].min }}\" max=\"{{ settingsMap[settingId].max }}\" step=\"1\"><tr><td>Allowed unit types<td><label ng-repeat=\"unit in autoPresetUnits\"><input type=\"checkbox\" ng-model=\"unit.enabled\"> {{ unit.name }}</label><tr><td colspan=\"2\"><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"previewAutoPresets()\">Save and preview packets</a><tr ng-repeat=\"plan in autoPresetPlans\"><td>Village {{ plan.villageId }} — {{ plan.nearbyTargets }} barbarians<td>{{ plan.name }} — capacity {{ plan.capacity }}</table><table class=\"tbl-border-light tbl-content tbl-medium-height\"><col><col width=\"270px\"><tr><th colspan=\"2\">{{ 'farming_controls' | i18n:loc.ale:'farm_overflow' }}<tr><td colspan=\"2\">{{ 'farming_controls_help' | i18n:loc.ale:'farm_overflow' }}<tr ng-repeat=\"settingId in farmingSettings\" ng-switch=\"settingsMap[settingId].inputType\"><td>{{ settingId | i18n:loc.ale:'farm_overflow' }}<td ng-switch-when=\"checkbox\"><div switch-slider=\"\" enabled=\"true\" border=\"true\" value=\"settings[settingId]\" vertical=\"false\" size=\"'56x28'\"></div><td ng-switch-when=\"number\"><input type=\"number\" class=\"fit textfield-border text-center\" ng-model=\"settings[settingId]\" min=\"{{ settingsMap[settingId].min }}\" max=\"{{ settingsMap[settingId].max }}\" step=\"1\"><td ng-switch-when=\"readable_time\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[settingId]\" tooltip=\"\" tooltip-content=\"{{ 'readable_time_format' | i18n:loc.ale:'common' }}\"></table><table class=\"tbl-border-light tbl-content tbl-medium-height\"><col width=\"*\"><col width=\"270px\"><tr><th colspan=\"2\">{{ 'step_cycle_header' | i18n:loc.ale:'farm_overflow' }}<tr><td><span class=\"ff-cell-fix\">{{ 'farmer_behavior' | i18n:loc.ale:'farm_overflow' }}</span><td><div select=\"\" list=\"farmerBehaviorList\" selected=\"selectedFarmerBehavior\" drop-down=\"true\"></div><tr><td><span class=\"ff-cell-fix\">{{ 'target_behavior' | i18n:loc.ale:'farm_overflow' }}</span><td><div select=\"\" list=\"targetBehaviorList\" selected=\"selectedTargetBehavior\" drop-down=\"true\"></div><tr><td><span class=\"ff-cell-fix\">{{ 'multiple_attacks_interval' | i18n:loc.ale:'farm_overflow' }}</span><td><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.MULTIPLE_ATTACKS_INTERVAL]\" tooltip=\"\" tooltip-content=\"{{ 'readable_time_format' | i18n:loc.ale:'common' }}\"></table><table class=\"tbl-border-light tbl-content tbl-medium-height\"><col width=\"*\"><col width=\"270px\"><tr><th colspan=\"2\">{{ 'groups_presets' | i18n:loc.ale:'farm_overflow' }}<tr><td><span class=\"ff-cell-fix\">{{ 'presets' | i18n:loc.ale:'farm_overflow' }}</span><td><div select=\"\" list=\"presets\" selected=\"settings[SETTINGS.PRESETS]\" drop-down=\"true\"></div><tr><td><span class=\"ff-cell-fix\">{{ 'group_ignored' | i18n:loc.ale:'farm_overflow' }}</span><td class=\"snowflake\"><div select=\"\" list=\"groupsWithDisabled\" selected=\"settings[SETTINGS.GROUP_IGNORE]\" drop-down=\"true\"></div><tr><td><span class=\"ff-cell-fix\">{{ 'group_include' | i18n:loc.ale:'farm_overflow' }}</span><td><div select=\"\" list=\"groups\" selected=\"settings[SETTINGS.GROUP_INCLUDE]\" drop-down=\"true\"></div><tr><td><span class=\"ff-cell-fix\">{{ 'group_only' | i18n:loc.ale:'farm_overflow' }}</span><td><div select=\"\" list=\"groups\" selected=\"settings[SETTINGS.GROUP_ONLY]\" drop-down=\"true\"></div></table><table class=\"tbl-border-light tbl-content tbl-medium-height\"><col><col width=\"200px\"><col width=\"60px\"><tr><th colspan=\"3\">{{ 'misc' | i18n:loc.ale:'farm_overflow' }}<tr><td><span class=\"ff-cell-fix\">{{ 'attack_interval' | i18n:loc.ale:'farm_overflow' }}</span><td colspan=\"2\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.ATTACK_INTERVAL]\" tooltip=\"\" tooltip-content=\"{{ 'readable_time_format' | i18n:loc.ale:'common' }}\"><tr><td><span class=\"ff-cell-fix\">{{ 'farmer_cycle_interval' | i18n:loc.ale:'farm_overflow' }}</span><td colspan=\"2\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.FARMER_CYCLE_INTERVAL]\" tooltip=\"\" tooltip-content=\"{{ 'readable_time_format' | i18n:loc.ale:'common' }}\"><tr><td><span class=\"ff-cell-fix\">{{ 'preserve_command_slots' | i18n:loc.ale:'farm_overflow' }}</span><td><div range-slider=\"\" min=\"settingsMap[SETTINGS.PRESERVE_COMMAND_SLOTS].min\" max=\"settingsMap[SETTINGS.PRESERVE_COMMAND_SLOTS].max\" value=\"settings[SETTINGS.PRESERVE_COMMAND_SLOTS]\" enabled=\"true\"></div><td class=\"cell-bottom\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.PRESERVE_COMMAND_SLOTS]\"><tr><td colspan=\"2\"><span class=\"ff-cell-fix\">{{ 'ignore_on_loss' | i18n:loc.ale:'farm_overflow' }}</span><td><div switch-slider=\"\" enabled=\"settings[SETTINGS.GROUP_IGNORE].value\" border=\"true\" value=\"settings[SETTINGS.IGNORE_ON_LOSS]\" vertical=\"false\" size=\"'56x28'\" tooltip=\"\" tooltip-content=\"{{ 'ignore_on_loss_tip' | i18n:loc.ale:'farm_overflow' }}\"></div><tr><td colspan=\"2\"><span class=\"ff-cell-fix\">{{ 'ignore_full_storage' | i18n:loc.ale:'farm_overflow' }}</span><td><div switch-slider=\"\" enabled=\"true\" border=\"true\" value=\"settings[SETTINGS.IGNORE_FULL_STORAGE]\" vertical=\"false\" size=\"'56x28'\"></div><tr><td><span class=\"ff-cell-fix\">{{ 'target_limit_per_village' | i18n:loc.ale:'farm_overflow' }}</span><td><div range-slider=\"\" min=\"settingsMap[SETTINGS.TARGET_LIMIT].min\" max=\"settingsMap[SETTINGS.TARGET_LIMIT].max\" value=\"settings[SETTINGS.TARGET_LIMIT]\" enabled=\"true\"></div><td class=\"cell-bottom\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.TARGET_LIMIT]\"></table><table class=\"tbl-border-light tbl-content tbl-medium-height\"><col><col width=\"200px\"><col width=\"60px\"><tr><th colspan=\"3\">{{ 'target_filters' | i18n:loc.ale:'farm_overflow' }}<tr><td><span class=\"ff-cell-fix\">{{ 'min_distance' | i18n:loc.ale:'farm_overflow' }}</span><td><div range-slider=\"\" min=\"settingsMap[SETTINGS.MIN_DISTANCE].min\" max=\"settingsMap[SETTINGS.MIN_DISTANCE].max\" value=\"settings[SETTINGS.MIN_DISTANCE]\" enabled=\"true\"></div><td class=\"cell-bottom\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.MIN_DISTANCE]\"><tr><td><span class=\"ff-cell-fix\">{{ 'max_distance' | i18n:loc.ale:'farm_overflow' }}</span><td><div range-slider=\"\" min=\"settingsMap[SETTINGS.MAX_DISTANCE].min\" max=\"settingsMap[SETTINGS.MAX_DISTANCE].max\" value=\"settings[SETTINGS.MAX_DISTANCE]\" enabled=\"true\"></div><td class=\"cell-bottom\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.MAX_DISTANCE]\"><tr><td><span class=\"ff-cell-fix\">{{ 'min_points' | i18n:loc.ale:'farm_overflow' }}</span><td><div range-slider=\"\" min=\"settingsMap[SETTINGS.MIN_POINTS].min\" max=\"settingsMap[SETTINGS.MIN_POINTS].max\" value=\"settings[SETTINGS.MIN_POINTS]\" enabled=\"true\"></div><td class=\"cell-bottom\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.MIN_POINTS]\"><tr><td><span class=\"ff-cell-fix\">{{ 'max_points' | i18n:loc.ale:'farm_overflow' }}</span><td><div range-slider=\"\" min=\"settingsMap[SETTINGS.MAX_POINTS].min\" max=\"settingsMap[SETTINGS.MAX_POINTS].max\" value=\"settings[SETTINGS.MAX_POINTS]\" enabled=\"true\"></div><td class=\"cell-bottom\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.MAX_POINTS]\"><tr><td><span class=\"ff-cell-fix\">{{ 'max_travel_time' | i18n:loc.ale:'farm_overflow' }}</span><td colspan=\"2\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.MAX_TRAVEL_TIME]\" tooltip=\"\" tooltip-content=\"{{ 'readable_time_format' | i18n:loc.ale:'common' }}\"></table><table class=\"tbl-border-light tbl-content tbl-medium-height\"><col><col width=\"200px\"><col width=\"60px\"><tr><th colspan=\"3\">{{ 'others' | i18n:loc.ale:'common' }}<tr><td><span class=\"ff-cell-fix\">{{ 'logs_limit' | i18n:loc.ale:'farm_overflow' }}</span><td><div range-slider=\"\" min=\"settingsMap[SETTINGS.LOGS_LIMIT].min\" max=\"settingsMap[SETTINGS.LOGS_LIMIT].max\" value=\"settings[SETTINGS.LOGS_LIMIT]\" enabled=\"true\"></div><td class=\"cell-bottom\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.LOGS_LIMIT]\"></table></div><div class=\"villages rich-text\" ng-show=\"selectedTab === TAB_TYPES.VILLAGES\"><p ng-show=\"showCycleTimer\" class=\"text-center\">{{ 'next_cycle_in' | i18n:loc.ale:'farm_overflow' }}: {{ nextCycleCountdown | readableMillisecondsFilter }}<h5 class=\"twx-section\">{{ 'farmer_villages' | i18n:loc.ale:'farm_overflow' }}</h5><p ng-show=\"!farmers.length\" class=\"text-center\">{{ 'no_farmer_villages' | i18n:loc.ale:'farm_overflow' }}<table class=\"tbl-border-light tbl-striped\" ng-show=\"farmers.length\"><col><col width=\"40%\"><col width=\"20%\"><tr><th>{{ 'villages' | i18n:loc.ale:'common' }}<th>{{ 'last_status' | i18n:loc.ale:'farm_overflow' }}<th>{{ 'target' | i18n:loc.ale:'common':2 }}<tr ng-repeat=\"farmer in farmers\"><td><span ng-class=\"{true:'icon-20x20-queue-indicator-long', false:'icon-20x20-queue-indicator-short'}[farmer.isRunning()]\"></span> <a class=\"link\" ng-click=\"openVillageInfo(farmer.getVillage().getId())\"><span class=\"icon-20x20-village\"></span> {{ farmer.getVillage().getName() }} ({{ farmer.getVillage().getX() }}|{{ farmer.getVillage().getY() }})</a><td>{{ 'status_' + farmer.getStatus() | i18n:loc.ale:'farm_overflow' }}<td ng-if=\"farmer.getTargets()\"><span ng-if=\"farmer.isRunning()\">{{ farmer.getIndex() }} / </span><span>{{ farmer.getTargets().length }}</span><td ng-if=\"!farmer.getTargets()\">{{ 'not_loaded' | i18n:loc.ale:'farm_overflow' }}</table><h5 class=\"twx-section\">{{ 'ignored_targets' | i18n:loc.ale:'farm_overflow' }}</h5><p ng-if=\"!exceptionVillages.ignored.length\" class=\"text-center\">{{ 'no_ignored_targets' | i18n:loc.ale:'farm_overflow' }}<table class=\"ignored-villages tbl-border-light tbl-striped\" ng-show=\"exceptionVillages.ignored.length\"><col><col width=\"15%\"><col width=\"15%\"><col width=\"30px\"><tr><th>{{ 'villages' | i18n:loc.ale:'common' }}<th>{{ 'date' | i18n:loc.ale:'farm_overflow' }}<th>{{ 'reports' | i18n:loc.ale:'farm_overflow' }}<th><tr ng-repeat=\"villageId in exceptionVillages.ignored track by $index\"><td><a class=\"link\" ng-click=\"openVillageInfo(villageId)\"><span class=\"icon-20x20-village\"></span> {{ villagesLabel[villageId] }}</a><td>{{ exceptionLogs[villageId].time | readableDateFilter:loc.ale:GAME_TIMEZONE:GAME_TIME_OFFSET }}<td><span ng-if=\"exceptionLogs[villageId].report\"><a class=\"link\" ng-click=\"showReport(exceptionLogs[villageId].report.id)\" tooltip=\"\" tooltip-content=\"{{ exceptionLogs[villageId].report.title }}\"><span class=\"icon-20x20-report\"></span> {{ 'open_report' | i18n:loc.ale:'farm_overflow' }}</a> <span ng-class=\"{2:'icon-20x20-queue-indicator-medium', 3:'icon-20x20-queue-indicator-short'}[exceptionLogs[villageId].report.result]\"></span> <span ng-class=\"{'full': 'icon-26x26-capacity', 'partial':'icon-26x26-capacity-low', 'none':'hidden'}[exceptionLogs[villageId].report.haul]\"></span> </span><span ng-if=\"!exceptionLogs[villageId].report\">{{ 'no_report' | i18n:loc.ale:'farm_overflow' }}</span><td><a href=\"#\" class=\"size-20x20 btn-red icon-20x20-close\" ng-click=\"removeIgnored(villageId)\" tooltip=\"\" tooltip-content=\"\"></a></table><h5 class=\"twx-section\">{{ 'included_targets' | i18n:loc.ale:'farm_overflow' }}</h5><p ng-if=\"!exceptionVillages.included.length\" class=\"text-center\">{{ 'no_included_targets' | i18n:loc.ale:'farm_overflow' }}<table class=\"tbl-border-light tbl-striped\" ng-show=\"exceptionVillages.included.length\"><col><col width=\"15%\"><col width=\"30px\"><tr><th>{{ 'villages' | i18n:loc.ale:'common' }}<th>{{ 'date' | i18n:loc.ale:'farm_overflow' }}<th><tr ng-repeat=\"villageId in exceptionVillages.included track by $index\"><td><a class=\"link\" ng-click=\"openVillageInfo(villageId)\"><span class=\"icon-20x20-village\"></span> {{ villagesLabel[villageId] }}</a><td>{{ exceptionLogs[villageId].time | readableDateFilter:loc.ale:GAME_TIMEZONE:GAME_TIME_OFFSET }}<td><a href=\"#\" class=\"size-20x20 btn-red icon-20x20-close\" ng-click=\"removeIncluded(villageId)\" tooltip=\"\" tooltip-content=\"\"></a></table></div><div class=\"logs rich-text\" ng-show=\"selectedTab === TAB_TYPES.LOGS\"><div class=\"page-wrap\" pagination=\"pagination\"></div><p class=\"text-center\" ng-show=\"!visibleLogs.length\">{{ 'no_logs' | i18n:loc.ale:'farm_overflow' }}<table class=\"log-list tbl-border-light tbl-striped\" ng-show=\"visibleLogs.length\"><col width=\"100px\"><col width=\"30px\"><col><tr ng-repeat=\"log in visibleLogs track by $index\"><td>{{ log.time | readableDateFilter:loc.ale:GAME_TIMEZONE:GAME_TIME_OFFSET }}<td><span class=\"icon-bg-black\" ng-class=\"{
+        interfaceOverflow.addTemplate('twoverflow_farm_overflow_window', `<div id=\"two-farmoverflow\" class=\"win-content two-window\"><header class=\"win-head\"><h2>FarmOverflow</h2><ul class=\"list-btn\"><li><a href=\"#\" class=\"size-34x34 btn-red icon-26x26-close\" ng-click=\"closeWindow()\"></a></ul></header><div class=\"win-main\" scrollbar=\"\"><div class=\"tabs tabs-bg\"><div class=\"tabs-three-col\"><div class=\"tab\" ng-click=\"selectTab(TAB_TYPES.SETTINGS)\" ng-class=\"{'tab-active': selectedTab == TAB_TYPES.SETTINGS}\"><div class=\"tab-inner\"><div ng-class=\"{'box-border-light': selectedTab === TAB_TYPES.SETTINGS}\"><a href=\"#\" ng-class=\"{'btn-icon btn-orange': selectedTab !== TAB_TYPES.SETTINGS}\">{{ TAB_TYPES.SETTINGS | i18n:loc.ale:'common' }}</a></div></div></div><div class=\"tab\" ng-click=\"selectTab(TAB_TYPES.VILLAGES)\" ng-class=\"{'tab-active': selectedTab == TAB_TYPES.VILLAGES}\"><div class=\"tab-inner\"><div ng-class=\"{'box-border-light': selectedTab === TAB_TYPES.VILLAGES}\"><a href=\"#\" ng-class=\"{'btn-icon btn-orange': selectedTab !== TAB_TYPES.VILLAGES}\">{{ TAB_TYPES.VILLAGES | i18n:loc.ale:'common' }}</a></div></div></div><div class=\"tab\" ng-click=\"selectTab(TAB_TYPES.LOGS)\" ng-class=\"{'tab-active': selectedTab == TAB_TYPES.LOGS}\"><div class=\"tab-inner\"><div ng-class=\"{'box-border-light': selectedTab === TAB_TYPES.LOGS}\"><a href=\"#\" ng-class=\"{'btn-icon btn-orange': selectedTab !== TAB_TYPES.LOGS}\">{{ TAB_TYPES.LOGS | i18n:loc.ale:'common' }}</a></div></div></div></div></div><div class=\"box-paper footer\"><div class=\"scroll-wrap\"><div class=\"settings\" ng-show=\"selectedTab === TAB_TYPES.SETTINGS\"><h3>Farming preview</h3><p>Preview refreshes every five seconds using saved settings, while stopped or running. Start sends attacks; Stop prevents further sends. Candidates are rechecked for fresh troops, targets and incoming commands before sending.</p><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"refreshPreview()\">Refresh preview</a><p ng-if=\"previewError\">{{ previewError }}<div ng-repeat=\"plan in farmPlans\"><h4>Village {{ plan.villageId }}</h4><p ng-if=\"!plan.targets.length\">No eligible targets in range.<table class=\"tbl-border-light tbl-content\"><tr><th>Target / preset<th>Troops / capacity<th>Travel / hourly estimate<th>Status<tr ng-repeat=\"target in plan.targets\"><td>{{ target.targetId }} / {{ target.presetId }}<td>{{ target.units }} / {{ target.capacity }}<td>{{ target.travelSeconds }}s / {{ target.ratePerHour }}<td>{{ target.reason }}</table></div><table class=\"tbl-border-light tbl-content tbl-medium-height\"><col><col width=\"270px\"><tr><th colspan=\"2\">Automatic farming presets<tr><td colspan=\"2\">Farmer creates local troop packets for nearby barbarians each cycle, using troops in town after reserves. Carrying capacity estimates loot space; it does not estimate defenders. Manual presets remain available.<tr ng-repeat=\"settingId in autoPresetSettings\" ng-switch=\"settingsMap[settingId].inputType\"><td>{{ settingId | i18n:loc.ale:'farm_overflow' }}<td ng-switch-when=\"checkbox\"><div switch-slider=\"\" enabled=\"true\" border=\"true\" value=\"settings[settingId]\" vertical=\"false\" size=\"'56x28'\"></div><td ng-switch-when=\"number\"><input type=\"number\" class=\"fit textfield-border text-center\" ng-model=\"settings[settingId]\" min=\"{{ settingsMap[settingId].min }}\" max=\"{{ settingsMap[settingId].max }}\" step=\"1\"><tr><td>Allowed unit types<td><label ng-repeat=\"unit in autoPresetUnits\"><input type=\"checkbox\" ng-model=\"unit.enabled\"> {{ unit.name }}</label><tr><td colspan=\"2\"><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"previewAutoPresets()\">Save and preview packets</a><tr ng-repeat=\"plan in autoPresetPlans\"><td>Village {{ plan.villageId }} — {{ plan.nearbyTargets }} barbarians<td>{{ plan.name }} — capacity {{ plan.capacity }}</table><table class=\"tbl-border-light tbl-content tbl-medium-height\"><col><col width=\"270px\"><tr><th colspan=\"2\">{{ 'farming_controls' | i18n:loc.ale:'farm_overflow' }}<tr><td colspan=\"2\">{{ 'farming_controls_help' | i18n:loc.ale:'farm_overflow' }}<tr ng-repeat=\"settingId in farmingSettings\" ng-switch=\"settingsMap[settingId].inputType\"><td>{{ settingId | i18n:loc.ale:'farm_overflow' }}<td ng-switch-when=\"checkbox\"><div switch-slider=\"\" enabled=\"true\" border=\"true\" value=\"settings[settingId]\" vertical=\"false\" size=\"'56x28'\"></div><td ng-switch-when=\"number\"><input type=\"number\" class=\"fit textfield-border text-center\" ng-model=\"settings[settingId]\" min=\"{{ settingsMap[settingId].min }}\" max=\"{{ settingsMap[settingId].max }}\" step=\"1\"><td ng-switch-when=\"readable_time\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[settingId]\" tooltip=\"\" tooltip-content=\"{{ 'readable_time_format' | i18n:loc.ale:'common' }}\"></table><table class=\"tbl-border-light tbl-content tbl-medium-height\"><col width=\"*\"><col width=\"270px\"><tr><th colspan=\"2\">{{ 'step_cycle_header' | i18n:loc.ale:'farm_overflow' }}<tr><td><span class=\"ff-cell-fix\">{{ 'farmer_behavior' | i18n:loc.ale:'farm_overflow' }}</span><td><div select=\"\" list=\"farmerBehaviorList\" selected=\"selectedFarmerBehavior\" drop-down=\"true\"></div><tr><td><span class=\"ff-cell-fix\">{{ 'target_behavior' | i18n:loc.ale:'farm_overflow' }}</span><td><div select=\"\" list=\"targetBehaviorList\" selected=\"selectedTargetBehavior\" drop-down=\"true\"></div><tr><td><span class=\"ff-cell-fix\">{{ 'multiple_attacks_interval' | i18n:loc.ale:'farm_overflow' }}</span><td><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.MULTIPLE_ATTACKS_INTERVAL]\" tooltip=\"\" tooltip-content=\"{{ 'readable_time_format' | i18n:loc.ale:'common' }}\"></table><table class=\"tbl-border-light tbl-content tbl-medium-height\"><col width=\"*\"><col width=\"270px\"><tr><th colspan=\"2\">{{ 'groups_presets' | i18n:loc.ale:'farm_overflow' }}<tr><td><span class=\"ff-cell-fix\">{{ 'presets' | i18n:loc.ale:'farm_overflow' }}</span><td><div select=\"\" list=\"presets\" selected=\"settings[SETTINGS.PRESETS]\" drop-down=\"true\"></div><tr><td><span class=\"ff-cell-fix\">{{ 'group_ignored' | i18n:loc.ale:'farm_overflow' }}</span><td class=\"snowflake\"><div select=\"\" list=\"groupsWithDisabled\" selected=\"settings[SETTINGS.GROUP_IGNORE]\" drop-down=\"true\"></div><tr><td><span class=\"ff-cell-fix\">{{ 'group_include' | i18n:loc.ale:'farm_overflow' }}</span><td><div select=\"\" list=\"groups\" selected=\"settings[SETTINGS.GROUP_INCLUDE]\" drop-down=\"true\"></div><tr><td><span class=\"ff-cell-fix\">{{ 'group_only' | i18n:loc.ale:'farm_overflow' }}</span><td><div select=\"\" list=\"groups\" selected=\"settings[SETTINGS.GROUP_ONLY]\" drop-down=\"true\"></div></table><table class=\"tbl-border-light tbl-content tbl-medium-height\"><col><col width=\"200px\"><col width=\"60px\"><tr><th colspan=\"3\">{{ 'misc' | i18n:loc.ale:'farm_overflow' }}<tr><td><span class=\"ff-cell-fix\">{{ 'attack_interval' | i18n:loc.ale:'farm_overflow' }}</span><td colspan=\"2\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.ATTACK_INTERVAL]\" tooltip=\"\" tooltip-content=\"{{ 'readable_time_format' | i18n:loc.ale:'common' }}\"><tr><td><span class=\"ff-cell-fix\">{{ 'farmer_cycle_interval' | i18n:loc.ale:'farm_overflow' }}</span><td colspan=\"2\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.FARMER_CYCLE_INTERVAL]\" tooltip=\"\" tooltip-content=\"{{ 'readable_time_format' | i18n:loc.ale:'common' }}\"><tr><td><span class=\"ff-cell-fix\">{{ 'preserve_command_slots' | i18n:loc.ale:'farm_overflow' }}</span><td><div range-slider=\"\" min=\"settingsMap[SETTINGS.PRESERVE_COMMAND_SLOTS].min\" max=\"settingsMap[SETTINGS.PRESERVE_COMMAND_SLOTS].max\" value=\"settings[SETTINGS.PRESERVE_COMMAND_SLOTS]\" enabled=\"true\"></div><td class=\"cell-bottom\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.PRESERVE_COMMAND_SLOTS]\"><tr><td colspan=\"2\"><span class=\"ff-cell-fix\">{{ 'ignore_on_loss' | i18n:loc.ale:'farm_overflow' }}</span><td><div switch-slider=\"\" enabled=\"settings[SETTINGS.GROUP_IGNORE].value\" border=\"true\" value=\"settings[SETTINGS.IGNORE_ON_LOSS]\" vertical=\"false\" size=\"'56x28'\" tooltip=\"\" tooltip-content=\"{{ 'ignore_on_loss_tip' | i18n:loc.ale:'farm_overflow' }}\"></div><tr><td colspan=\"2\"><span class=\"ff-cell-fix\">{{ 'ignore_full_storage' | i18n:loc.ale:'farm_overflow' }}</span><td><div switch-slider=\"\" enabled=\"true\" border=\"true\" value=\"settings[SETTINGS.IGNORE_FULL_STORAGE]\" vertical=\"false\" size=\"'56x28'\"></div><tr><td><span class=\"ff-cell-fix\">{{ 'target_limit_per_village' | i18n:loc.ale:'farm_overflow' }}</span><td><div range-slider=\"\" min=\"settingsMap[SETTINGS.TARGET_LIMIT].min\" max=\"settingsMap[SETTINGS.TARGET_LIMIT].max\" value=\"settings[SETTINGS.TARGET_LIMIT]\" enabled=\"true\"></div><td class=\"cell-bottom\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.TARGET_LIMIT]\"></table><table class=\"tbl-border-light tbl-content tbl-medium-height\"><col><col width=\"200px\"><col width=\"60px\"><tr><th colspan=\"3\">{{ 'target_filters' | i18n:loc.ale:'farm_overflow' }}<tr><td><span class=\"ff-cell-fix\">{{ 'min_distance' | i18n:loc.ale:'farm_overflow' }}</span><td><div range-slider=\"\" min=\"settingsMap[SETTINGS.MIN_DISTANCE].min\" max=\"settingsMap[SETTINGS.MIN_DISTANCE].max\" value=\"settings[SETTINGS.MIN_DISTANCE]\" enabled=\"true\"></div><td class=\"cell-bottom\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.MIN_DISTANCE]\"><tr><td><span class=\"ff-cell-fix\">{{ 'max_distance' | i18n:loc.ale:'farm_overflow' }}</span><td><div range-slider=\"\" min=\"settingsMap[SETTINGS.MAX_DISTANCE].min\" max=\"settingsMap[SETTINGS.MAX_DISTANCE].max\" value=\"settings[SETTINGS.MAX_DISTANCE]\" enabled=\"true\"></div><td class=\"cell-bottom\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.MAX_DISTANCE]\"><tr><td><span class=\"ff-cell-fix\">{{ 'min_points' | i18n:loc.ale:'farm_overflow' }}</span><td><div range-slider=\"\" min=\"settingsMap[SETTINGS.MIN_POINTS].min\" max=\"settingsMap[SETTINGS.MIN_POINTS].max\" value=\"settings[SETTINGS.MIN_POINTS]\" enabled=\"true\"></div><td class=\"cell-bottom\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.MIN_POINTS]\"><tr><td><span class=\"ff-cell-fix\">{{ 'max_points' | i18n:loc.ale:'farm_overflow' }}</span><td><div range-slider=\"\" min=\"settingsMap[SETTINGS.MAX_POINTS].min\" max=\"settingsMap[SETTINGS.MAX_POINTS].max\" value=\"settings[SETTINGS.MAX_POINTS]\" enabled=\"true\"></div><td class=\"cell-bottom\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.MAX_POINTS]\"><tr><td><span class=\"ff-cell-fix\">{{ 'max_travel_time' | i18n:loc.ale:'farm_overflow' }}</span><td colspan=\"2\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.MAX_TRAVEL_TIME]\" tooltip=\"\" tooltip-content=\"{{ 'readable_time_format' | i18n:loc.ale:'common' }}\"></table><table class=\"tbl-border-light tbl-content tbl-medium-height\"><col><col width=\"200px\"><col width=\"60px\"><tr><th colspan=\"3\">{{ 'others' | i18n:loc.ale:'common' }}<tr><td><span class=\"ff-cell-fix\">{{ 'logs_limit' | i18n:loc.ale:'farm_overflow' }}</span><td><div range-slider=\"\" min=\"settingsMap[SETTINGS.LOGS_LIMIT].min\" max=\"settingsMap[SETTINGS.LOGS_LIMIT].max\" value=\"settings[SETTINGS.LOGS_LIMIT]\" enabled=\"true\"></div><td class=\"cell-bottom\"><input class=\"fit textfield-border text-center\" ng-model=\"settings[SETTINGS.LOGS_LIMIT]\"></table></div><div class=\"villages rich-text\" ng-show=\"selectedTab === TAB_TYPES.VILLAGES\"><p ng-show=\"showCycleTimer\" class=\"text-center\">{{ 'next_cycle_in' | i18n:loc.ale:'farm_overflow' }}: {{ nextCycleCountdown | readableMillisecondsFilter }}<h5 class=\"twx-section\">{{ 'farmer_villages' | i18n:loc.ale:'farm_overflow' }}</h5><p ng-show=\"!farmers.length\" class=\"text-center\">{{ 'no_farmer_villages' | i18n:loc.ale:'farm_overflow' }}<table class=\"tbl-border-light tbl-striped\" ng-show=\"farmers.length\"><col><col width=\"40%\"><col width=\"20%\"><tr><th>{{ 'villages' | i18n:loc.ale:'common' }}<th>{{ 'last_status' | i18n:loc.ale:'farm_overflow' }}<th>{{ 'target' | i18n:loc.ale:'common':2 }}<tr ng-repeat=\"farmer in farmers\"><td><span ng-class=\"{true:'icon-20x20-queue-indicator-long', false:'icon-20x20-queue-indicator-short'}[farmer.isRunning()]\"></span> <a class=\"link\" ng-click=\"openVillageInfo(farmer.getVillage().getId())\"><span class=\"icon-20x20-village\"></span> {{ farmer.getVillage().getName() }} ({{ farmer.getVillage().getX() }}|{{ farmer.getVillage().getY() }})</a><td>{{ 'status_' + farmer.getStatus() | i18n:loc.ale:'farm_overflow' }}<td ng-if=\"farmer.getTargets()\"><span ng-if=\"farmer.isRunning()\">{{ farmer.getIndex() }} / </span><span>{{ farmer.getTargets().length }}</span><td ng-if=\"!farmer.getTargets()\">{{ 'not_loaded' | i18n:loc.ale:'farm_overflow' }}</table><h5 class=\"twx-section\">{{ 'ignored_targets' | i18n:loc.ale:'farm_overflow' }}</h5><p ng-if=\"!exceptionVillages.ignored.length\" class=\"text-center\">{{ 'no_ignored_targets' | i18n:loc.ale:'farm_overflow' }}<table class=\"ignored-villages tbl-border-light tbl-striped\" ng-show=\"exceptionVillages.ignored.length\"><col><col width=\"15%\"><col width=\"15%\"><col width=\"30px\"><tr><th>{{ 'villages' | i18n:loc.ale:'common' }}<th>{{ 'date' | i18n:loc.ale:'farm_overflow' }}<th>{{ 'reports' | i18n:loc.ale:'farm_overflow' }}<th><tr ng-repeat=\"villageId in exceptionVillages.ignored track by $index\"><td><a class=\"link\" ng-click=\"openVillageInfo(villageId)\"><span class=\"icon-20x20-village\"></span> {{ villagesLabel[villageId] }}</a><td>{{ exceptionLogs[villageId].time | readableDateFilter:loc.ale:GAME_TIMEZONE:GAME_TIME_OFFSET }}<td><span ng-if=\"exceptionLogs[villageId].report\"><a class=\"link\" ng-click=\"showReport(exceptionLogs[villageId].report.id)\" tooltip=\"\" tooltip-content=\"{{ exceptionLogs[villageId].report.title }}\"><span class=\"icon-20x20-report\"></span> {{ 'open_report' | i18n:loc.ale:'farm_overflow' }}</a> <span ng-class=\"{2:'icon-20x20-queue-indicator-medium', 3:'icon-20x20-queue-indicator-short'}[exceptionLogs[villageId].report.result]\"></span> <span ng-class=\"{'full': 'icon-26x26-capacity', 'partial':'icon-26x26-capacity-low', 'none':'hidden'}[exceptionLogs[villageId].report.haul]\"></span> </span><span ng-if=\"!exceptionLogs[villageId].report\">{{ 'no_report' | i18n:loc.ale:'farm_overflow' }}</span><td><a href=\"#\" class=\"size-20x20 btn-red icon-20x20-close\" ng-click=\"removeIgnored(villageId)\" tooltip=\"\" tooltip-content=\"\"></a></table><h5 class=\"twx-section\">{{ 'included_targets' | i18n:loc.ale:'farm_overflow' }}</h5><p ng-if=\"!exceptionVillages.included.length\" class=\"text-center\">{{ 'no_included_targets' | i18n:loc.ale:'farm_overflow' }}<table class=\"tbl-border-light tbl-striped\" ng-show=\"exceptionVillages.included.length\"><col><col width=\"15%\"><col width=\"30px\"><tr><th>{{ 'villages' | i18n:loc.ale:'common' }}<th>{{ 'date' | i18n:loc.ale:'farm_overflow' }}<th><tr ng-repeat=\"villageId in exceptionVillages.included track by $index\"><td><a class=\"link\" ng-click=\"openVillageInfo(villageId)\"><span class=\"icon-20x20-village\"></span> {{ villagesLabel[villageId] }}</a><td>{{ exceptionLogs[villageId].time | readableDateFilter:loc.ale:GAME_TIMEZONE:GAME_TIME_OFFSET }}<td><a href=\"#\" class=\"size-20x20 btn-red icon-20x20-close\" ng-click=\"removeIncluded(villageId)\" tooltip=\"\" tooltip-content=\"\"></a></table></div><div class=\"logs rich-text\" ng-show=\"selectedTab === TAB_TYPES.LOGS\"><div class=\"page-wrap\" pagination=\"pagination\"></div><p class=\"text-center\" ng-show=\"!visibleLogs.length\">{{ 'no_logs' | i18n:loc.ale:'farm_overflow' }}<table class=\"log-list tbl-border-light tbl-striped\" ng-show=\"visibleLogs.length\"><col width=\"100px\"><col width=\"30px\"><col><tr ng-repeat=\"log in visibleLogs track by $index\"><td>{{ log.time | readableDateFilter:loc.ale:GAME_TIMEZONE:GAME_TIME_OFFSET }}<td><span class=\"icon-bg-black\" ng-class=\"{
                                 'icon-26x26-dot-green': log.type === LOG_TYPES.FARM_START,
                                 'icon-26x26-dot-red': log.type === LOG_TYPES.FARM_STOP,
                                 'icon-26x26-check-negative': log.type === LOG_TYPES.IGNORED_VILLAGE || log.type === LOG_TYPES.INCLUDED_VILLAGE_REMOVED,
@@ -16318,7 +16357,6 @@ define('two/farmOverflow/ui', [
         $scope.saveButtonColor = 'orange';
         $scope.settingsMap = settings.settingsMap;
         $scope.farmingSettings = [
-            SETTINGS.PREVIEW_ONLY,
             SETTINGS.BARBARIANS_ONLY,
             SETTINGS.OPTIMIZE_HAUL,
             SETTINGS.ESTIMATED_TARGET_LOOT,
@@ -16364,13 +16402,32 @@ define('two/farmOverflow/ui', [
             SETTINGS.AUTO_PRESET_MIN_UNITS,
             SETTINGS.AUTO_PRESET_MAX_UNITS,
             SETTINGS.AUTO_PRESET_CARRY];
+        let previewPending = false;
+        const scope = $scope;
+        scope.refreshPreview = function () {
+            if (previewPending || scope.$$destroyed) {
+                return;
+            }
+            previewPending = true;
+            farmOverflow.preview().then(plans => scope.$evalAsync(() => {
+                if (!scope.$$destroyed) {
+                    scope.farmPlans = plans;
+                    scope.autoPresetPlans = plans.flatMap(plan => plan.packets);
+                    scope.previewError = null;
+                }
+            })).catch(error => scope.$evalAsync(() => {
+                scope.previewError = error.message;
+            })).finally(() => {
+                previewPending = false;
+            });
+        };
+        scope.refreshPreview();
+        const previewTimer = setInterval(scope.refreshPreview, 5000);
         $scope.previewAutoPresets = function () {
             if (saveSettings() !== true) {
                 return;
             }
-            farmOverflow.previewAutoPresets().then(plans => $scope.$evalAsync(() => {
-                $scope.autoPresetPlans = plans;
-            }));
+            scope.refreshPreview();
         };
         eventHandlers.updatePresets();
         eventHandlers.updateGroups();
@@ -16391,6 +16448,7 @@ define('two/farmOverflow/ui', [
         $scope.removeIncluded = removeIncluded;
 
         const eventScope = new EventScope('twoverflow_farm_overflow_window', function onDestroy () {
+            clearInterval(previewTimer);
             clearInterval(cycleCountdownTimer);
         });
 
@@ -16399,7 +16457,6 @@ define('two/farmOverflow/ui', [
         eventScope.register(eventTypeProvider.GROUPS_UPDATED, eventHandlers.updateGroups, true);
         eventScope.register(eventTypeProvider.GROUPS_CREATED, eventHandlers.updateGroups, true);
         eventScope.register(eventTypeProvider.GROUPS_DESTROYED, eventHandlers.updateGroups, true);
-        const scope = $scope;
         const inAngular = (handler) => (...args) => scope.$evalAsync(() => {
             if (!scope.$$destroyed) {
                 handler(...args);
@@ -16732,7 +16789,6 @@ define('two/farmOverflow/settings', [], function () {
         EMPTY_HAUL_COOLDOWN: 'empty_haul_cooldown',
         LOSS_COOLDOWN: 'loss_cooldown',
         MAX_ATTACKS_PER_CYCLE: 'max_attacks_per_cycle',
-        PREVIEW_ONLY: 'preview_only',
         AUTO_FREE_SPEEDUP: 'auto_free_speedup',
 
         // Intelligent farming settings
@@ -16829,11 +16885,6 @@ define('two/farmOverflow/settings/map', [
             inputType: 'number',
             min: 1,
             max: 1000
-        },
-        [SETTINGS.PREVIEW_ONLY]: {
-            default: true,
-            updates: [],
-            inputType: 'checkbox'
         },
         [SETTINGS.AUTO_FREE_SPEEDUP]: {
             default: true,
@@ -18662,8 +18713,9 @@ define('two/recruiter', [
     'two/ready',
     'queues/EventQueue',
     'Lockr',
-    'helper/time'
-], function (Settings, villageSettings, settingsMap, policy, resourceBudget, ready, eventQueue, Lockr, time) {
+    'helper/time',
+    'two/migratePreviewSettings'
+], function (Settings, villageSettings, settingsMap, policy, resourceBudget, ready, eventQueue, Lockr, time, migratePreviewSettings) {
     let initialized = false;
     let running = false;
     let settings;
@@ -18692,7 +18744,7 @@ define('two/recruiter', [
         return ids.map(id => player.getVillage(id)).filter(Boolean);
     };
 
-    const villageConfig = villageId => villageSettings(settings, villageId, ['preview_only', 'check_interval', 'enabled_groups']).getAll();
+    const villageConfig = villageId => villageSettings(settings, villageId, ['check_interval', 'enabled_groups']).getAll();
 
     const snapshot = function (village, config = villageConfig(village.getId())) {
         buildingService.compute(village);
@@ -18812,7 +18864,7 @@ define('two/recruiter', [
             }
             const state = snapshot(village, config);
             let batch = batches.get(villageId);
-            if (!config.preview_only && !reconcile(village, state)) {
+            if (!reconcile(village, state)) {
                 const plan = policy.plan(state, config, unitData(), batch && batch.remaining);
                 plan.reason = 'Waiting for an earlier spend to appear in game data';
                 showPlan(villageId, plan);
@@ -18831,9 +18883,6 @@ define('two/recruiter', [
             }
             const plan = policy.plan(state, config, unitData(), batch && batch.remaining);
             showPlan(villageId, plan);
-            if (config.preview_only) {
-                return;
-            }
             if (!batch && plan.orders.length) {
                 batch = {remaining: {...plan.budget}};
                 batches.set(villageId, batch);
@@ -18890,7 +18939,7 @@ define('two/recruiter', [
         Lockr.set(pendingKey, pending);
         timers.set(village.getId(), setTimeout(() => {
             try {
-                if (!reconcile(village, snapshot(village)) && running && !config.preview_only) {
+                if (!reconcile(village, snapshot(village)) && running) {
                     recruiter.stop('Recruitment acknowledgement or resource update missing; inspect the game queue');
                 }
             } catch (error) {
@@ -18954,6 +19003,7 @@ define('two/recruiter', [
                     }
                 });
             }
+            migratePreviewSettings(`recruiter_settings_${suffix}`, 'recruiter_active');
             settings = new Settings({settingsMap, storageKey: `recruiter_settings_${suffix}`});
             config = settings.getAll();
             settings.onChange(() => {
@@ -18964,8 +19014,11 @@ define('two/recruiter', [
                 config = settings.getAll();
                 if (restart) {
                     recruiter.start();
+                } else {
+                    recruiter.preview();
                 }
             });
+            recruiter.preview();
         },
         start: function () {
             if (running || !valid()) {
@@ -18973,7 +19026,7 @@ define('two/recruiter', [
             }
             running = true;
             eventQueue.trigger('two_recruiter_start');
-            recruiter.status = config.preview_only ? 'Previewing recruitment' : 'Recruiting';
+            recruiter.status = 'Recruiting';
             const token = ++version;
             ready(() => {
                 if (!running || token !== version) {
@@ -18998,11 +19051,37 @@ define('two/recruiter', [
             batches.clear();
             recruiter.status = reason;
             eventQueue.trigger('two_recruiter_stop');
+            recruiter.preview();
+        },
+        preview: function () {
+            if (!initialized || running) {
+                return plans;
+            }
+            plans = [];
+            for (const village of villages()) {
+                const villageId = village.getId();
+                try {
+                    const local = villageConfig(villageId);
+                    if (!policy.validSettings(local, settingsMap, unitData(), buildingData()) || !local.enabled) {
+                        showPlan(villageId, {reason: local.enabled ? 'Invalid village recruitment settings'
+                            : 'Recruitment disabled for this village', orders: []});
+                        continue;
+                    }
+                    const plan = policy.plan(snapshot(village, local), local, unitData());
+                    if (pending[villageId] || resourceBudget.isBusy(village)) {
+                        plan.reason = 'Waiting for an earlier spend to appear in game data';
+                    }
+                    showPlan(villageId, plan);
+                } catch (error) {
+                    showPlan(villageId, {reason: error.message, orders: []});
+                }
+            }
             publish();
+            return plans;
         },
         isRunning: () => running,
         isInitialized: () => initialized,
-        getSettings: villageId => villageSettings(settings, villageId, ['preview_only', 'check_interval', 'enabled_groups']),
+        getSettings: villageId => villageSettings(settings, villageId, ['check_interval', 'enabled_groups']),
         resolvePending: function (villageId) {
             if (running) {
                 return false;
@@ -19028,7 +19107,7 @@ define('two/recruiter/ui', [
     'two/ui', 'two/recruiter', 'two/recruiter/policy', 'two/Settings', 'two/EventScope', 'two/utils', 'humanInterval', 'queues/EventQueue'
 ], function (ui, recruiter, policy, Settings, EventScope, utils, humanInterval, eventQueue) {
     const labels = {
-        enabled: 'Recruit for this village', preview_only: 'Preview only (shared)', check_interval: 'Check interval (shared)', spend_percent: 'Maximum share of spendable resources per cycle (%)',
+        enabled: 'Recruit for this village', check_interval: 'Check interval (shared)', spend_percent: 'Maximum share of spendable resources per cycle (%)',
         max_batch: 'Maximum soldiers per batch', max_queue_jobs: 'Maximum barracks queue jobs',
         preserve_wood: 'Wood savings', preserve_clay: 'Clay savings', preserve_iron: 'Iron savings', preserve_food: 'Free population to preserve',
         building_wood: 'Additional wood budget for buildings', building_clay: 'Additional clay budget for buildings',
@@ -19042,10 +19121,11 @@ define('two/recruiter/ui', [
         };
         eventQueue.register('two_recruiter_updated', updateButton);
         updateButton();
-        ui.addTemplate('two_recruiter_window', `<div id=\"two-recruiter\" class=\"win-content two-window\"><header class=\"win-head\"><h2>Recruiter</h2><ul class=\"list-btn\"><li><a href=\"#\" class=\"size-34x34 btn-red icon-26x26-close\" ng-click=\"closeWindow()\"></a></ul></header><div class=\"win-main\" scrollbar=\"\"><div class=\"box-paper footer\"><div class=\"scroll-wrap\"><label>Configure <select class=\"textfield-border\" ng-model=\"profileVillage\" ng-options=\"village.value as village.name for village in profileVillages\" ng-change=\"selectVillage()\"></select></label> <a href=\"#\" class=\"btn-border btn-orange\" ng-show=\"profileVillage\" ng-click=\"useDefaults()\">Use shared defaults for this village</a><p>Save before switching villages. Villages without a saved profile use shared defaults. Preview mode, check interval and group filter are shared.<p>Maintain troop targets per village. Targets include owned troops away from home and soldiers still in training. Zero disables a unit type. Each cycle fills available queue slots in the order shown, splitting troop deficits into batches up to the configured cap. All batches share one spending budget for the interval. Each village uses its own resources.<p>Spendable budget = current stock − savings − additional building budget − selected upcoming upgrade costs. Queued buildings and troops are already paid and are not charged twice. Food means free population.<table class=\"tbl-border-light tbl-content tbl-medium-height\"><tr><td>Village groups (empty = all owned villages)<td><div select=\"\" list=\"groups\" selected=\"settings.enabled_groups\" drop-down=\"true\"></div><tr ng-repeat=\"id in controls\" ng-switch=\"map[id].inputType\"><td>{{ labels[id] }}<td ng-switch-when=\"checkbox\"><div switch-slider=\"\" enabled=\"true\" border=\"true\" value=\"settings[id]\" vertical=\"false\" size=\"'56x28'\"></div><td ng-switch-when=\"number\"><input type=\"number\" class=\"fit textfield-border\" ng-model=\"settings[id]\" min=\"{{ map[id].min }}\" max=\"{{ map[id].max }}\" step=\"1\"><td ng-switch-when=\"readable_time\"><input class=\"fit textfield-border\" ng-model=\"settings[id]\"><tr><th>Unit kind<th>Target soldiers per village<tr ng-repeat=\"unit in units\"><td>{{ unit.name }}<td><input type=\"number\" class=\"fit textfield-border\" min=\"0\" max=\"1000000\" step=\"1\" ng-model=\"unit.target\"></table><h3>Save for upcoming building upgrades</h3><p>Reserve the next level cost of each selected building. A building with an upgrade already in the queue is skipped until that upgrade finishes. Use additional building budgets above to save for further levels or other spending.<div class=\"building-choices\"><label ng-repeat=\"building in buildings\"><input type=\"checkbox\" ng-model=\"building.enabled\"> {{ building.name }}</label></div><h3>{{ status }}</h3><div ng-repeat=\"(villageId, entry) in pending\"><p>Village {{ villageId }}: pending {{ entry.amount }} {{ entry.unit }}.</p><a href=\"#\" ng-show=\"!running\" class=\"btn-border btn-orange\" ng-click=\"resolvePending(villageId)\">Resolve guard after checking game</a></div><div ng-if=\"pendingToResolve !== null && pendingToResolve !== undefined && !running\" class=\"recruit-plan\"><h3>Resolve pending recruitment for village {{ pendingToResolve }}</h3><p>Check the village barracks queue, owned troop totals, and resources in the game first. Clearing this guard allows another batch and may repeat an earlier order if game data is still stale.</p><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"confirmPendingResolution()\">I checked the game; clear guard</a> <a href=\"#\" class=\"btn-border\" ng-click=\"cancelPendingResolution()\">Cancel</a></div><div ng-repeat=\"plan in plans\" class=\"recruit-plan\"><h3>Village {{ plan.villageId }} — {{ plan.reason }}</h3><p>Protected: {{ plan.protected }}<br>Upcoming buildings: {{ plan.buildingCosts }}<br>Cycle budget: {{ plan.budget }}<table class=\"tbl-border-light tbl-content\"><tr><th>Unit<th>Owned<th>In training<th>Target<th>Missing<tr ng-repeat=\"item in plan.deficits\"><td>{{ item.name }}<td>{{ item.owned }}<td>{{ item.queued }}<td>{{ item.target }}<td>{{ item.deficit }}</table><p ng-repeat=\"order in plan.orders\">{{ $first ? 'Next batch' : 'Following batch' }}: {{ order.amount }} {{ order.unit_type }} — cost {{ order.cost }}</div></div></div></div><footer class=\"win-foot\"><ul class=\"list-btn list-center\"><li><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"save()\">Save</a><li><a href=\"#\" class=\"btn-border\" ng-class=\"running ? 'btn-red' : 'btn-green'\" ng-click=\"toggle()\">{{ running ? 'Pause' : 'Start' }}</a></ul></footer></div>`);
+        ui.addTemplate('two_recruiter_window', `<div id=\"two-recruiter\" class=\"win-content two-window\"><header class=\"win-head\"><h2>Recruiter</h2><ul class=\"list-btn\"><li><a href=\"#\" class=\"size-34x34 btn-red icon-26x26-close\" ng-click=\"closeWindow()\"></a></ul></header><div class=\"win-main\" scrollbar=\"\"><div class=\"box-paper footer\"><div class=\"scroll-wrap\"><label>Configure <select class=\"textfield-border\" ng-model=\"profileVillage\" ng-options=\"village.value as village.name for village in profileVillages\" ng-change=\"selectVillage()\"></select></label> <a href=\"#\" class=\"btn-border btn-orange\" ng-show=\"profileVillage\" ng-click=\"useDefaults()\">Use shared defaults for this village</a><p>Save before switching villages. Villages without a saved profile use shared defaults. Check interval and group filter are shared.<p>Maintain troop targets per village. Targets include owned troops away from home and soldiers still in training. Zero disables a unit type. Each cycle fills available queue slots in the order shown, splitting troop deficits into batches up to the configured cap. All batches share one spending budget for the interval. Each village uses its own resources.<p>Spendable budget = current stock − savings − additional building budget − selected upcoming upgrade costs. Queued buildings and troops are already paid and are not charged twice. Food means free population.<table class=\"tbl-border-light tbl-content tbl-medium-height\"><tr><td>Village groups (empty = all owned villages)<td><div select=\"\" list=\"groups\" selected=\"settings.enabled_groups\" drop-down=\"true\"></div><tr ng-repeat=\"id in controls\" ng-switch=\"map[id].inputType\"><td>{{ labels[id] }}<td ng-switch-when=\"checkbox\"><div switch-slider=\"\" enabled=\"true\" border=\"true\" value=\"settings[id]\" vertical=\"false\" size=\"'56x28'\"></div><td ng-switch-when=\"number\"><input type=\"number\" class=\"fit textfield-border\" ng-model=\"settings[id]\" min=\"{{ map[id].min }}\" max=\"{{ map[id].max }}\" step=\"1\"><td ng-switch-when=\"readable_time\"><input class=\"fit textfield-border\" ng-model=\"settings[id]\"><tr><th>Unit kind<th>Target soldiers per village<tr ng-repeat=\"unit in units\"><td>{{ unit.name }}<td><input type=\"number\" class=\"fit textfield-border\" min=\"0\" max=\"1000000\" step=\"1\" ng-model=\"unit.target\"></table><h3>Save for upcoming building upgrades</h3><p>Reserve the next level cost of each selected building. A building with an upgrade already in the queue is skipped until that upgrade finishes. Use additional building budgets above to save for further levels or other spending.<div class=\"building-choices\"><label ng-repeat=\"building in buildings\"><input type=\"checkbox\" ng-model=\"building.enabled\"> {{ building.name }}</label></div><h3>Recruitment preview — {{ status }}</h3><p>Preview refreshes every five seconds while paused using saved settings. Start recruits; Pause prevents further orders. Plans remain visible while running.</p><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"refreshPreview()\">Refresh preview</a><div ng-repeat=\"(villageId, entry) in pending\"><p>Village {{ villageId }}: pending {{ entry.amount }} {{ entry.unit }}.</p><a href=\"#\" ng-show=\"!running\" class=\"btn-border btn-orange\" ng-click=\"resolvePending(villageId)\">Resolve guard after checking game</a></div><div ng-if=\"pendingToResolve !== null && pendingToResolve !== undefined && !running\" class=\"recruit-plan\"><h3>Resolve pending recruitment for village {{ pendingToResolve }}</h3><p>Check the village barracks queue, owned troop totals, and resources in the game first. Clearing this guard allows another batch and may repeat an earlier order if game data is still stale.</p><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"confirmPendingResolution()\">I checked the game; clear guard</a> <a href=\"#\" class=\"btn-border\" ng-click=\"cancelPendingResolution()\">Cancel</a></div><div ng-repeat=\"plan in plans\" class=\"recruit-plan\"><h3>Village {{ plan.villageId }} — {{ plan.reason }}</h3><p>Protected: {{ plan.protected }}<br>Upcoming buildings: {{ plan.buildingCosts }}<br>Cycle budget: {{ plan.budget }}<table class=\"tbl-border-light tbl-content\"><tr><th>Unit<th>Owned<th>In training<th>Target<th>Missing<tr ng-repeat=\"item in plan.deficits\"><td>{{ item.name }}<td>{{ item.owned }}<td>{{ item.queued }}<td>{{ item.target }}<td>{{ item.deficit }}</table><p ng-repeat=\"order in plan.orders\">{{ $first ? 'Next batch' : 'Following batch' }}: {{ order.amount }} {{ order.unit_type }} — cost {{ order.cost }}</div></div></div></div><footer class=\"win-foot\"><ul class=\"list-btn list-center\"><li><a href=\"#\" class=\"btn-border btn-orange\" ng-click=\"save()\">Save</a><li><a href=\"#\" class=\"btn-border\" ng-class=\"running ? 'btn-red' : 'btn-green'\" ng-click=\"toggle()\">{{ running ? 'Pause' : 'Start' }}</a></ul></footer></div>`);
         ui.addStyle('#two-recruiter .scroll-wrap{padding:12px}#two-recruiter p{margin:10px 0}#two-recruiter h3{margin-top:16px}#two-recruiter .building-choices label{display:inline-block;width:180px;padding:5px}#two-recruiter .recruit-plan{border-top:1px solid #bca475;margin-top:16px}');
         button.addEventListener('click', function () {
             const scope = $rootScope.$new();
+            recruiter.preview();
             let settings = recruiter.getSettings();
             const map = settings.settingsMap;
             const units = modelDataService.getGameData().getUnitsObject();
@@ -19129,7 +19209,9 @@ define('two/recruiter/ui', [
                 return resolved;
             };
             update();
-            const events = new EventScope('two_recruiter_window', noop);
+            scope.refreshPreview = () => recruiter.preview();
+            const previewTimer = setInterval(scope.refreshPreview, 5000);
+            const events = new EventScope('two_recruiter_window', () => clearInterval(previewTimer));
             events.register('two_recruiter_updated', () => scope.$evalAsync(() => {
                 if (!scope.$$destroyed) {
                     update();
@@ -19252,7 +19334,6 @@ define('two/recruiter/settings/map', [], function () {
     return {
         village_profiles: {default: {}, updates: [], inputType: 'profiles'},
         enabled: {default: true, updates: [], inputType: 'checkbox'},
-        preview_only: {default: true, updates: [], inputType: 'checkbox'},
         check_interval: {default: '1 minute', updates: [], inputType: 'readable_time'},
         enabled_groups: {default: [], updates: [], inputType: 'select', multiSelect: true, type: 'groups', disabledOption: true},
         targets: {default: {}, updates: [], inputType: 'targets'},

@@ -6,7 +6,6 @@
         "auto_preset_carry": "Desired packet carrying capacity",
         "farming_controls": "Farming controls",
         "farming_controls_help": "Preview records planned attacks without sending them. Capacity per hour estimates transport capacity, not actual loot. Saving settings pauses an active farmer.",
-        "preview_only": "Preview only (no attacks)",
         "barbarians_only": "Only attack barbarian villages",
         "optimize_haul": "Prefer carrying capacity per round-trip time",
         "estimated_target_loot": "Estimated loot per target (0 = unknown)",

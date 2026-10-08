@@ -34,7 +34,6 @@ define('two/farmOverflow/settings', [], function () {
         EMPTY_HAUL_COOLDOWN: 'empty_haul_cooldown',
         LOSS_COOLDOWN: 'loss_cooldown',
         MAX_ATTACKS_PER_CYCLE: 'max_attacks_per_cycle',
-        PREVIEW_ONLY: 'preview_only',
         AUTO_FREE_SPEEDUP: 'auto_free_speedup',
         
         // Intelligent farming settings
@@ -131,11 +130,6 @@ define('two/farmOverflow/settings/map', [
             inputType: 'number',
             min: 1,
             max: 1000
-        },
-        [SETTINGS.PREVIEW_ONLY]: {
-            default: true,
-            updates: [],
-            inputType: 'checkbox'
         },
         [SETTINGS.AUTO_FREE_SPEEDUP]: {
             default: true,
